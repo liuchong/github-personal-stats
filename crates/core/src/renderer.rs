@@ -552,16 +552,16 @@ fn current_streak_hero(
     let mask_id = "psm-streak-flame-cut";
     let range = date_range(&streak.current_start, &streak.current_end);
     format!(
-        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{ring_top}" rx="12" ry="16" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="3" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="3" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
+        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="9" ry="12" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="3" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="3" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
         mask_id = mask_id,
         center_x = center_x,
-        ring_top = ring_top,
+        notch_y = ring_top.saturating_sub(1),
         ring_cy = ring_cy,
         radius = radius,
         panel = theme.panel,
         accent_soft = theme.accent_soft,
         flame_color = flame_color,
-        flame = flame_icon(center_x, ring_top, flame_color),
+        flame = flame_icon(center_x, ring_top.saturating_sub(4), flame_color),
         number_y = number_y,
         text_color = theme.text,
         count = streak.current,
@@ -751,31 +751,31 @@ fn flame_icon(cx: u32, base_y: u32, color: &str) -> String {
     let cx = cx as i32;
     let base_y = base_y as i32;
     let outer = format!(
-        "M {tx} {ty} C {c1x} {c1y} {c2x} {c2y} {rx} {ry} C {c3x} {c3y} {c4x} {c4y} 0 22 C {c5x} {c5y} {c6x} {c6y} {lx} {ly} C {c7x} {c7y} {c8x} {c8y} {tx} {ty} Z",
+        "M {tx} {ty} C {c1x} {c1y} {c2x} {c2y} {rx} {ry} C {c3x} {c3y} {c4x} {c4y} 0 15 C {c5x} {c5y} {c6x} {c6y} {lx} {ly} C {c7x} {c7y} {c8x} {c8y} {tx} {ty} Z",
         tx = 0,
-        ty = -10,
-        c1x = 5,
-        c1y = -5,
-        c2x = 8,
-        c2y = 0,
-        rx = 7,
-        ry = 7,
-        c3x = 7,
-        c3y = 14,
-        c4x = 4,
-        c4y = 19,
-        c5x = -4,
-        c5y = 19,
-        c6x = -7,
-        c6y = 14,
-        lx = -7,
-        ly = 7,
-        c7x = -8,
-        c7y = 0,
-        c8x = -4,
-        c8y = -3
+        ty = -7,
+        c1x = 4,
+        c1y = -3,
+        c2x = 5,
+        c2y = 1,
+        rx = 5,
+        ry = 5,
+        c3x = 5,
+        c3y = 10,
+        c4x = 3,
+        c4y = 14,
+        c5x = -3,
+        c5y = 14,
+        c6x = -5,
+        c6y = 10,
+        lx = -5,
+        ly = 5,
+        c7x = -5,
+        c7y = 1,
+        c8x = -3,
+        c8y = -1
     );
-    let inner = "M -1 6 C 1 6 3 8 3 12 C 3 16 1 18 0 18 C -2 18 -3 16 -3 13 C -3 10 -2 7 -1 6 Z";
+    let inner = "M -1 5 C 1 5 2 7 2 10 C 2 13 1 14 0 14 C -1 14 -2 13 -2 10 C -2 8 -1 6 -1 5 Z";
     format!(
         r##"<g transform="translate({cx},{base_y})"><path d="{outer}" fill="{color}"/><path d="{inner}" fill="#ffd166"/></g>"##
     )

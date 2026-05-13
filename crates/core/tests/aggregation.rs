@@ -26,6 +26,22 @@ fn stats_aggregation_computes_score_and_rank() {
 }
 
 #[test]
+fn stats_rank_follows_weighted_percentile_model() {
+    let mut data = fixture_data();
+    data.profile.followers = 189;
+    data.stats.stars = 7_016;
+    data.stats.commits = 292;
+    data.stats.pull_requests = 7;
+    data.stats.issues = 0;
+    data.stats.reviews = 4;
+    data.stats.contributed_to = 9;
+    let stats = aggregate_stats(&data);
+
+    assert_eq!(stats.score, 7_362);
+    assert_eq!(stats.rank, "B+");
+}
+
+#[test]
 fn language_aggregation_merges_sorts_and_limits() {
     let languages = vec![
         RepositoryLanguage {
@@ -92,28 +108,69 @@ fn daily_streak_handles_gaps() {
 
 #[test]
 fn weekly_streak_deduplicates_active_days_in_same_week_bucket() {
+    let current_week = test_sunday_of_week(current_date_ordinal() - 1);
+    let previous_week = current_week - 7;
     let days = vec![
         ContributionDay {
-            date: "2026-05-10".to_owned(),
+            date: ordinal_to_date(previous_week),
             count: 1,
         },
         ContributionDay {
-            date: "2026-05-11".to_owned(),
+            date: ordinal_to_date(previous_week + 1),
             count: 3,
         },
         ContributionDay {
-            date: "2026-05-20".to_owned(),
+            date: ordinal_to_date(current_week),
             count: 2,
         },
     ];
 
     let streak = calculate_streak(&days, StreakMode::Weekly, &[]);
+    let expected_start = ordinal_to_date(previous_week);
+    let expected_end = ordinal_to_date(current_week);
 
     assert_eq!(streak.total_active_days, 3);
     assert_eq!(streak.total_contributions, 6);
     assert_eq!(streak.longest, 2);
-    assert_eq!(streak.current_start.as_deref(), Some("2026-05-10"));
-    assert_eq!(streak.current_end.as_deref(), Some("2026-05-17"));
+    assert_eq!(
+        streak.current_start.as_deref(),
+        Some(expected_start.as_str())
+    );
+    assert_eq!(streak.current_end.as_deref(), Some(expected_end.as_str()));
+}
+
+#[test]
+fn weekly_streak_breaks_when_middle_week_has_no_contributions() {
+    let current_week = test_sunday_of_week(current_date_ordinal() - 1);
+    let first_week = current_week - 14;
+    let days = vec![
+        ContributionDay {
+            date: ordinal_to_date(first_week + 1),
+            count: 2,
+        },
+        ContributionDay {
+            date: ordinal_to_date(first_week + 2),
+            count: 1,
+        },
+        ContributionDay {
+            date: ordinal_to_date(current_week + 1),
+            count: 4,
+        },
+    ];
+
+    let streak = calculate_streak(&days, StreakMode::Weekly, &[]);
+    let expected_current_week = ordinal_to_date(current_week);
+
+    assert_eq!(streak.longest, 1);
+    assert_eq!(streak.current, 1);
+    assert_eq!(
+        streak.current_start.as_deref(),
+        Some(expected_current_week.as_str())
+    );
+    assert_eq!(
+        streak.current_end.as_deref(),
+        Some(expected_current_week.as_str())
+    );
 }
 
 #[test]
@@ -154,6 +211,70 @@ fn streak_handles_empty_contributions() {
     assert_eq!(streak.longest, 0);
     assert_eq!(streak.current_start, None);
     assert_eq!(streak.longest_start, None);
+}
+
+#[test]
+fn daily_streak_ignores_far_future_days_and_keeps_tomorrow_with_activity() {
+    let today = current_date_ordinal();
+    let contributions = vec![
+        ContributionDay {
+            date: ordinal_to_date(today - 1),
+            count: 1,
+        },
+        ContributionDay {
+            date: ordinal_to_date(today),
+            count: 1,
+        },
+        ContributionDay {
+            date: ordinal_to_date(today + 1),
+            count: 1,
+        },
+        ContributionDay {
+            date: ordinal_to_date(today + 2),
+            count: 100,
+        },
+    ];
+
+    let streak = calculate_streak(&contributions, StreakMode::Daily, &[]);
+    let expected_start = ordinal_to_date(today - 1);
+    let expected_end = ordinal_to_date(today + 1);
+
+    assert_eq!(streak.current, 3);
+    assert_eq!(streak.longest, 3);
+    assert_eq!(
+        streak.current_start.as_deref(),
+        Some(expected_start.as_str())
+    );
+    assert_eq!(streak.current_end.as_deref(), Some(expected_end.as_str()));
+    assert_eq!(streak.total_contributions, 3);
+}
+
+fn current_date_ordinal() -> i32 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0);
+    (seconds / 86_400) as i32
+}
+
+fn ordinal_to_date(ordinal: i32) -> String {
+    let days = ordinal + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    let year = year + i32::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn test_sunday_of_week(ordinal: i32) -> i32 {
+    ordinal - (ordinal + 4).rem_euclid(7)
 }
 
 #[test]
