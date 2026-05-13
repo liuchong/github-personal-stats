@@ -6,15 +6,15 @@
 
 ## Project State
 
-CLI and Action logic has been committed. Server and deployment logic is ready for commit.
+The planned foundation, data client, aggregation, renderer, CLI, Action, server, and deployment stages have been implemented and committed.
 
 ## Active Task
 
-Review and commit HTTP server endpoints, deployment assets, and server tests.
+Run final verification and continue hardening production behavior through focused follow-up tasks.
 
 ## Next Safe Task After Commit
 
-Run final verification across the repository and prepare the next development task from the roadmap.
+Replace deterministic sample data paths with real authenticated upstream fetching, caching, and production release publishing.
 
 ## Constraints
 
