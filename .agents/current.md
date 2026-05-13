@@ -6,15 +6,15 @@
 
 ## Project State
 
-The typed configuration and fixture-driven data client stage has been committed. Aggregation logic is ready for commit.
+Aggregation logic has been committed. Renderer logic is ready for commit.
 
 ## Active Task
 
-Review and commit stats, language share, streak, coding activity, and card-data aggregation logic with boundary tests.
+Review and commit dashboard SVG, individual card SVG, coding activity text rendering, and golden snapshot tests.
 
 ## Next Safe Task After Commit
 
-Implement SVG and text renderers with snapshot tests.
+Implement CLI generation, README update mode, release-binary Action wiring, and Action smoke tests.
 
 ## Constraints
 
