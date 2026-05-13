@@ -84,6 +84,10 @@ fn daily_streak_handles_gaps() {
     assert_eq!(streak.current, 2);
     assert_eq!(streak.total_active_days, 3);
     assert_eq!(streak.total_contributions, 6);
+    assert_eq!(streak.current_start.as_deref(), Some("2026-05-12"));
+    assert_eq!(streak.current_end.as_deref(), Some("2026-05-13"));
+    assert_eq!(streak.longest_start.as_deref(), Some("2026-05-12"));
+    assert_eq!(streak.longest_end.as_deref(), Some("2026-05-13"));
 }
 
 #[test]
@@ -108,6 +112,8 @@ fn weekly_streak_deduplicates_active_days_in_same_week_bucket() {
     assert_eq!(streak.total_active_days, 3);
     assert_eq!(streak.total_contributions, 6);
     assert_eq!(streak.longest, 2);
+    assert_eq!(streak.current_start.as_deref(), Some("2026-05-10"));
+    assert_eq!(streak.current_end.as_deref(), Some("2026-05-17"));
 }
 
 #[test]
@@ -136,6 +142,8 @@ fn daily_streak_keeps_yesterday_streak_when_today_is_empty() {
     assert_eq!(streak.current, 2);
     assert_eq!(streak.longest, 2);
     assert_eq!(streak.total_contributions, 3);
+    assert_eq!(streak.current_start.as_deref(), Some("2026-05-11"));
+    assert_eq!(streak.current_end.as_deref(), Some("2026-05-12"));
 }
 
 #[test]
@@ -144,6 +152,8 @@ fn streak_handles_empty_contributions() {
 
     assert_eq!(streak.current, 0);
     assert_eq!(streak.longest, 0);
+    assert_eq!(streak.current_start, None);
+    assert_eq!(streak.longest_start, None);
 }
 
 #[test]

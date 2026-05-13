@@ -1,3 +1,5 @@
+**Code is cheap, help out with your tokens!**
+
 # GitHub Stats
 
 GitHub Stats is a Rust workspace for generating profile metrics as a unified SVG dashboard. The default output is one dashboard image so README layout is controlled by the renderer instead of by multiple images and HTML alignment rules.

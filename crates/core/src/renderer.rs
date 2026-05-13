@@ -243,7 +243,7 @@ fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme) -> Str
 
 fn svg_root(size: &ImageSize, theme: &RenderTheme, body: String) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="{}"/><stop offset="100%" stop-color="{}"/></linearGradient><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1f2937" flood-opacity="0.12"/></filter></defs><rect width="100%" height="100%" fill="url(#bg)"/>{}</svg>"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="{}"/><stop offset="100%" stop-color="{}"/></linearGradient><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.10"/></filter></defs><rect width="100%" height="100%" fill="url(#bg)"/>{}</svg>"##,
         size.width, size.height, size.width, size.height, theme.background, theme.accent_soft, body
     )
 }
@@ -357,7 +357,7 @@ fn stat_row<T: ToString>(
 fn rank_ring(x: u32, y: u32, size: u32, rank: &str, score: u64, theme: &RenderTheme) -> String {
     let center = size / 2;
     format!(
-        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="10"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="10" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
+        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="6"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="6" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
         x + center,
         y + center,
         theme.panel,
@@ -391,29 +391,37 @@ fn language_bars(
     let bar_width = width.saturating_sub(150);
     let rows = languages
         .iter()
-        .take(5)
+        .take(6)
         .enumerate()
         .map(|(index, language)| {
-            let row_y = y + 34 + index as u32 * 21;
+            let row_y = y + 24 + index as u32 * 17;
             let percentage = language.percentage_basis_points as f32 / 100.0;
             let filled = bar_width * language.percentage_basis_points / 10_000;
             format!(
                 r#"{}{}{}{}"#,
-                text(x, row_y + 9, 12, theme.text, &language.name),
+                text(x, row_y + 8, 11, theme.text, &language.name),
                 text(
                     x + width - 58,
-                    row_y + 9,
-                    12,
+                    row_y + 8,
+                    11,
                     theme.muted,
                     &format!("{percentage:.1}%")
                 ),
-                rounded_rect(x + 94, row_y, bar_width, 9, 5, theme.accent_soft, "none"),
                 rounded_rect(
                     x + 94,
-                    row_y,
-                    filled,
-                    9,
+                    row_y + 2,
+                    bar_width,
                     5,
+                    3,
+                    theme.accent_soft,
+                    "none"
+                ),
+                rounded_rect(
+                    x + 94,
+                    row_y + 2,
+                    filled,
+                    5,
+                    3,
                     language_color(&language.name, index),
                     "none"
                 )
@@ -445,15 +453,15 @@ fn stacked_language_bar(
             x + 2 + offset,
             y,
             segment_width,
-            12,
-            6,
+            8,
+            4,
             language_color(&language.name, index),
             "none",
         ));
         offset += segment_width;
     }
 
-    rounded_rect(x, y - 1, width, 14, 7, theme.accent_soft, "none") + &segments
+    rounded_rect(x, y, width, 8, 4, theme.accent_soft, "none") + &segments
 }
 
 fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &RenderTheme) -> String {
@@ -467,10 +475,15 @@ fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &Rend
             label: "Total Contributions",
             value: format_number(streak.total_contributions),
             unit: "",
+            note: streak
+                .current_end
+                .as_deref()
+                .map(format_single_date)
+                .unwrap_or_default(),
             accent: theme.accent,
             theme,
         }),
-        current_streak_hero(center_x, y, 260, streak.current, theme),
+        current_streak_hero(center_x, y, 260, streak, theme),
         side_streak_metric(SideStreakMetric {
             x: center_x + 276,
             y: y + 12,
@@ -478,6 +491,7 @@ fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &Rend
             label: "Longest Streak",
             value: streak.longest.to_string(),
             unit: "days",
+            note: date_range(&streak.longest_start, &streak.longest_end),
             accent: theme.success,
             theme,
         }),
@@ -492,13 +506,14 @@ struct SideStreakMetric<'a> {
     label: &'a str,
     value: String,
     unit: &'a str,
+    note: String,
     accent: &'a str,
     theme: &'a RenderTheme,
 }
 
 fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="72" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="32" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="4" rx="2" fill="{}"/></g>"#,
+        r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="32" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="2" rx="1" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text></g>"#,
         metric.x,
         metric.y,
         metric.width,
@@ -519,33 +534,57 @@ fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
         metric.x + 18,
         metric.y + 62,
         metric.width.saturating_sub(36),
-        metric.accent
+        metric.accent,
+        metric.x + 18,
+        metric.y + 76,
+        metric.theme.muted,
+        escape_xml(&metric.note)
     )
 }
 
-fn current_streak_hero(x: u32, y: u32, width: u32, current: u32, theme: &RenderTheme) -> String {
+fn current_streak_hero(
+    x: u32,
+    y: u32,
+    width: u32,
+    streak: &StreakSummary,
+    theme: &RenderTheme,
+) -> String {
     let center_x = x + width / 2;
+    let center_y = y + 62;
+    let radius = 38;
+    let ring_length = 239;
+    let active_length = 179;
+    let range = date_range(&streak.current_start, &streak.current_end);
     format!(
-        r#"<g><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="{}">CURRENT STREAK</text><circle cx="{}" cy="{}" r="48" fill="{}" stroke="{}" stroke-width="10"/><circle cx="{}" cy="{}" r="48" fill="none" stroke="{}" stroke-width="10" stroke-linecap="round" stroke-dasharray="226 302" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">days</text></g>"#,
+        r#"<g><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="{}">CURRENT STREAK</text>{}<circle cx="{}" cy="{}" r="{}" fill="{}" stroke="{}" stroke-width="5"/><circle cx="{}" cy="{}" r="{}" fill="none" stroke="{}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{} {}" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="{}">days</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text></g>"#,
         center_x,
-        y + 16,
+        y + 8,
         theme.muted,
+        flame_icon(center_x - 11, center_y - radius - 12),
         center_x,
-        y + 58,
+        center_y,
+        radius,
         theme.panel,
         theme.accent_soft,
         center_x,
-        y + 58,
+        center_y,
+        radius,
         "#ff9800",
+        active_length,
+        ring_length,
         center_x,
-        y + 58,
+        center_y,
         center_x,
-        y + 70,
+        center_y + 11,
         theme.text,
-        current,
+        streak.current,
         center_x,
-        y + 90,
-        theme.muted
+        center_y + 29,
+        theme.muted,
+        center_x,
+        y + 114,
+        theme.muted,
+        escape_xml(&range)
     )
 }
 
@@ -636,6 +675,74 @@ fn format_number(value: u64) -> String {
         formatted.push(character);
     }
     formatted.chars().rev().collect()
+}
+
+fn date_range(start: &Option<String>, end: &Option<String>) -> String {
+    match (start.as_deref(), end.as_deref()) {
+        (Some(start), Some(end)) if start == end => format_single_date(start),
+        (Some(start), Some(end)) => format!(
+            "{} - {}",
+            format_single_date(start),
+            format_single_date(end)
+        ),
+        _ => String::new(),
+    }
+}
+
+fn format_single_date(date: &str) -> String {
+    let mut parts = date.split('-');
+    let Some(year) = parts.next() else {
+        return date.to_owned();
+    };
+    let month = parts
+        .next()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let day = parts.next().unwrap_or("");
+    let month_name = [
+        "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .get(month)
+    .copied()
+    .unwrap_or("");
+
+    if month_name.is_empty() {
+        date.to_owned()
+    } else {
+        format!("{month_name} {} {}", day.trim_start_matches('0'), year)
+    }
+}
+
+fn flame_icon(x: u32, y: u32) -> String {
+    format!(
+        r##"<path d="M{} {} C{} {} {} {} {} {} C{} {} {} {} {} {} C{} {} {} {} {} {} C{} {} {} {} {} {} Z" fill="#ff9800"/>"##,
+        x + 11,
+        y,
+        x + 20,
+        y + 8,
+        x + 15,
+        y + 15,
+        x + 18,
+        y + 23,
+        x + 11,
+        y + 30,
+        x + 4,
+        y + 25,
+        x,
+        y + 17,
+        x + 7,
+        y + 10,
+        x + 5,
+        y + 20,
+        x + 12,
+        y + 16,
+        x + 8,
+        y + 10,
+        x + 11,
+        y,
+        x + 11,
+        y
+    )
 }
 
 fn language_color(name: &str, fallback_index: usize) -> &'static str {
