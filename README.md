@@ -46,15 +46,27 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+      - name: Check personal stats token
+        env:
+          PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
+        run: test -n "$PERSONAL_STATS_TOKEN"
       - uses: liuchong/github-personal-stats@v1.0.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --width 1000 --height 420
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update profile stats"
 ```
+
+Do not use the default `GITHUB_TOKEN` when you expect private repository data. It is scoped to the workflow repository and cannot read all private repositories owned by the profile user. Create a dedicated token instead:
+
+- Classic token template: [create a token with `repo` selected](https://github.com/settings/tokens/new?description=GitHub%20Personal%20Stats&scopes=repo).
+- Fine-grained token: create one at [Fine-grained personal access tokens](https://github.com/settings/personal-access-tokens/new), select the repositories you want counted, and grant read access to metadata and contents.
+
+Save the token as a repository secret named `PERSONAL_STATS_TOKEN`.
 
 Then add the generated image to your profile README:
 

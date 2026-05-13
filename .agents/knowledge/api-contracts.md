@@ -15,7 +15,9 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 ## Current Core Contract
 
 - `GithubStatsConfig` owns username, token environment variable name, card selection, image size, and theme.
-- `GithubGraphqlClient` builds typed GraphQL request metadata without reading secrets.
+- `GithubGraphqlClient` performs live GraphQL fetches using the configured token environment variable.
 - `GithubClient` is a trait so aggregation tests can use deterministic fixture-backed clients.
 - `RemoteErrorKind` classifies authentication, permission, not found, rate limit, upstream unavailable, invalid response, and unsupported configuration failures.
-- Fixture parsing is intentionally narrow and deterministic until a full JSON dependency is introduced for real HTTP integration.
+- Fixture parsing remains available for deterministic tests and offline previews.
+- Profile workflows should pass a dedicated personal access token when private repository data is expected. The default Actions `GITHUB_TOKEN` is repository-scoped and should not be documented as sufficient for private profile-wide stats.
+- Stats use `pullRequests.totalCount`, `issues.totalCount`, pull request review contributions, follower counts, and owner repository stars. Language share aggregates owner non-fork repository language sizes. Streaks use per-year contribution calendars.

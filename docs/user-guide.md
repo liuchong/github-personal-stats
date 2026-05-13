@@ -32,17 +32,52 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+      - name: Check personal stats token
+        env:
+          PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
+        run: test -n "$PERSONAL_STATS_TOKEN"
       - uses: liuchong/github-personal-stats@v1.0.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --width 1000 --height 420
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update profile stats"
 ```
 
-Use a token with enough read permissions if your profile should include private contribution data.
+## Private Repository Data
+
+Use a dedicated personal access token when your dashboard should include private repositories. Do not rely on the default `GITHUB_TOKEN` for this purpose: it is scoped to the workflow repository and cannot read every private repository owned by the profile user.
+
+Create one of these tokens:
+
+- Classic PAT: use this template, then create the token with `repo` selected: <https://github.com/settings/tokens/new?description=GitHub%20Personal%20Stats&scopes=repo>
+- Fine-grained PAT: use <https://github.com/settings/personal-access-tokens/new>, select the repositories you want counted, and grant read access to metadata and contents.
+
+Save the token in your profile repository as an Actions secret:
+
+```sh
+gh secret set PERSONAL_STATS_TOKEN --repo your-login/your-login
+```
+
+The workflow should pass only that secret to the Action:
+
+```yaml
+token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+```
+
+Add a check step before generation so a missing token fails the workflow instead of silently generating public-only data:
+
+```yaml
+- name: Check personal stats token
+  env:
+    PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
+  run: test -n "$PERSONAL_STATS_TOKEN"
+```
+
+Private token access affects repository language share, contribution totals, streaks, and any stats based on private repository metadata. If the token is missing or under-scoped, the dashboard can still render, but the data will be public-only or incomplete.
 
 ## README Usage
 
@@ -83,6 +118,15 @@ cargo run -p github-personal-stats -- generate \
   --card dashboard \
   --width 1000 \
   --height 420 \
+  --output profile/github-personal-stats.svg
+```
+
+For a local live preview, export a token with the same permissions:
+
+```sh
+GITHUB_TOKEN=YOUR_PERSONAL_STATS_TOKEN cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card dashboard \
   --output profile/github-personal-stats.svg
 ```
 
