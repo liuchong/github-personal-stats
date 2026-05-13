@@ -21,3 +21,6 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - Fixture parsing remains available for deterministic tests and offline previews.
 - Profile workflows should pass a dedicated personal access token when private repository data is expected. The default Actions `GITHUB_TOKEN` is repository-scoped and should not be documented as sufficient for private profile-wide stats.
 - Stats use `pullRequests.totalCount`, `issues.totalCount`, pull request review contributions, follower counts, and owner repository stars. Language share aggregates owner non-fork repository language sizes. Streaks use per-year contribution calendars.
+- `--authored-languages` keeps language aggregation API-only and restricts language share to owned non-fork repositories that match contribution data, username commit author data, or configured `--author-email` supplements from the REST commits API. `--author-email` accepts comma-separated values and can be repeated. It is repository-level filtering, not per-line authorship analysis.
+- `--hide-language` removes named languages before aggregation. It accepts comma-separated values and can be repeated.
+- `--min-repo-language-share` filters languages below the configured per-repository percentage before language aggregation, using GraphQL `languages.totalSize`.

@@ -34,8 +34,17 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let height = option_value(&args, "--height")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(420);
-    let config = GithubStatsConfig::new(user)?.with_size(width, height)?;
-    let data = github_data(&config, option_value(&args, "--fixture"))?;
+    let mut config = GithubStatsConfig::new(user)?.with_size(width, height)?;
+    if option_flag(&args, "--authored-languages") {
+        config = config.with_authored_languages();
+    }
+    config = config.with_author_emails(option_values(&args, "--author-email"));
+    config = config.with_hidden_languages(option_values(&args, "--hide-language"));
+    if let Some(value) = option_value(&args, "--min-repo-language-share") {
+        config = config.with_min_repo_language_share(&value)?;
+    }
+    let mut data = github_data(&config, option_value(&args, "--fixture"))?;
+    hide_languages(&mut data, &config.hidden_languages);
     let card_data = aggregate_card_data(&data, parse_output_kind(&card)?);
     let rendered = render_card(&card_data, &config);
 
@@ -127,7 +136,29 @@ fn write_output(path: PathBuf, content: String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn hide_languages(data: &mut GithubData, hidden_languages: &[String]) {
+    if hidden_languages.is_empty() {
+        return;
+    }
+    data.languages.retain(|language| {
+        !hidden_languages
+            .iter()
+            .any(|hidden| hidden.eq_ignore_ascii_case(&language.name))
+    });
+}
+
 fn option_value(args: &[String], name: &str) -> Option<String> {
     args.windows(2)
         .find_map(|window| (window[0] == name).then(|| window[1].clone()))
+}
+
+fn option_values(args: &[String], name: &str) -> Vec<String> {
+    args.windows(2)
+        .filter(|window| window[0] == name)
+        .map(|window| window[1].clone())
+        .collect()
+}
+
+fn option_flag(args: &[String], name: &str) -> bool {
+    args.iter().any(|arg| arg == name)
 }
