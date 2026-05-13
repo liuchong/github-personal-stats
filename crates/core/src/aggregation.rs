@@ -31,6 +31,10 @@ pub struct StreakSummary {
     pub longest: u32,
     pub total_active_days: u32,
     pub total_contributions: u64,
+    pub current_start: Option<String>,
+    pub current_end: Option<String>,
+    pub longest_start: Option<String>,
+    pub longest_end: Option<String>,
     pub mode: StreakMode,
 }
 
@@ -152,10 +156,14 @@ pub fn calculate_streak(
     };
 
     StreakSummary {
-        current,
-        longest,
+        current: current.length,
+        longest: longest.length,
         total_active_days,
         total_contributions,
+        current_start: current.start.map(date_from_ordinal),
+        current_end: current.end.map(date_from_ordinal),
+        longest_start: longest.start.map(date_from_ordinal),
+        longest_end: longest.end.map(date_from_ordinal),
         mode,
     }
 }
@@ -260,26 +268,37 @@ fn normalized_days(contributions: &[ContributionDay]) -> Vec<(i32, u32)> {
     days
 }
 
-fn daily_streak(days: &[(i32, u32)], excluded_weekdays: &[u8]) -> (u32, u32) {
-    let mut current = 0_u32;
-    let mut longest = 0_u32;
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct StreakRun {
+    length: u32,
+    start: Option<i32>,
+    end: Option<i32>,
+}
+
+fn daily_streak(days: &[(i32, u32)], excluded_weekdays: &[u8]) -> (StreakRun, StreakRun) {
+    let mut current = StreakRun::default();
+    let mut longest = StreakRun::default();
     let Some((last_day, _)) = days.last() else {
-        return (0, 0);
+        return (current, longest);
     };
 
     for (ordinal, count) in days {
-        if *count > 0 || (current > 0 && excluded_weekdays.contains(&weekday(*ordinal))) {
-            current += 1;
-            longest = longest.max(current);
+        if *count > 0 || (current.length > 0 && excluded_weekdays.contains(&weekday(*ordinal))) {
+            current.length += 1;
+            current.start = current.start.or(Some(*ordinal));
+            current.end = Some(*ordinal);
+            if current.length > longest.length {
+                longest = current;
+            }
         } else if ordinal != last_day {
-            current = 0;
+            current = StreakRun::default();
         }
     }
 
     (current, longest)
 }
 
-fn weekly_streak(days: &[(i32, u32)]) -> (u32, u32) {
+fn weekly_streak(days: &[(i32, u32)]) -> (StreakRun, StreakRun) {
     let mut weeks = Vec::<(i32, u32)>::new();
     for (ordinal, count) in days {
         let week = sunday_of_week(*ordinal);
@@ -290,18 +309,22 @@ fn weekly_streak(days: &[(i32, u32)]) -> (u32, u32) {
         }
     }
 
-    let mut current = 0_u32;
-    let mut longest = 0_u32;
+    let mut current = StreakRun::default();
+    let mut longest = StreakRun::default();
     let Some((last_week, _)) = weeks.last().copied() else {
-        return (0, 0);
+        return (current, longest);
     };
 
     for (week, count) in weeks {
         if count > 0 {
-            current += 1;
-            longest = longest.max(current);
+            current.length += 1;
+            current.start = current.start.or(Some(week));
+            current.end = Some(week);
+            if current.length > longest.length {
+                longest = current;
+            }
         } else if week != last_week {
-            current = 0;
+            current = StreakRun::default();
         }
     }
 
@@ -340,4 +363,19 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i32> {
     let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     Some(era * 146_097 + day_of_era - 719_468)
+}
+
+fn date_from_ordinal(ordinal: i32) -> String {
+    let days = ordinal + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    let year = year + i32::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
