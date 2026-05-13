@@ -1,4 +1,4 @@
-use github_stats_core::{
+use github_personal_stats_core::{
     CodingActivityEntry, ContributionDay, GithubClient, GithubStatsConfig, MockGithubClient,
     OutputKind, RepositoryLanguage, StreakMode, aggregate_card_data, aggregate_coding_activity,
     aggregate_languages, aggregate_stats, calculate_streak,
@@ -6,7 +6,7 @@ use github_stats_core::{
 
 const FIXTURE: &str = include_str!("fixtures/github_user_data.json");
 
-fn fixture_data() -> github_stats_core::GithubData {
+fn fixture_data() -> github_personal_stats_core::GithubData {
     let config = GithubStatsConfig::new("octo").unwrap();
     MockGithubClient::success(FIXTURE)
         .fetch_user_data(&config)
@@ -196,7 +196,7 @@ fn card_data_dashboard_reuses_shared_aggregations() {
     let card = aggregate_card_data(&data, OutputKind::Dashboard);
 
     match card {
-        github_stats_core::CardData::Dashboard {
+        github_personal_stats_core::CardData::Dashboard {
             stats,
             languages,
             streak,

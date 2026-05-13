@@ -1,4 +1,4 @@
-use github_stats_server::{handle_request, http_bytes};
+use github_personal_stats_server::{handle_request, http_bytes};
 use std::{
     env,
     io::{Read, Write},
@@ -6,7 +6,8 @@ use std::{
 };
 
 fn main() -> std::io::Result<()> {
-    let address = env::var("GITHUB_STATS_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
+    let address =
+        env::var("GITHUB_PERSONAL_STATS_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let listener = TcpListener::bind(address)?;
 
     for stream in listener.incoming() {

@@ -1,5 +1,5 @@
 [package]
-name = "github-stats-server"
+name = "github-personal-stats-server"
 edition.workspace = true
 license-file.workspace = true
 repository.workspace = true
@@ -7,4 +7,4 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-github-stats-core = { path = "../core" }
+github-personal-stats-core = { path = "../core" }

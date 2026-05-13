@@ -1,4 +1,4 @@
-use github_stats_core::{
+use github_personal_stats_core::{
     GithubClient, GithubGraphqlClient, GithubStatsConfig, MockGithubClient, RemoteErrorKind,
 };
 
