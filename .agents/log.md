@@ -103,3 +103,7 @@ Added `--min-repo-language-share` so small per-repository language slices can be
 ## [2026-05-13] data-client | tolerate missing pagination metadata
 
 Made repository pagination metadata optional in live GraphQL response parsing so older or partial connection payloads are treated as a single page instead of failing deserialization.
+
+## [2026-05-13] action | pin installer to action ref
+
+Changed the Action installer default from `latest` to the checked-out Action ref so tagged Action runs download matching release assets. Workflows can still override the binary version explicitly with the `version` input.
