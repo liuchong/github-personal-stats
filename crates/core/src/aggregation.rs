@@ -1,4 +1,6 @@
 use crate::{ContributionDay, GithubData, OutputKind, RepositoryLanguage};
+use std::collections::BTreeMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregatedStats {
@@ -90,7 +92,6 @@ pub fn aggregate_card_data(data: &GithubData, output: OutputKind) -> CardData {
 
 pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
     let stats = &data.stats;
-    let rank = rank_for_stats(data);
     let score = stats
         .stars
         .saturating_add(stats.commits)
@@ -98,6 +99,7 @@ pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
         .saturating_add(stats.issues.saturating_mul(3))
         .saturating_add(stats.reviews.saturating_mul(2))
         .saturating_add(stats.contributed_to.saturating_mul(2));
+    let rank = rank_for_stats(data);
 
     AggregatedStats {
         total_stars: stats.stars,
@@ -224,9 +226,7 @@ fn rank_for_stats(data: &GithubData) -> &'static str {
             / total_weight;
     let percentile = rank * 100.0;
 
-    if percentile <= 0.5 {
-        "S+"
-    } else if percentile <= 1.0 {
+    if percentile <= 1.0 {
         "S"
     } else if percentile <= 12.5 {
         "A+"
@@ -260,9 +260,18 @@ fn percentage_basis_points(value: u64, total: u64) -> u32 {
 }
 
 fn normalized_days(contributions: &[ContributionDay]) -> Vec<(i32, u32)> {
+    let today = today_ordinal();
+    let tomorrow = today + 1;
     let mut days = contributions
         .iter()
-        .filter_map(|day| date_to_ordinal(&day.date).map(|ordinal| (ordinal, day.count)))
+        .filter_map(|day| {
+            let ordinal = date_to_ordinal(&day.date)?;
+            if ordinal <= today || (ordinal == tomorrow && day.count > 0) {
+                Some((ordinal, day.count))
+            } else {
+                None
+            }
+        })
         .collect::<Vec<_>>();
     days.sort_unstable_by_key(|(ordinal, _)| *ordinal);
     days
@@ -299,23 +308,24 @@ fn daily_streak(days: &[(i32, u32)], excluded_weekdays: &[u8]) -> (StreakRun, St
 }
 
 fn weekly_streak(days: &[(i32, u32)]) -> (StreakRun, StreakRun) {
-    let mut weeks = Vec::<(i32, u32)>::new();
+    let mut by_week = BTreeMap::<i32, u32>::new();
     for (ordinal, count) in days {
         let week = sunday_of_week(*ordinal);
-        if let Some((_, total)) = weeks.iter_mut().find(|(existing, _)| *existing == week) {
-            *total += *count;
-        } else {
-            weeks.push((week, *count));
-        }
+        *by_week.entry(week).or_default() += *count;
     }
 
     let mut current = StreakRun::default();
     let mut longest = StreakRun::default();
-    let Some((last_week, _)) = weeks.last().copied() else {
+    let Some(first_week) = by_week.keys().next().copied() else {
+        return (current, longest);
+    };
+    let Some(last_week) = by_week.keys().next_back().copied() else {
         return (current, longest);
     };
 
-    for (week, count) in weeks {
+    let mut week = first_week;
+    while week <= last_week {
+        let count = by_week.get(&week).copied().unwrap_or(0);
         if count > 0 {
             current.length += 1;
             current.start = current.start.or(Some(week));
@@ -326,6 +336,7 @@ fn weekly_streak(days: &[(i32, u32)]) -> (StreakRun, StreakRun) {
         } else if week != last_week {
             current = StreakRun::default();
         }
+        week += 7;
     }
 
     (current, longest)
@@ -378,4 +389,12 @@ fn date_from_ordinal(ordinal: i32) -> String {
     let month = month_prime + if month_prime < 10 { 3 } else { -9 };
     let year = year + i32::from(month <= 2);
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn today_ordinal() -> i32 {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0);
+    (seconds / 86_400) as i32
 }
