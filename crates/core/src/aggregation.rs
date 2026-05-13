@@ -218,11 +218,7 @@ fn rank_for_score(score: u64) -> &'static str {
 }
 
 fn percentage_basis_points(value: u64, total: u64) -> u32 {
-    if total == 0 {
-        0
-    } else {
-        ((value * 10_000) / total) as u32
-    }
+    value.saturating_mul(10_000).checked_div(total).unwrap_or(0) as u32
 }
 
 fn longest_run(values: &[i32]) -> u32 {
