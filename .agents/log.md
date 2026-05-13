@@ -23,3 +23,7 @@ Added default dashboard SVG rendering, individual card SVG rendering, fixed `wid
 ## [2026-05-13] cli-action | add generator and binary action
 
 Added CLI `generate` and `update-readme` modes, deterministic CLI tests, composite Action wiring that installs release binaries, release artifact workflow, install script checksum verification, and an Action contract test that rejects Rust build steps in consuming workflows.
+
+## [2026-05-13] server-deploy | add http deployment path
+
+Added a standard-library HTTP server path with `/health`, `/info`, SVG card endpoints, and coding activity text preview. Added server tests, Dockerfile, Kubernetes manifest, and deployment docs. Local Docker build could not run because the Docker daemon was unavailable.

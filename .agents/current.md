@@ -6,15 +6,15 @@
 
 ## Project State
 
-Renderer logic has been committed. CLI and Action logic is ready for commit.
+CLI and Action logic has been committed. Server and deployment logic is ready for commit.
 
 ## Active Task
 
-Review and commit CLI generation, README update mode, release-binary Action wiring, release workflow, and Action contract tests.
+Review and commit HTTP server endpoints, deployment assets, and server tests.
 
 ## Next Safe Task After Commit
 
-Implement HTTP server endpoints, container packaging, deployment examples, and server tests.
+Run final verification across the repository and prepare the next development task from the roadmap.
 
 ## Constraints
 
