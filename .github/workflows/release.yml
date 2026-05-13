@@ -6,6 +6,9 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -13,6 +16,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
+          - os: macos-15-intel
+            target: macos-x64
           - os: macos-14
             target: macos-arm64
     runs-on: ${{ matrix.os }}
@@ -32,3 +37,31 @@ jobs:
           path: |
             github-stats-${{ matrix.target }}.tar.gz
             github-stats-${{ matrix.target }}.sha256
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Create checksums
+        run: |
+          mapfile -t assets < <(find dist -name 'github-stats-*.tar.gz' -print | sort)
+          shasum -a 256 "${assets[@]}" | sed 's# .*/# #' > checksums.txt
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          mapfile -t assets < <(find dist -name 'github-stats-*.tar.gz' -print | sort)
+          assets+=(checksums.txt)
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${TAG_NAME}" "${assets[@]}" \
+              --title "GitHub Stats ${TAG_NAME}" \
+              --notes "Release ${TAG_NAME} of the GitHub Stats Action and CLI binaries."
+          fi

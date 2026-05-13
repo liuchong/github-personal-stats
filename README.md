@@ -46,7 +46,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: liuchong/github-stats@v1
+      - uses: liuchong/github-stats@v1.0.0
         with:
           card: dashboard
           path: profile/github-stats.svg

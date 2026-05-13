@@ -35,3 +35,27 @@ Added streak date ranges to aggregated card data, restored a flame marker for cu
 ## [2026-05-13] docs | improve user-facing documentation
 
 Reworked the README into a visual landing page, added deterministic SVG examples under `examples/`, and added `docs/user-guide.md` with Action, CLI, card, sizing, and README usage guidance.
+
+## [2026-05-13] release | prepare marketplace release
+
+Added Action branding metadata, taught the release workflow to publish binary archives and a combined checksum file to GitHub Releases, pinned user-facing Action examples to the first release tag, and set explicit release repository context for non-checkout publish steps.
+
+## [2026-05-13] release | publish stable action tag
+
+Published the first release assets, fixed macOS asset name resolution in the installer, and moved user-facing Action examples to the stable release tag that includes the release workflow and installer fixes.
+
+## [2026-05-13] release | add macOS x64 asset
+
+Added a macOS x64 build target to the release matrix so the installer can resolve assets on both Intel and Apple Silicon macOS runners, then moved user-facing Action examples to the complete release tag.
+
+## [2026-05-13] release | use supported macOS Intel runner
+
+Moved the macOS x64 release job from the retired Intel runner label to the supported Intel runner label and advanced the user-facing release tag.
+
+## [2026-05-13] release | consolidate first version
+
+Moved user-facing examples back to the first release tag and consolidated release publishing around a single initial version.
+
+## [2026-05-13] release | choose marketplace name
+
+Renamed the Action display name to a more specific Marketplace-safe title while keeping the first release tag unchanged.
