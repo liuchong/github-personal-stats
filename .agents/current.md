@@ -6,18 +6,18 @@
 
 ## Project State
 
-The repository is intentionally empty except for git metadata before this framework is created. The first committed artifact must be the agent operating framework.
+The agent operating framework has been committed. The Rust foundation stage is ready for commit.
 
 ## Active Task
 
-Create `AGENTS.md` and `.agents/` as the first development step, then commit only those files.
+Review and commit the Rust workspace, 1PL license, basic CI, `.gitignore`, foundational README, and minimal compile-tested crate skeleton.
 
 ## Next Safe Task After Commit
 
-Initialize the Rust workspace, 1PL license, basic CI, and foundational project documentation.
+Implement typed configuration and fixture-driven data clients.
 
 ## Constraints
 
-- Do not create product code before the framework commit.
 - Do not write private reference names, paths, URLs, or copied text into repository files.
-- Keep the framework concise enough that a fresh agent can resume from it.
+- Keep business code free of explanatory comments.
+- Keep each committed stage independently buildable and reviewable.

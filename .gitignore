@@ -1,0 +1,14 @@
+/target/
+/.cargo/
+*.log
+*.tmp
+*.temp
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+profile/*.svg
+coverage/
+*.profraw
