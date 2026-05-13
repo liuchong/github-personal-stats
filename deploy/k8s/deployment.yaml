@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-stats
+  template:
+    metadata:
+      labels:
+        app: github-stats
+    spec:
+      containers:
+        - name: github-stats
+          image: ghcr.io/liuchong/github-stats:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GITHUB_STATS_ADDR
+              value: 0.0.0.0:3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-stats
+spec:
+  selector:
+    app: github-stats
+  ports:
+    - port: 80
+      targetPort: 3000

@@ -22,3 +22,11 @@ Release assets must include platform binaries and checksums. Smoke tests must ve
 - The installer downloads from the Action repository release assets, not from the consuming repository.
 - The consuming workflow path must not run Rust build, install, or toolchain setup steps.
 - `mode=generate` writes an SVG path; `mode=update-readme` rewrites the marked section in the target file.
+
+## Current Server Contract
+
+- `github-stats-server` listens on `GITHUB_STATS_ADDR`, defaulting to `127.0.0.1:3000`.
+- `/health` returns plain text `ok`.
+- `/info` returns workspace metadata as JSON.
+- `/api` and `/api/:card` return SVG responses with cache headers.
+- `/api/wakatime-text` previews the coding activity README text output without remote writes.
