@@ -58,21 +58,61 @@ impl GithubGraphqlClient {
         query: &str,
         variables: V,
     ) -> Result<T, GithubStatsError> {
-        let body = serde_json::to_vec(&GraphqlRequest { query, variables }).map_err(|error| {
-            GithubStatsError::InvalidResponse {
-                message: error.to_string(),
+        let body = Bytes::from(
+            serde_json::to_vec(&GraphqlRequest { query, variables }).map_err(|error| {
+                GithubStatsError::InvalidResponse {
+                    message: error.to_string(),
+                }
+            })?,
+        );
+        let mut last_error = None;
+        for attempt in 0..3 {
+            let request = Request::builder()
+                .method(Method::POST)
+                .uri(&self.endpoint)
+                .header(AUTHORIZATION, format!("Bearer {token}"))
+                .header(CONTENT_TYPE, "application/json")
+                .header(USER_AGENT, "github-personal-stats")
+                .body(Full::new(body.clone()))
+                .map_err(|error| GithubStatsError::InvalidResponse {
+                    message: error.to_string(),
+                })?;
+            let Some(body) = self.request_body(request).await? else {
+                retry_delay(attempt).await;
+                continue;
+            };
+            if let Err(error) = ensure_success_body(&body) {
+                if retryable_body(&error) && attempt < 2 {
+                    last_error = Some(error);
+                    retry_delay(attempt).await;
+                    continue;
+                }
+                return Err(error);
             }
-        })?;
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri(&self.endpoint)
-            .header(AUTHORIZATION, format!("Bearer {token}"))
-            .header(CONTENT_TYPE, "application/json")
-            .header(USER_AGENT, "github-personal-stats")
-            .body(Full::new(Bytes::from(body)))
-            .map_err(|error| GithubStatsError::InvalidResponse {
-                message: error.to_string(),
+            let payload = serde_json::from_str::<GraphqlResponse<T>>(&body).map_err(|error| {
+                GithubStatsError::InvalidResponse {
+                    message: error.to_string(),
+                }
             })?;
+            if let Some(errors) = payload.errors {
+                return Err(graphql_error(errors));
+            }
+            return payload
+                .data
+                .ok_or_else(|| GithubStatsError::InvalidResponse {
+                    message: "missing GraphQL data".to_owned(),
+                });
+        }
+        Err(last_error.unwrap_or_else(|| GithubStatsError::Remote {
+            kind: RemoteErrorKind::UpstreamUnavailable,
+            message: "request failed after retries".to_owned(),
+        }))
+    }
+
+    async fn request_body(
+        &self,
+        request: Request<Full<Bytes>>,
+    ) -> Result<Option<String>, GithubStatsError> {
         let connector = HttpsConnectorBuilder::new()
             .with_webpki_roots()
             .https_only()
@@ -80,13 +120,10 @@ impl GithubGraphqlClient {
             .enable_http2()
             .build();
         let client = Client::builder(TokioExecutor::new()).build(connector);
-        let response = client
-            .request(request)
-            .await
-            .map_err(|error| GithubStatsError::Remote {
-                kind: RemoteErrorKind::UpstreamUnavailable,
-                message: error.to_string(),
-            })?;
+        let response = match client.request(request).await {
+            Ok(response) => response,
+            Err(_) => return Ok(None),
+        };
         let status = response.status();
         let body = response
             .into_body()
@@ -103,24 +140,9 @@ impl GithubGraphqlClient {
             }
         })?;
         if !status.is_success() {
-            return Err(GithubStatsError::Remote {
-                kind: http_error_kind(status.as_u16(), &body),
-                message: body,
-            });
+            return Ok(Some(format!("{}\n{}", status.as_u16(), body)));
         }
-        let payload = serde_json::from_str::<GraphqlResponse<T>>(&body).map_err(|error| {
-            GithubStatsError::InvalidResponse {
-                message: error.to_string(),
-            }
-        })?;
-        if let Some(errors) = payload.errors {
-            return Err(graphql_error(errors));
-        }
-        payload
-            .data
-            .ok_or_else(|| GithubStatsError::InvalidResponse {
-                message: "missing GraphQL data".to_owned(),
-            })
+        Ok(Some(body))
     }
 
     async fn get_json<T: for<'de> Deserialize<'de>>(
@@ -128,53 +150,39 @@ impl GithubGraphqlClient {
         token: &str,
         url: &str,
     ) -> Result<T, GithubStatsError> {
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri(url)
-            .header(AUTHORIZATION, format!("Bearer {token}"))
-            .header(USER_AGENT, "github-personal-stats")
-            .body(Full::new(Bytes::new()))
-            .map_err(|error| GithubStatsError::InvalidResponse {
-                message: error.to_string(),
-            })?;
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_only()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        let client = Client::builder(TokioExecutor::new()).build(connector);
-        let response = client
-            .request(request)
-            .await
-            .map_err(|error| GithubStatsError::Remote {
-                kind: RemoteErrorKind::UpstreamUnavailable,
-                message: error.to_string(),
-            })?;
-        let status = response.status();
-        let body = response
-            .into_body()
-            .collect()
-            .await
-            .map_err(|error| GithubStatsError::Remote {
-                kind: RemoteErrorKind::UpstreamUnavailable,
-                message: error.to_string(),
-            })?
-            .to_bytes();
-        let body = String::from_utf8(body.to_vec()).map_err(|error| {
-            GithubStatsError::InvalidResponse {
-                message: error.to_string(),
+        let mut last_error = None;
+        for attempt in 0..3 {
+            let request = Request::builder()
+                .method(Method::GET)
+                .uri(url)
+                .header(AUTHORIZATION, format!("Bearer {token}"))
+                .header(USER_AGENT, "github-personal-stats")
+                .body(Full::new(Bytes::new()))
+                .map_err(|error| GithubStatsError::InvalidResponse {
+                    message: error.to_string(),
+                })?;
+            let Some(body) = self.request_body(request).await? else {
+                retry_delay(attempt).await;
+                continue;
+            };
+            if let Err(error) = ensure_success_body(&body) {
+                if retryable_body(&error) && attempt < 2 {
+                    last_error = Some(error);
+                    retry_delay(attempt).await;
+                    continue;
+                }
+                return Err(error);
             }
-        })?;
-        if !status.is_success() {
-            return Err(GithubStatsError::Remote {
-                kind: http_error_kind(status.as_u16(), &body),
-                message: body,
+            return serde_json::from_str::<T>(&body).map_err(|error| {
+                GithubStatsError::InvalidResponse {
+                    message: error.to_string(),
+                }
             });
         }
-        serde_json::from_str::<T>(&body).map_err(|error| GithubStatsError::InvalidResponse {
-            message: error.to_string(),
-        })
+        Err(last_error.unwrap_or_else(|| GithubStatsError::Remote {
+            kind: RemoteErrorKind::UpstreamUnavailable,
+            message: "request failed after retries".to_owned(),
+        }))
     }
 
     async fn fetch_user_data_async(
@@ -466,6 +474,33 @@ fn http_error_kind(status: u16, body: &str) -> RemoteErrorKind {
     }
 }
 
+fn ensure_success_body(body: &str) -> Result<(), GithubStatsError> {
+    let Some((status, response_body)) = body.split_once('\n') else {
+        return Ok(());
+    };
+    let Ok(status) = status.parse::<u16>() else {
+        return Ok(());
+    };
+    Err(GithubStatsError::Remote {
+        kind: http_error_kind(status, response_body),
+        message: response_body.to_owned(),
+    })
+}
+
+fn retryable_body(error: &GithubStatsError) -> bool {
+    matches!(
+        error,
+        GithubStatsError::Remote {
+            kind: RemoteErrorKind::UpstreamUnavailable,
+            ..
+        }
+    )
+}
+
+async fn retry_delay(attempt: usize) {
+    tokio::time::sleep(std::time::Duration::from_millis(300 * (attempt as u64 + 1))).await;
+}
+
 fn repository_commits_url(name_with_owner: &str, author: &str) -> String {
     let path = name_with_owner
         .split('/')
@@ -609,6 +644,7 @@ struct RepositoryConnection {
     #[serde(rename = "totalCount")]
     total_count: u64,
     nodes: Vec<RepositoryNode>,
+    #[serde(default)]
     page_info: PageInfo,
 }
 
@@ -637,6 +673,7 @@ struct AuthoredRepositoriesUser {
 #[serde(rename_all = "camelCase")]
 struct AuthoredRepositoryConnection {
     nodes: Vec<AuthoredRepositoryNode>,
+    #[serde(default)]
     page_info: PageInfo,
 }
 
@@ -645,7 +682,7 @@ struct AuthoredRepositoryNode {
     id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PageInfo {
     has_next_page: bool,
