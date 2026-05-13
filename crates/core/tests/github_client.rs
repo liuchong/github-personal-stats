@@ -55,7 +55,9 @@ fn graphql_request_contains_endpoint_token_env_and_username() {
 
     assert_eq!(request.endpoint, "https://api.github.com/graphql");
     assert_eq!(request.token_env, "GITHUB_TOKEN");
-    assert!(request.body.contains("octo"));
+    assert!(request.body.contains("pullRequests"));
+    assert!(request.body.contains("issues"));
+    assert!(request.body.contains("contributionYears"));
 }
 
 #[test]
@@ -80,5 +82,18 @@ fn mock_client_preserves_remote_error_classification() {
     assert_eq!(
         error.to_string(),
         "remote error RateLimit: rate limit exceeded"
+    );
+}
+
+#[test]
+fn graphql_client_requires_token_env_for_live_fetch() {
+    let mut config = GithubStatsConfig::new("octo").unwrap();
+    config.token_env = "GITHUB_PERSONAL_STATS_TEST_MISSING_TOKEN".to_owned();
+    let client = GithubGraphqlClient::new("https://api.github.com/graphql");
+    let error = client.fetch_user_data(&config).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "remote error Authentication: missing token environment variable GITHUB_PERSONAL_STATS_TEST_MISSING_TOKEN"
     );
 }

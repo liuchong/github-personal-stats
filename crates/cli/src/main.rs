@@ -1,8 +1,7 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig,
-    MockGithubClient, RepositoryLanguage, UserStats, aggregate_card_data,
-    aggregate_coding_activity, parse_output_kind, render_card, render_readme_section,
-    workspace_info,
+    CodingActivityEntry, GithubData, GithubGraphqlClient, GithubStatsConfig, MockGithubClient,
+    aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
+    render_readme_section, workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
@@ -36,7 +35,7 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(420);
     let config = GithubStatsConfig::new(user)?.with_size(width, height)?;
-    let data = fixture_data(option_value(&args, "--fixture"))?;
+    let data = github_data(&config, option_value(&args, "--fixture"))?;
     let card_data = aggregate_card_data(&data, parse_output_kind(&card)?);
     let rendered = render_card(&card_data, &config);
 
@@ -59,7 +58,10 @@ fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn fixture_data(path: Option<String>) -> Result<GithubData, Box<dyn Error>> {
+fn github_data(
+    config: &GithubStatsConfig,
+    path: Option<String>,
+) -> Result<GithubData, Box<dyn Error>> {
     if let Some(path) = path {
         let content = fs::read_to_string(path)?;
         let config = GithubStatsConfig::new("fixture")?;
@@ -71,54 +73,12 @@ fn fixture_data(path: Option<String>) -> Result<GithubData, Box<dyn Error>> {
         );
     }
 
-    Ok(sample_github_data())
-}
-
-fn sample_github_data() -> GithubData {
-    GithubData {
-        profile: GithubProfile {
-            login: "octo".to_owned(),
-            name: Some("Octo User".to_owned()),
-            followers: 42,
-            public_repositories: 7,
-        },
-        stats: UserStats {
-            stars: 120,
-            commits: 350,
-            pull_requests: 21,
-            issues: 13,
-            reviews: 8,
-            contributed_to: 5,
-        },
-        languages: vec![
-            RepositoryLanguage {
-                name: "Rust".to_owned(),
-                size: 5000,
-            },
-            RepositoryLanguage {
-                name: "TypeScript".to_owned(),
-                size: 3000,
-            },
-            RepositoryLanguage {
-                name: "Shell".to_owned(),
-                size: 400,
-            },
-        ],
-        contributions: vec![
-            ContributionDay {
-                date: "2026-05-10".to_owned(),
-                count: 1,
-            },
-            ContributionDay {
-                date: "2026-05-11".to_owned(),
-                count: 0,
-            },
-            ContributionDay {
-                date: "2026-05-12".to_owned(),
-                count: 3,
-            },
-        ],
-    }
+    Ok(
+        <GithubGraphqlClient as github_personal_stats_core::GithubClient>::fetch_user_data(
+            &GithubGraphqlClient::new("https://api.github.com/graphql"),
+            config,
+        )?,
+    )
 }
 
 fn sample_coding_activity() -> Vec<CodingActivityEntry> {
