@@ -2,50 +2,34 @@
 
 # GitHub Stats
 
-GitHub Stats is a Rust workspace for generating profile metrics as a unified SVG dashboard. The default output is one dashboard image so README layout is controlled by the renderer instead of by multiple images and HTML alignment rules.
+Generate a polished GitHub profile dashboard as one SVG. The renderer owns the layout, so your README does not have to fight tables, image heights, or fragile HTML alignment.
 
-## Goals
+<p align="center">
+  <img src="./examples/dashboard.svg" alt="GitHub Stats dashboard preview" width="100%" />
+</p>
 
-- Generate a single dashboard SVG by default.
-- Support individual cards for stats, languages, streaks, repositories, gists, status, and coding activity.
-- Provide a local CLI, release-binary GitHub Action, and HTTP server.
-- Keep rendering dimensions explicit and configurable.
-- Keep tests dense enough to protect aggregation, rendering, and deployment behavior.
+## Why Use It
 
-## Repository Layout
+- One default dashboard for stats, language share, total contributions, current streak, and longest streak.
+- Optional individual cards when you want a custom README layout.
+- Release-binary GitHub Action, local CLI, and HTTP server deployment path.
+- Fixed SVG dimensions with configurable width and height.
+- Deterministic rendering backed by fixtures and snapshot tests.
 
-- `crates/core`: shared data model, aggregation, rendering, and configuration.
-- `crates/cli`: command-line interface.
-- `crates/server`: HTTP interface.
-- `.agents`: durable AI development memory and process files.
+## Card Examples
 
-## Development
+<p align="center">
+  <img src="./examples/stats.svg" alt="Stats card preview" width="49%" />
+  <img src="./examples/languages.svg" alt="Languages card preview" width="49%" />
+</p>
 
-```sh
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-```
+<p align="center">
+  <img src="./examples/streak.svg" alt="Streak card preview" width="100%" />
+</p>
 
-Coverage is enforced in CI with `cargo llvm-cov` once product logic grows beyond the foundation skeleton.
+## Quick Start
 
-## CLI
-
-Generate the default dashboard:
-
-```sh
-cargo run -p github-stats -- generate --card dashboard --output profile/github-stats.svg
-```
-
-Update a marked coding activity section:
-
-```sh
-cargo run -p github-stats -- update-readme --section waka --target README.md
-```
-
-## GitHub Action
-
-The Action installs a prebuilt release binary and runs it. Consuming workflows do not compile Rust.
+Use the Action from your profile repository and commit the generated dashboard back to `profile/github-stats.svg`.
 
 ```yaml
 name: GitHub Stats
@@ -66,10 +50,64 @@ jobs:
         with:
           card: dashboard
           path: profile/github-stats.svg
+          options: --user your-github-login --width 1000 --height 420
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update profile stats"
 ```
+
+Then add the generated image to your profile README:
+
+```md
+![GitHub Stats](./profile/github-stats.svg)
+```
+
+## Local Preview
+
+Generate the showcase dashboard from the deterministic example data:
+
+```sh
+cargo run -p github-stats -- generate \
+  --fixture examples/showcase.json \
+  --user showcase \
+  --card dashboard \
+  --output examples/dashboard.svg
+```
+
+Generate an individual card:
+
+```sh
+cargo run -p github-stats -- generate \
+  --fixture examples/showcase.json \
+  --card languages \
+  --width 520 \
+  --height 260 \
+  --output examples/languages.svg
+```
+
+## Documentation
+
+- [User Guide](docs/user-guide.md): Action setup, CLI usage, card types, sizing, and README patterns.
+- [Deployment Guide](deploy/README.md): HTTP server, container, and Kubernetes deployment notes.
+- [Vercel Notes](deploy/vercel/README.md): lightweight serverless deployment considerations.
+
+## Repository Layout
+
+- `crates/core`: shared data model, aggregation, rendering, and configuration.
+- `crates/cli`: command-line interface.
+- `crates/server`: HTTP interface.
+- `examples`: deterministic showcase data and generated SVG previews.
+- `.agents`: durable AI development memory and process files.
+
+## Development
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+Coverage is enforced in CI with `cargo llvm-cov`.
 
 ## License
 
