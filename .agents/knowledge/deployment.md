@@ -20,6 +20,7 @@ Release assets must include platform binaries and checksums. Smoke tests must ve
 
 - `action.yml` calls `scripts/install-action-binary.sh` before invoking `github-personal-stats`.
 - The installer downloads from the Action repository release assets, not from the consuming repository.
+- If the `version` input is omitted, the installer uses the checked-out Action ref before falling back to `latest`; consuming workflows can still set `version` explicitly to pin the release asset.
 - The consuming workflow path must not run Rust build, install, or toolchain setup steps.
 - `mode=generate` writes an SVG path; `mode=update-readme` rewrites the marked section in the target file.
 

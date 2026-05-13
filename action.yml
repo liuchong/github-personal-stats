@@ -70,6 +70,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_BINARY_URL: ${{ inputs.binary-url }}
         GITHUB_ACTION_REPOSITORY: ${{ github.action_repository }}
+        GITHUB_ACTION_REF: ${{ github.action_ref }}
         GITHUB_ACTION_PATH: ${{ github.action_path }}
     - name: Run generator
       shell: bash

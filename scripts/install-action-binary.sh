@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo="${GITHUB_ACTION_REPOSITORY:-liuchong/github-personal-stats}"
-version="${INPUT_VERSION:-}"
+version="${INPUT_VERSION:-${GITHUB_ACTION_REF:-}}"
 binary_url="${INPUT_BINARY_URL:-}"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
