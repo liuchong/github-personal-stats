@@ -11,3 +11,7 @@ Added the Rust workspace skeleton, 1PL license, CI workflow, ignore rules, found
 ## [2026-05-13] data-client | add typed config and fixture client
 
 Added typed output selection, image sizing, project config, GitHub request construction, remote error categories, sanitized fixture parsing, and a mock client for deterministic data-client tests. No live network tests were added.
+
+## [2026-05-13] aggregation | add card data aggregation
+
+Added stats score and rank aggregation, language merging and percentage calculation, daily and weekly streak summaries, coding activity summarization, and a shared `CardData` enum for renderers. Added boundary tests for empty data, gaps, weekly dedupe, aliases, and masked coding activity totals.
