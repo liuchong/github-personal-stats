@@ -22,7 +22,7 @@ fn stats_aggregation_computes_score_and_rank() {
     assert_eq!(stats.total_commits, 350);
     assert_eq!(stats.total_pull_requests, 21);
     assert_eq!(stats.score, 619);
-    assert_eq!(stats.rank, "A");
+    assert_eq!(stats.rank, "B+");
 }
 
 #[test]
@@ -83,6 +83,7 @@ fn daily_streak_handles_gaps() {
     assert_eq!(streak.longest, 2);
     assert_eq!(streak.current, 2);
     assert_eq!(streak.total_active_days, 3);
+    assert_eq!(streak.total_contributions, 6);
 }
 
 #[test]
@@ -104,8 +105,37 @@ fn weekly_streak_deduplicates_active_days_in_same_week_bucket() {
 
     let streak = calculate_streak(&days, StreakMode::Weekly, &[]);
 
-    assert_eq!(streak.total_active_days, 2);
+    assert_eq!(streak.total_active_days, 3);
+    assert_eq!(streak.total_contributions, 6);
     assert_eq!(streak.longest, 2);
+}
+
+#[test]
+fn daily_streak_keeps_yesterday_streak_when_today_is_empty() {
+    let days = vec![
+        ContributionDay {
+            date: "2026-05-10".to_owned(),
+            count: 0,
+        },
+        ContributionDay {
+            date: "2026-05-11".to_owned(),
+            count: 2,
+        },
+        ContributionDay {
+            date: "2026-05-12".to_owned(),
+            count: 1,
+        },
+        ContributionDay {
+            date: "2026-05-13".to_owned(),
+            count: 0,
+        },
+    ];
+
+    let streak = calculate_streak(&days, StreakMode::Daily, &[]);
+
+    assert_eq!(streak.current, 2);
+    assert_eq!(streak.longest, 2);
+    assert_eq!(streak.total_contributions, 3);
 }
 
 #[test]
@@ -161,9 +191,10 @@ fn card_data_dashboard_reuses_shared_aggregations() {
             languages,
             streak,
         } => {
-            assert_eq!(stats.rank, "A");
+            assert_eq!(stats.rank, "B+");
             assert_eq!(languages[0].name, "Rust");
             assert_eq!(streak.total_active_days, 2);
+            assert_eq!(streak.total_contributions, 4);
         }
         _ => panic!("expected dashboard card data"),
     }
