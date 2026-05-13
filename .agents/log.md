@@ -31,3 +31,7 @@ Added a standard-library HTTP server path with `/health`, `/info`, SVG card endp
 ## [2026-05-13] renderer | refine dashboard metrics
 
 Added streak date ranges to aggregated card data, restored a flame marker for current streak rendering, reduced heavy strokes in SVG panels and metric rings, expanded dashboard language rows to six entries, and regenerated the local profile preview with aligned language data. Local `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` passed.
+
+## [2026-05-13] docs | improve user-facing documentation
+
+Reworked the README into a visual landing page, added deterministic SVG examples under `examples/`, and added `docs/user-guide.md` with Action, CLI, card, sizing, and README usage guidance.
