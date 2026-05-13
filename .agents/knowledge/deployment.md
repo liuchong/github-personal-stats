@@ -15,3 +15,10 @@ The HTTP server should expose the same core renderer through request parameters 
 ## Release
 
 Release assets must include platform binaries and checksums. Smoke tests must verify installation and at least one dashboard generation path.
+
+## Current Action Contract
+
+- `action.yml` calls `scripts/install-action-binary.sh` before invoking `github-stats`.
+- The installer downloads from the Action repository release assets, not from the consuming repository.
+- The consuming workflow path must not run Rust build, install, or toolchain setup steps.
+- `mode=generate` writes an SVG path; `mode=update-readme` rewrites the marked section in the target file.

@@ -6,15 +6,15 @@
 
 ## Project State
 
-Aggregation logic has been committed. Renderer logic is ready for commit.
+Renderer logic has been committed. CLI and Action logic is ready for commit.
 
 ## Active Task
 
-Review and commit dashboard SVG, individual card SVG, coding activity text rendering, and golden snapshot tests.
+Review and commit CLI generation, README update mode, release-binary Action wiring, release workflow, and Action contract tests.
 
 ## Next Safe Task After Commit
 
-Implement CLI generation, README update mode, release-binary Action wiring, and Action smoke tests.
+Implement HTTP server endpoints, container packaging, deployment examples, and server tests.
 
 ## Constraints
 

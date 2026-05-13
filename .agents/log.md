@@ -19,3 +19,7 @@ Added stats score and rank aggregation, language merging and percentage calculat
 ## [2026-05-13] renderer | add svg and text rendering
 
 Added default dashboard SVG rendering, individual card SVG rendering, fixed `width`/`height`/`viewBox` output, theme selection, coding activity README text rendering, and golden snapshot tests for dashboard, stats, and text output.
+
+## [2026-05-13] cli-action | add generator and binary action
+
+Added CLI `generate` and `update-readme` modes, deterministic CLI tests, composite Action wiring that installs release binaries, release artifact workflow, install script checksum verification, and an Action contract test that rejects Rust build steps in consuming workflows.

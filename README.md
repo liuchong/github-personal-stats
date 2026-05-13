@@ -27,6 +27,48 @@ cargo test
 
 Coverage is enforced in CI with `cargo llvm-cov` once product logic grows beyond the foundation skeleton.
 
+## CLI
+
+Generate the default dashboard:
+
+```sh
+cargo run -p github-stats -- generate --card dashboard --output profile/github-stats.svg
+```
+
+Update a marked coding activity section:
+
+```sh
+cargo run -p github-stats -- update-readme --section waka --target README.md
+```
+
+## GitHub Action
+
+The Action installs a prebuilt release binary and runs it. Consuming workflows do not compile Rust.
+
+```yaml
+name: GitHub Stats
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: liuchong/github-stats@v1
+        with:
+          card: dashboard
+          path: profile/github-stats.svg
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update profile stats"
+```
+
 ## License
 
 This project is licensed under 1PL. See `LICENSE`.

@@ -1,0 +1,88 @@
+name: GitHub Stats
+description: Generate GitHub profile metrics assets from release binaries
+inputs:
+  mode:
+    description: generate or update-readme
+    required: false
+    default: generate
+  card:
+    description: dashboard, stats, languages, streak, repo, gist, wakatime, status, json, or png
+    required: false
+    default: dashboard
+  options:
+    description: Additional CLI options
+    required: false
+    default: ""
+  path:
+    description: Output path for generated assets
+    required: false
+    default: profile/github-stats.svg
+  token:
+    description: GitHub token
+    required: false
+    default: ""
+  config:
+    description: Config file path
+    required: false
+    default: ""
+  version:
+    description: Release version to download
+    required: false
+    default: ""
+  binary-url:
+    description: Override binary archive URL
+    required: false
+    default: ""
+  wakatime-api-key:
+    description: Coding activity API key
+    required: false
+    default: ""
+  section-name:
+    description: README section name
+    required: false
+    default: waka
+  target-path:
+    description: README path for update mode
+    required: false
+    default: README.md
+  target-branch:
+    description: Branch to update
+    required: false
+    default: ""
+  committer:
+    description: Committer identity
+    required: false
+    default: ""
+  author:
+    description: Author identity
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install binary
+      shell: bash
+      run: ${{ github.action_path }}/scripts/install-action-binary.sh
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_BINARY_URL: ${{ inputs.binary-url }}
+        GITHUB_ACTION_REPOSITORY: ${{ github.action_repository }}
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+    - name: Run generator
+      shell: bash
+      run: |
+        if [ "${INPUT_MODE}" = "update-readme" ]; then
+          github-stats update-readme --section "${INPUT_SECTION_NAME}" --target "${INPUT_TARGET_PATH}" ${INPUT_OPTIONS}
+        else
+          github-stats generate --card "${INPUT_CARD}" --output "${INPUT_PATH}" ${INPUT_OPTIONS}
+        fi
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_CARD: ${{ inputs.card }}
+        INPUT_OPTIONS: ${{ inputs.options }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_SECTION_NAME: ${{ inputs.section-name }}
+        INPUT_TARGET_PATH: ${{ inputs.target-path }}
+        GITHUB_TOKEN: ${{ inputs.token || github.token }}
+        WAKATIME_API_KEY: ${{ inputs.wakatime-api-key }}
