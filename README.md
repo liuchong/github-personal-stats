@@ -54,7 +54,7 @@ jobs:
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
-          options: --user your-github-login --width 1000 --height 420
+          options: --user your-github-login --width 1000 --height 420 --authored-languages --author-email old@example.com,work@example.com --hide-language Ruby --min-repo-language-share 2
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -96,6 +96,12 @@ cargo run -p github-personal-stats -- generate \
   --height 260 \
   --output examples/languages.svg
 ```
+
+Add `--authored-languages` when you want the language card to count only owned repositories where the target user has commit contributions. Add `--author-email` with comma-separated values, or repeat it, for historical commit emails that GitHub no longer associates with the user. The default language view still counts all owned non-fork repositories.
+
+Add `--hide-language Ruby` when repository-level language data includes languages you do not want to display. The option accepts comma-separated values and can also be repeated.
+
+Add `--min-repo-language-share 2` to ignore languages that make up less than 2% of an individual repository before the global language share is calculated.
 
 ## Documentation
 

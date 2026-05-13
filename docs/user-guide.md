@@ -40,7 +40,7 @@ jobs:
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
-          options: --user your-github-login --width 1000 --height 420
+          options: --user your-github-login --width 1000 --height 420 --authored-languages --author-email old@example.com,work@example.com --hide-language Ruby --min-repo-language-share 2
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -79,6 +79,40 @@ Add a check step before generation so a missing token fails the workflow instead
 
 Private token access affects repository language share, contribution totals, streaks, and any stats based on private repository metadata. If the token is missing or under-scoped, the dashboard can still render, but the data will be public-only or incomplete.
 
+## Language Scope
+
+By default, the language card counts all owned non-fork repositories. This matches repository language share, but it can include repositories owned by the profile user where most code was written by someone else.
+
+Add `--authored-languages` to count only owned non-fork repositories where the target user has commit contributions:
+
+```yaml
+options: --user your-github-login --width 1000 --height 420 --authored-languages
+```
+
+If old commits used emails that GitHub no longer associates with the account, add those emails as supplements. The option accepts comma-separated values and can also be repeated:
+
+```yaml
+options: --user your-github-login --width 1000 --height 420 --authored-languages --author-email old@example.com,work@example.com
+```
+
+This mode still uses only GitHub API data. It does not clone or check out target repositories. The scope is repository-level: once a repository qualifies through GitHub contribution data, username commits, or a configured email match, its repository language sizes are counted. It does not perform per-line authorship analysis.
+
+Hide languages that should not appear in the card:
+
+```yaml
+options: --user your-github-login --width 1000 --height 420 --authored-languages --hide-language Ruby
+```
+
+`--hide-language` accepts comma-separated values and can also be repeated.
+
+Filter small per-repository language noise without hiding the language everywhere:
+
+```yaml
+options: --user your-github-login --width 1000 --height 420 --authored-languages --min-repo-language-share 2
+```
+
+`--min-repo-language-share 2` ignores a language in a repository when that language is less than 2% of that repository's language total. If another repository is actually Python-heavy, Python still counts there.
+
 ## README Usage
 
 Reference the generated dashboard:
@@ -116,6 +150,10 @@ The default dashboard size is `1000x420`.
 cargo run -p github-personal-stats -- generate \
   --user your-github-login \
   --card dashboard \
+  --authored-languages \
+  --author-email old@example.com,work@example.com \
+  --hide-language Ruby \
+  --min-repo-language-share 2 \
   --width 1000 \
   --height 420 \
   --output profile/github-personal-stats.svg

@@ -15,6 +15,13 @@ fn cli_generates_dashboard_svg_file() {
             "dashboard",
             "--fixture",
             fixture.to_str().unwrap(),
+            "--authored-languages",
+            "--author-email",
+            "old@example.com",
+            "--hide-language",
+            "Ruby,HTML",
+            "--min-repo-language-share",
+            "1",
             "--output",
             output.to_str().unwrap(),
         ])
@@ -25,6 +32,7 @@ fn cli_generates_dashboard_svg_file() {
     let svg = fs::read_to_string(&output).unwrap();
     assert!(svg.contains(r#"width="1000""#));
     assert!(svg.contains("Streak"));
+    assert!(!svg.contains("HTML"));
     let _ = fs::remove_file(output);
 }
 

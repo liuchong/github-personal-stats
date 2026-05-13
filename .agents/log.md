@@ -79,3 +79,23 @@ Implemented live GitHub data fetching inside the core client using Tokio plus th
 ## [2026-05-13] docs | document private token setup
 
 Updated user-facing documentation to require a dedicated personal access token for private repository data, explain why the default Actions `GITHUB_TOKEN` is insufficient for profile-wide private stats, and provide token creation links and workflow validation steps.
+
+## [2026-05-13] data-client | add authored language scope
+
+Added an API-only `--authored-languages` mode that filters language aggregation to owned non-fork repositories where the target user has commit contributions. The default remains owned repository language share.
+
+## [2026-05-13] data-client | supplement authored language emails
+
+Extended authored language filtering with repeatable `--author-email` supplements. The client stays API-only and checks owned repositories through the REST commits API using the username and configured historical emails before counting repository language sizes.
+
+## [2026-05-13] cli | hide selected languages
+
+Added repeatable and comma-separated `--hide-language` CLI filtering so repository-level language noise can be excluded before aggregation.
+
+## [2026-05-13] data-client | paginate owned repositories
+
+Changed live language and star aggregation to paginate all owned repositories instead of only the first 100 repositories. This prevents lower-ranked owned repositories from being omitted from language share calculations.
+
+## [2026-05-13] data-client | add per-repository language threshold
+
+Added `--min-repo-language-share` so small per-repository language slices can be ignored before global language aggregation. This keeps languages like Python visible when they are substantial in a repository while reducing script and test noise in otherwise non-Python repositories.
