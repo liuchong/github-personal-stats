@@ -18,4 +18,5 @@ Rendering changes require snapshot review. Snapshot updates must be intentional 
 - Dashboard rendering computes all panel coordinates internally.
 - Default dashboard uses a two-panel top row and a full-width lower streak panel.
 - Small inline SVG icons use a fixed `16x16` viewBox, theme or data colors, and explicit coordinates so rows keep native SVG alignment without external CSS.
+- The current streak hero uses an SVG mask to cut a notch at the top of the ring so a small flame icon can visually plug into the ring; the count sits centered inside the ring, with the streak label and date range stacked below.
 - Text output for coding activity is deterministic and independent from SVG rendering.

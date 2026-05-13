@@ -542,41 +542,33 @@ fn current_streak_hero(
     theme: &RenderTheme,
 ) -> String {
     let center_x = x + width / 2;
-    let center_y = y + 62;
-    let radius = 38;
-    let ring_length = 239;
-    let active_length = 179;
+    let radius: u32 = 34;
+    let ring_cy = y + 4 + radius;
+    let ring_top = ring_cy - radius;
+    let number_y = ring_cy + 10;
+    let label_y = ring_cy + radius + 18;
+    let date_y = label_y + 16;
+    let flame_color = "#ff8c1a";
+    let mask_id = "psm-streak-flame-cut";
     let range = date_range(&streak.current_start, &streak.current_end);
     format!(
-        r#"<g><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="{}">CURRENT STREAK</text>{}<circle cx="{}" cy="{}" r="{}" fill="{}" stroke="{}" stroke-width="5"/><circle cx="{}" cy="{}" r="{}" fill="none" stroke="{}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{} {}" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="{}">days</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text></g>"#,
-        center_x,
-        y + 8,
-        theme.muted,
-        flame_icon(center_x - 11, center_y - radius - 12),
-        center_x,
-        center_y,
-        radius,
-        theme.panel,
-        theme.accent_soft,
-        center_x,
-        center_y,
-        radius,
-        "#ff9800",
-        active_length,
-        ring_length,
-        center_x,
-        center_y,
-        center_x,
-        center_y + 11,
-        theme.text,
-        streak.current,
-        center_x,
-        center_y + 29,
-        theme.muted,
-        center_x,
-        y + 114,
-        theme.muted,
-        escape_xml(&range)
+        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{ring_top}" rx="12" ry="16" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="3" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="3" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
+        mask_id = mask_id,
+        center_x = center_x,
+        ring_top = ring_top,
+        ring_cy = ring_cy,
+        radius = radius,
+        panel = theme.panel,
+        accent_soft = theme.accent_soft,
+        flame_color = flame_color,
+        flame = flame_icon(center_x, ring_top, flame_color),
+        number_y = number_y,
+        text_color = theme.text,
+        count = streak.current,
+        label_y = label_y,
+        date_y = date_y,
+        muted = theme.muted,
+        range = escape_xml(&range)
     )
 }
 
@@ -755,35 +747,37 @@ fn format_single_date(date: &str) -> String {
     }
 }
 
-fn flame_icon(x: u32, y: u32) -> String {
+fn flame_icon(cx: u32, base_y: u32, color: &str) -> String {
+    let cx = cx as i32;
+    let base_y = base_y as i32;
+    let outer = format!(
+        "M {tx} {ty} C {c1x} {c1y} {c2x} {c2y} {rx} {ry} C {c3x} {c3y} {c4x} {c4y} 0 22 C {c5x} {c5y} {c6x} {c6y} {lx} {ly} C {c7x} {c7y} {c8x} {c8y} {tx} {ty} Z",
+        tx = 0,
+        ty = -10,
+        c1x = 5,
+        c1y = -5,
+        c2x = 8,
+        c2y = 0,
+        rx = 7,
+        ry = 7,
+        c3x = 7,
+        c3y = 14,
+        c4x = 4,
+        c4y = 19,
+        c5x = -4,
+        c5y = 19,
+        c6x = -7,
+        c6y = 14,
+        lx = -7,
+        ly = 7,
+        c7x = -8,
+        c7y = 0,
+        c8x = -4,
+        c8y = -3
+    );
+    let inner = "M -1 6 C 1 6 3 8 3 12 C 3 16 1 18 0 18 C -2 18 -3 16 -3 13 C -3 10 -2 7 -1 6 Z";
     format!(
-        r##"<path d="M{} {} C{} {} {} {} {} {} C{} {} {} {} {} {} C{} {} {} {} {} {} C{} {} {} {} {} {} Z" fill="#ff9800"/>"##,
-        x + 11,
-        y,
-        x + 20,
-        y + 8,
-        x + 15,
-        y + 15,
-        x + 18,
-        y + 23,
-        x + 11,
-        y + 30,
-        x + 4,
-        y + 25,
-        x,
-        y + 17,
-        x + 7,
-        y + 10,
-        x + 5,
-        y + 20,
-        x + 12,
-        y + 16,
-        x + 8,
-        y + 10,
-        x + 11,
-        y,
-        x + 11,
-        y
+        r##"<g transform="translate({cx},{base_y})"><path d="{outer}" fill="{color}"/><path d="{inner}" fill="#ffd166"/></g>"##
     )
 }
 
