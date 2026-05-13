@@ -6,15 +6,15 @@
 
 ## Project State
 
-The agent operating framework has been committed. The Rust foundation stage is ready for commit.
+The Rust foundation stage has been committed. The typed configuration and fixture-driven data client stage is ready for commit.
 
 ## Active Task
 
-Review and commit the Rust workspace, 1PL license, basic CI, `.gitignore`, foundational README, and minimal compile-tested crate skeleton.
+Review and commit typed configuration, GitHub request construction, remote error classification, sanitized fixture parsing, and mock client tests.
 
 ## Next Safe Task After Commit
 
-Implement typed configuration and fixture-driven data clients.
+Implement stats, languages, streak, and coding activity aggregation on top of fixture-backed data models.
 
 ## Constraints
 
