@@ -1,0 +1,22 @@
+{
+  "login": "octo",
+  "name": "Octo User",
+  "followers": 42,
+  "publicRepositories": 7,
+  "stars": 120,
+  "commits": 350,
+  "pullRequests": 21,
+  "issues": 13,
+  "reviews": 8,
+  "contributedTo": 5,
+  "languages": [
+    { "name": "Rust", "size": 5000 },
+    { "name": "TypeScript", "size": 3000 },
+    { "name": "Shell", "size": 400 }
+  ],
+  "contributions": [
+    { "date": "2026-05-10", "count": 1 },
+    { "date": "2026-05-11", "count": 0 },
+    { "date": "2026-05-12", "count": 3 }
+  ]
+}
