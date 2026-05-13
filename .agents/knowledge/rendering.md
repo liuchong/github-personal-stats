@@ -17,4 +17,5 @@ Rendering changes require snapshot review. Snapshot updates must be intentional 
 - `render_card` accepts `CardData` plus `GithubStatsConfig`.
 - Dashboard rendering computes all panel coordinates internally.
 - Default dashboard uses a two-panel top row and a full-width lower streak panel.
+- Small inline SVG icons use a fixed `16x16` viewBox, theme or data colors, and explicit coordinates so rows keep native SVG alignment without external CSS.
 - Text output for coding activity is deterministic and independent from SVG rendering.

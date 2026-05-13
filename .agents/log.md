@@ -63,3 +63,7 @@ Renamed the Action display name to a more specific Marketplace-safe title while 
 ## [2026-05-13] rename | align project identity
 
 Renamed package, binary, crate, documentation, Action, deployment, release asset, and default output references to the new project identity.
+
+## [2026-05-13] renderer | add inline metric icons
+
+Added a small native SVG icon primitive for metric and language rows, updated rendering snapshots, and regenerated example SVG previews.
