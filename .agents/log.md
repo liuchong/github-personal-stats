@@ -99,3 +99,7 @@ Changed live language and star aggregation to paginate all owned repositories in
 ## [2026-05-13] data-client | add per-repository language threshold
 
 Added `--min-repo-language-share` so small per-repository language slices can be ignored before global language aggregation. This keeps languages like Python visible when they are substantial in a repository while reducing script and test noise in otherwise non-Python repositories.
+
+## [2026-05-13] data-client | tolerate missing pagination metadata
+
+Made repository pagination metadata optional in live GraphQL response parsing so older or partial connection payloads are treated as a single page instead of failing deserialization.
