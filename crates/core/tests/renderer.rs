@@ -51,6 +51,17 @@ fn renderer_sets_fixed_svg_dimensions() {
 }
 
 #[test]
+fn language_renderer_uses_language_specific_colors() {
+    let config = GithubStatsConfig::new("octo").unwrap();
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages);
+    let svg = render_card(&card, &config);
+
+    assert!(svg.contains("#dea584"));
+    assert!(svg.contains("#3178c6"));
+    assert!(svg.contains("#89e051"));
+}
+
+#[test]
 fn readme_section_renderer_matches_snapshot() {
     let summary = aggregate_coding_activity(
         vec![

@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: liuchong/github-stats@v1
         with:
           card: dashboard
@@ -71,4 +71,4 @@ jobs:
 
 ## License
 
-This project is licensed under 1PL. See `LICENSE`.
+This project is licensed under 1PL. See [`LICENSE`](LICENSE).
