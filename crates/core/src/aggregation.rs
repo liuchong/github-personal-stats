@@ -30,6 +30,7 @@ pub struct StreakSummary {
     pub current: u32,
     pub longest: u32,
     pub total_active_days: u32,
+    pub total_contributions: u64,
     pub mode: StreakMode,
 }
 
@@ -85,12 +86,14 @@ pub fn aggregate_card_data(data: &GithubData, output: OutputKind) -> CardData {
 
 pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
     let stats = &data.stats;
-    let score = stats.stars
-        + stats.commits
-        + stats.pull_requests * 4
-        + stats.issues * 3
-        + stats.reviews * 2
-        + stats.contributed_to * 2;
+    let rank = rank_for_stats(data);
+    let score = stats
+        .stars
+        .saturating_add(stats.commits)
+        .saturating_add(stats.pull_requests.saturating_mul(4))
+        .saturating_add(stats.issues.saturating_mul(3))
+        .saturating_add(stats.reviews.saturating_mul(2))
+        .saturating_add(stats.contributed_to.saturating_mul(2));
 
     AggregatedStats {
         total_stars: stats.stars,
@@ -100,7 +103,7 @@ pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
         total_reviews: stats.reviews,
         contributed_to: stats.contributed_to,
         score,
-        rank: rank_for_score(score),
+        rank,
     }
 }
 
@@ -140,27 +143,19 @@ pub fn calculate_streak(
     mode: StreakMode,
     excluded_weekdays: &[u8],
 ) -> StreakSummary {
-    let mut active_ordinals = contributions
-        .iter()
-        .filter(|day| day.count > 0)
-        .filter_map(|day| date_to_ordinal(&day.date).map(|ordinal| (ordinal, day.count)))
-        .filter(|(ordinal, _)| !excluded_weekdays.contains(&weekday(*ordinal)))
-        .map(|(ordinal, _)| match mode {
-            StreakMode::Daily => ordinal,
-            StreakMode::Weekly => ordinal / 7,
-        })
-        .collect::<Vec<_>>();
-
-    active_ordinals.sort_unstable();
-    active_ordinals.dedup();
-
-    let longest = longest_run(&active_ordinals);
-    let current = current_run(&active_ordinals);
+    let days = normalized_days(contributions);
+    let total_contributions = days.iter().map(|(_, count)| u64::from(*count)).sum();
+    let total_active_days = days.iter().filter(|(_, count)| *count > 0).count() as u32;
+    let (current, longest) = match mode {
+        StreakMode::Daily => daily_streak(&days, excluded_weekdays),
+        StreakMode::Weekly => weekly_streak(&days),
+    };
 
     StreakSummary {
         current,
         longest,
-        total_active_days: active_ordinals.len() as u32,
+        total_active_days,
+        total_contributions,
         mode,
     }
 }
@@ -207,56 +202,110 @@ pub fn aggregate_coding_activity(
     }
 }
 
-fn rank_for_score(score: u64) -> &'static str {
-    match score {
-        0..=99 => "C",
-        100..=299 => "B",
-        300..=699 => "A",
-        700..=1499 => "A+",
-        _ => "S",
+fn rank_for_stats(data: &GithubData) -> &'static str {
+    let stats = &data.stats;
+    let commits_median = 250.0;
+    let total_weight = 12.0;
+    let rank = 1.0
+        - (2.0 * exponential_cdf(stats.commits as f64 / commits_median)
+            + 3.0 * exponential_cdf(stats.pull_requests as f64 / 50.0)
+            + exponential_cdf(stats.issues as f64 / 25.0)
+            + exponential_cdf(stats.reviews as f64 / 2.0)
+            + 4.0 * log_normal_cdf(stats.stars as f64 / 50.0)
+            + log_normal_cdf(data.profile.followers as f64 / 10.0))
+            / total_weight;
+    let percentile = rank * 100.0;
+
+    if percentile <= 0.5 {
+        "S+"
+    } else if percentile <= 1.0 {
+        "S"
+    } else if percentile <= 12.5 {
+        "A+"
+    } else if percentile <= 25.0 {
+        "A"
+    } else if percentile <= 37.5 {
+        "A-"
+    } else if percentile <= 50.0 {
+        "B+"
+    } else if percentile <= 62.5 {
+        "B"
+    } else if percentile <= 75.0 {
+        "B-"
+    } else if percentile <= 87.5 {
+        "C+"
+    } else {
+        "C"
     }
+}
+
+fn exponential_cdf(value: f64) -> f64 {
+    1.0 - 2_f64.powf(-value)
+}
+
+fn log_normal_cdf(value: f64) -> f64 {
+    value / (1.0 + value)
 }
 
 fn percentage_basis_points(value: u64, total: u64) -> u32 {
     value.saturating_mul(10_000).checked_div(total).unwrap_or(0) as u32
 }
 
-fn longest_run(values: &[i32]) -> u32 {
-    if values.is_empty() {
-        return 0;
-    }
-
-    let mut longest = 1_u32;
-    let mut current = 1_u32;
-
-    for pair in values.windows(2) {
-        if pair[1] == pair[0] + 1 {
-            current += 1;
-            longest = longest.max(current);
-        } else {
-            current = 1;
-        }
-    }
-
-    longest
+fn normalized_days(contributions: &[ContributionDay]) -> Vec<(i32, u32)> {
+    let mut days = contributions
+        .iter()
+        .filter_map(|day| date_to_ordinal(&day.date).map(|ordinal| (ordinal, day.count)))
+        .collect::<Vec<_>>();
+    days.sort_unstable_by_key(|(ordinal, _)| *ordinal);
+    days
 }
 
-fn current_run(values: &[i32]) -> u32 {
-    if values.is_empty() {
-        return 0;
-    }
+fn daily_streak(days: &[(i32, u32)], excluded_weekdays: &[u8]) -> (u32, u32) {
+    let mut current = 0_u32;
+    let mut longest = 0_u32;
+    let Some((last_day, _)) = days.last() else {
+        return (0, 0);
+    };
 
-    let mut current = 1_u32;
-
-    for pair in values.windows(2).rev() {
-        if pair[1] == pair[0] + 1 {
+    for (ordinal, count) in days {
+        if *count > 0 || (current > 0 && excluded_weekdays.contains(&weekday(*ordinal))) {
             current += 1;
-        } else {
-            break;
+            longest = longest.max(current);
+        } else if ordinal != last_day {
+            current = 0;
         }
     }
 
-    current
+    (current, longest)
+}
+
+fn weekly_streak(days: &[(i32, u32)]) -> (u32, u32) {
+    let mut weeks = Vec::<(i32, u32)>::new();
+    for (ordinal, count) in days {
+        let week = sunday_of_week(*ordinal);
+        if let Some((_, total)) = weeks.iter_mut().find(|(existing, _)| *existing == week) {
+            *total += *count;
+        } else {
+            weeks.push((week, *count));
+        }
+    }
+
+    let mut current = 0_u32;
+    let mut longest = 0_u32;
+    let Some((last_week, _)) = weeks.last().copied() else {
+        return (0, 0);
+    };
+
+    for (week, count) in weeks {
+        if count > 0 {
+            current += 1;
+            longest = longest.max(current);
+        } else if week != last_week {
+            current = 0;
+        }
+    }
+
+    (current, longest)
 }
 
 fn mask_seconds(seconds: u64) -> u64 {
@@ -266,11 +315,29 @@ fn mask_seconds(seconds: u64) -> u64 {
 fn date_to_ordinal(date: &str) -> Option<i32> {
     let mut parts = date.split('-');
     let year = parts.next()?.parse::<i32>().ok()?;
-    let month = parts.next()?.parse::<i32>().ok()?;
-    let day = parts.next()?.parse::<i32>().ok()?;
-    Some(year * 372 + month * 31 + day)
+    let month = parts.next()?.parse::<u32>().ok()?;
+    let day = parts.next()?.parse::<u32>().ok()?;
+    days_from_civil(year, month, day)
 }
 
 fn weekday(ordinal: i32) -> u8 {
-    ordinal.rem_euclid(7) as u8
+    (ordinal + 4).rem_euclid(7) as u8
+}
+
+fn sunday_of_week(ordinal: i32) -> i32 {
+    ordinal - i32::from(weekday(ordinal))
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i32> {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let adjusted_year = year - i32::from(month <= 2);
+    let era = adjusted_year.div_euclid(400);
+    let year_of_era = adjusted_year - era * 400;
+    let month = month as i32;
+    let day = day as i32;
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    Some(era * 146_097 + day_of_era - 719_468)
 }

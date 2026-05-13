@@ -286,49 +286,50 @@ fn stats_dashboard(
     width: u32,
     theme: &RenderTheme,
 ) -> String {
-    let tile_width = (width - 12) / 2;
+    let list_width = width.saturating_sub(150);
     [
-        metric_tile(
+        stat_row(
             x,
             y,
-            tile_width,
-            "Stars",
+            list_width,
+            "Total Stars",
             stats.total_stars,
             theme.accent,
             theme,
         ),
-        metric_tile(
-            x + tile_width + 12,
-            y,
-            tile_width,
+        stat_row(
+            x,
+            y + 28,
+            list_width,
             "Commits",
             stats.total_commits,
             theme.success,
             theme,
         ),
-        metric_tile(
+        stat_row(
             x,
-            y + 58,
-            tile_width,
+            y + 56,
+            list_width,
             "Pull Requests",
             stats.total_pull_requests,
             "#fb8500",
             theme,
         ),
-        metric_tile(
-            x + tile_width + 12,
-            y + 58,
-            tile_width,
-            "Rank",
-            stats.rank,
+        stat_row(
+            x,
+            y + 84,
+            list_width,
+            "Issues",
+            stats.total_issues,
             "#d63384",
             theme,
         ),
+        rank_ring(x + width - 118, y + 4, 96, stats.rank, stats.score, theme),
     ]
     .join("")
 }
 
-fn metric_tile<T: ToString>(
+fn stat_row<T: ToString>(
     x: u32,
     y: u32,
     width: u32,
@@ -338,23 +339,45 @@ fn metric_tile<T: ToString>(
     theme: &RenderTheme,
 ) -> String {
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="46" rx="12" fill="{}" stroke="{}"/><circle cx="{}" cy="{}" r="5" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="{}">{}</text></g>"#,
-        x,
-        y,
-        width,
-        theme.accent_soft,
-        theme.border,
-        x + 18,
-        y + 17,
+        r#"<g><circle cx="{}" cy="{}" r="5" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="800" fill="{}">{}</text></g>"#,
+        x + 8,
+        y + 9,
         accent,
-        x + 32,
-        y + 19,
-        theme.muted,
+        x + 22,
+        y + 13,
+        theme.text,
         escape_xml(label),
-        x + 16,
-        y + 37,
+        x + width,
+        y + 13,
         theme.text,
         escape_xml(&value.to_string())
+    )
+}
+
+fn rank_ring(x: u32, y: u32, size: u32, rank: &str, score: u64, theme: &RenderTheme) -> String {
+    let center = size / 2;
+    format!(
+        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="10"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="10" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
+        x + center,
+        y + center,
+        theme.panel,
+        theme.accent_soft,
+        x + center,
+        y + center,
+        rank_color(rank, theme),
+        x + center,
+        y + center,
+        x + center,
+        y + center + 8,
+        theme.text,
+        escape_xml(rank),
+        x + center,
+        y + center - 22,
+        theme.muted,
+        x + center,
+        y + center + 27,
+        theme.muted,
+        score
     )
 }
 
@@ -365,103 +388,174 @@ fn language_bars(
     width: u32,
     theme: &RenderTheme,
 ) -> String {
-    languages
+    let bar_width = width.saturating_sub(150);
+    let rows = languages
         .iter()
         .take(5)
         .enumerate()
         .map(|(index, language)| {
-            let row_y = y + index as u32 * 24;
+            let row_y = y + 34 + index as u32 * 21;
             let percentage = language.percentage_basis_points as f32 / 100.0;
-            let bar_width = width.saturating_sub(150);
             let filled = bar_width * language.percentage_basis_points / 10_000;
             format!(
                 r#"{}{}{}{}"#,
-                text(x, row_y + 10, 12, theme.text, &language.name),
+                text(x, row_y + 9, 12, theme.text, &language.name),
                 text(
                     x + width - 58,
-                    row_y + 10,
+                    row_y + 9,
                     12,
                     theme.muted,
                     &format!("{percentage:.1}%")
                 ),
-                rounded_rect(x + 94, row_y, bar_width, 10, 5, theme.accent_soft, "none"),
+                rounded_rect(x + 94, row_y, bar_width, 9, 5, theme.accent_soft, "none"),
                 rounded_rect(
                     x + 94,
                     row_y,
                     filled,
-                    10,
+                    9,
                     5,
                     language_color(&language.name, index),
                     "none"
                 )
             )
         })
-        .collect()
+        .collect::<String>();
+
+    stacked_language_bar(languages, x, y, width, theme) + &rows
+}
+
+fn stacked_language_bar(
+    languages: &[LanguageShare],
+    x: u32,
+    y: u32,
+    width: u32,
+    theme: &RenderTheme,
+) -> String {
+    let mut offset = 0;
+    let total_width = width.saturating_sub(4);
+    let mut segments = String::new();
+
+    for (index, language) in languages.iter().take(6).enumerate() {
+        let segment_width = if index == 5 {
+            total_width.saturating_sub(offset)
+        } else {
+            total_width * language.percentage_basis_points / 10_000
+        };
+        segments.push_str(&rounded_rect(
+            x + 2 + offset,
+            y,
+            segment_width,
+            12,
+            6,
+            language_color(&language.name, index),
+            "none",
+        ));
+        offset += segment_width;
+    }
+
+    rounded_rect(x, y - 1, width, 14, 7, theme.accent_soft, "none") + &segments
 }
 
 fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &RenderTheme) -> String {
-    let tile_width = (width - 24) / 3;
+    let side_width = (width - 260 - 32) / 2;
+    let center_x = x + side_width + 16;
     [
-        large_metric(
+        side_streak_metric(SideStreakMetric {
             x,
-            y,
-            tile_width,
-            "Current",
-            streak.current,
-            theme.accent,
+            y: y + 12,
+            width: side_width,
+            label: "Total Contributions",
+            value: format_number(streak.total_contributions),
+            unit: "",
+            accent: theme.accent,
             theme,
-        ),
-        large_metric(
-            x + tile_width + 12,
-            y,
-            tile_width,
-            "Longest",
-            streak.longest,
-            theme.success,
+        }),
+        current_streak_hero(center_x, y, 260, streak.current, theme),
+        side_streak_metric(SideStreakMetric {
+            x: center_x + 276,
+            y: y + 12,
+            width: side_width,
+            label: "Longest Streak",
+            value: streak.longest.to_string(),
+            unit: "days",
+            accent: theme.success,
             theme,
-        ),
-        large_metric(
-            x + (tile_width + 12) * 2,
-            y,
-            tile_width,
-            "Active Days",
-            streak.total_active_days,
-            "#fb8500",
-            theme,
-        ),
+        }),
     ]
     .join("")
 }
 
-fn large_metric<T: ToString>(
+struct SideStreakMetric<'a> {
     x: u32,
     y: u32,
     width: u32,
-    label: &str,
-    value: T,
-    accent: &str,
-    theme: &RenderTheme,
-) -> String {
+    label: &'a str,
+    value: String,
+    unit: &'a str,
+    accent: &'a str,
+    theme: &'a RenderTheme,
+}
+
+fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="78" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="4" rx="2" fill="{}"/></g>"#,
-        x,
-        y,
-        width,
-        theme.accent_soft,
-        theme.border,
-        x + 18,
-        y + 24,
-        theme.muted,
-        escape_xml(label),
-        x + 18,
-        y + 58,
-        theme.text,
-        escape_xml(&value.to_string()),
-        x + 18,
-        y + 66,
-        width.saturating_sub(36),
-        accent
+        r#"<g><rect x="{}" y="{}" width="{}" height="72" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="32" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="4" rx="2" fill="{}"/></g>"#,
+        metric.x,
+        metric.y,
+        metric.width,
+        metric.theme.accent_soft,
+        metric.theme.border,
+        metric.x + 18,
+        metric.y + 22,
+        metric.theme.muted,
+        escape_xml(metric.label),
+        metric.x + 18,
+        metric.y + 55,
+        metric.theme.text,
+        escape_xml(&metric.value),
+        metric.x + 76,
+        metric.y + 55,
+        metric.theme.muted,
+        escape_xml(metric.unit),
+        metric.x + 18,
+        metric.y + 62,
+        metric.width.saturating_sub(36),
+        metric.accent
     )
+}
+
+fn current_streak_hero(x: u32, y: u32, width: u32, current: u32, theme: &RenderTheme) -> String {
+    let center_x = x + width / 2;
+    format!(
+        r#"<g><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="{}">CURRENT STREAK</text><circle cx="{}" cy="{}" r="48" fill="{}" stroke="{}" stroke-width="10"/><circle cx="{}" cy="{}" r="48" fill="none" stroke="{}" stroke-width="10" stroke-linecap="round" stroke-dasharray="226 302" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">days</text></g>"#,
+        center_x,
+        y + 16,
+        theme.muted,
+        center_x,
+        y + 58,
+        theme.panel,
+        theme.accent_soft,
+        center_x,
+        y + 58,
+        "#ff9800",
+        center_x,
+        y + 58,
+        center_x,
+        y + 70,
+        theme.text,
+        current,
+        center_x,
+        y + 90,
+        theme.muted
+    )
+}
+
+fn rank_color(rank: &str, theme: &RenderTheme) -> &'static str {
+    match rank {
+        "S+" | "S" => "#ff9800",
+        "A+" | "A" | "A-" => theme.accent,
+        "B+" | "B" | "B-" => theme.success,
+        _ => "#57606a",
+    }
 }
 
 fn wakatime_lines(summary: &CodingActivitySummary, x: u32, y: u32, theme: &RenderTheme) -> String {
@@ -530,6 +624,18 @@ fn text(x: u32, y: u32, size: u32, fill: &str, value: &str) -> String {
         fill,
         escape_xml(value)
     )
+}
+
+fn format_number(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::new();
+    for (index, character) in digits.chars().rev().enumerate() {
+        if index > 0 && index % 3 == 0 {
+            formatted.push(',');
+        }
+        formatted.push(character);
+    }
+    formatted.chars().rev().collect()
 }
 
 fn language_color(name: &str, fallback_index: usize) -> &'static str {
