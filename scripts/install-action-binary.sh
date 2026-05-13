@@ -7,6 +7,10 @@ binary_url="${INPUT_BINARY_URL:-}"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 
+case "${os}" in
+  darwin) os="macos" ;;
+esac
+
 case "${arch}" in
   x86_64) arch="x64" ;;
   arm64|aarch64) arch="arm64" ;;

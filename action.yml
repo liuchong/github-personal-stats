@@ -1,5 +1,8 @@
-name: GitHub Stats
+name: GitHub Personal Stats
 description: Generate GitHub profile metrics assets from release binaries
+branding:
+  icon: bar-chart-2
+  color: purple
 inputs:
   mode:
     description: generate or update-readme
