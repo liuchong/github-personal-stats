@@ -1,0 +1,10 @@
+[package]
+name = "github-stats"
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+github-stats-core = { path = "../core" }

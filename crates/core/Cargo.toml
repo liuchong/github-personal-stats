@@ -1,0 +1,9 @@
+[package]
+name = "github-stats-core"
+edition.workspace = true
+license-file.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
