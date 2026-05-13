@@ -11,3 +11,10 @@ Every SVG must define fixed `width`, `height`, and `viewBox`. Internal panels sh
 ## Snapshot Rule
 
 Rendering changes require snapshot review. Snapshot updates must be intentional and paired with reasoning in the commit or review notes.
+
+## Current Renderer Contract
+
+- `render_card` accepts `CardData` plus `GithubStatsConfig`.
+- Dashboard rendering computes all panel coordinates internally.
+- Default dashboard uses a two-panel top row and a full-width lower streak panel.
+- Text output for coding activity is deterministic and independent from SVG rendering.

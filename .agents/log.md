@@ -15,3 +15,7 @@ Added typed output selection, image sizing, project config, GitHub request const
 ## [2026-05-13] aggregation | add card data aggregation
 
 Added stats score and rank aggregation, language merging and percentage calculation, daily and weekly streak summaries, coding activity summarization, and a shared `CardData` enum for renderers. Added boundary tests for empty data, gaps, weekly dedupe, aliases, and masked coding activity totals.
+
+## [2026-05-13] renderer | add svg and text rendering
+
+Added default dashboard SVG rendering, individual card SVG rendering, fixed `width`/`height`/`viewBox` output, theme selection, coding activity README text rendering, and golden snapshot tests for dashboard, stats, and text output.
