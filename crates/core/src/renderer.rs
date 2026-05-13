@@ -339,10 +339,8 @@ fn stat_row<T: ToString>(
     theme: &RenderTheme,
 ) -> String {
     format!(
-        r#"<g><circle cx="{}" cy="{}" r="5" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="800" fill="{}">{}</text></g>"#,
-        x + 8,
-        y + 9,
-        accent,
+        r#"<g>{}<text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="800" fill="{}">{}</text></g>"#,
+        icon(stat_icon(label), x, y, 16, accent),
         x + 22,
         y + 13,
         theme.text,
@@ -397,9 +395,11 @@ fn language_bars(
             let row_y = y + 24 + index as u32 * 17;
             let percentage = language.percentage_basis_points as f32 / 100.0;
             let filled = bar_width * language.percentage_basis_points / 10_000;
+            let color = language_color(&language.name, index);
             format!(
-                r#"{}{}{}{}"#,
-                text(x, row_y + 8, 11, theme.text, &language.name),
+                r#"{}{}{}{}{}"#,
+                icon(IconKind::Code, x, row_y, 12, color),
+                text(x + 18, row_y + 8, 11, theme.text, &language.name),
                 text(
                     x + width - 58,
                     row_y + 8,
@@ -416,15 +416,7 @@ fn language_bars(
                     theme.accent_soft,
                     "none"
                 ),
-                rounded_rect(
-                    x + 94,
-                    row_y + 2,
-                    filled,
-                    5,
-                    3,
-                    language_color(&language.name, index),
-                    "none"
-                )
+                rounded_rect(x + 94, row_y + 2, filled, 5, 3, color, "none")
             )
         })
         .collect::<String>();
@@ -637,6 +629,56 @@ fn badge(
         text_fill,
         escape_xml(value)
     )
+}
+
+enum IconKind {
+    Star,
+    Commit,
+    PullRequest,
+    Issue,
+    Code,
+}
+
+fn stat_icon(label: &str) -> IconKind {
+    match label {
+        "Total Stars" => IconKind::Star,
+        "Commits" => IconKind::Commit,
+        "Pull Requests" => IconKind::PullRequest,
+        "Issues" => IconKind::Issue,
+        _ => IconKind::Code,
+    }
+}
+
+fn icon(kind: IconKind, x: u32, y: u32, size: u32, fill: &str) -> String {
+    format!(
+        r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 16 16" fill="{}" aria-hidden="true"><path d="{}"/></svg>"#,
+        x,
+        y,
+        size,
+        size,
+        fill,
+        icon_path(kind)
+    )
+}
+
+fn icon_path(kind: IconKind) -> &'static str {
+    match kind {
+        IconKind::Star => {
+            "M8 1.2l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11l-3.8 2 .7-4.3-3.1-3 4.3-.6L8 1.2z"
+        }
+        IconKind::Commit => {
+            "M8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM0 7h4v2H0V7zm12 0h4v2h-4V7z"
+        }
+        IconKind::PullRequest => {
+            "M5 3a2 2 0 1 1-3 1.7V11a2 2 0 1 1-2 0V4.7A2 2 0 0 1 3 3zm8 0a2 2 0 0 1 1 3.7V9a4 4 0 0 1-4 4H8v2L5 12l3-3v2h2a2 2 0 0 0 2-2V6.7A2 2 0 0 1 13 3z"
+        }
+        IconKind::Issue => {
+            "M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 2a1 1 0 0 0-1 1v4a1 1 0 1 0 2 0v-4a1 1 0 0 0-1-1zm0 8.5a1.1 1.1 0 1 0 0-2.2 1.1 1.1 0 0 0 0 2.2z"
+        }
+        IconKind::Code => {
+            "M5.2 4.2 1.4 8l3.8 3.8 1.1-1.1L3.6 8l2.7-2.7-1.1-1.1zm5.6 0-1.1 1.1L12.4 8l-2.7 2.7 1.1 1.1L14.6 8l-3.8-3.8z"
+        }
+    }
 }
 
 fn rounded_rect(
