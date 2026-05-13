@@ -6,11 +6,15 @@ fn cli_generates_dashboard_svg_file() {
         "github-personal-stats-cli-{}-dashboard.svg",
         std::process::id()
     ));
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
     let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .args([
             "generate",
             "--card",
             "dashboard",
+            "--fixture",
+            fixture.to_str().unwrap(),
             "--output",
             output.to_str().unwrap(),
         ])
