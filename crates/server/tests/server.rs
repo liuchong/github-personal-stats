@@ -1,4 +1,4 @@
-use github_stats_server::{handle_request, http_bytes};
+use github_personal_stats_server::{handle_request, http_bytes};
 
 #[test]
 fn health_endpoint_returns_ok() {

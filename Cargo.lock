@@ -3,19 +3,19 @@
 version = 4
 
 [[package]]
-name = "github-stats"
+name = "github-personal-stats"
 version = "0.1.0"
 dependencies = [
- "github-stats-core",
+ "github-personal-stats-core",
 ]
 
 [[package]]
-name = "github-stats-core"
+name = "github-personal-stats-core"
 version = "0.1.0"
 
 [[package]]
-name = "github-stats-server"
+name = "github-personal-stats-server"
 version = "0.1.0"
 dependencies = [
- "github-stats-core",
+ "github-personal-stats-core",
 ]

@@ -3,7 +3,7 @@
 ## Local Server
 
 ```sh
-cargo run -p github-stats-server
+cargo run -p github-personal-stats-server
 ```
 
 Endpoints:
@@ -19,8 +19,8 @@ Endpoints:
 ## Docker
 
 ```sh
-docker build -t github-stats .
-docker run --rm -p 3000:3000 github-stats
+docker build -t github-personal-stats .
+docker run --rm -p 3000:3000 github-personal-stats
 ```
 
 ## Kubernetes

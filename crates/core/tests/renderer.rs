@@ -1,4 +1,4 @@
-use github_stats_core::{
+use github_personal_stats_core::{
     CodingActivityEntry, GithubClient, GithubStatsConfig, MockGithubClient, OutputKind,
     aggregate_card_data, aggregate_coding_activity, render_card, render_readme_section,
 };
@@ -8,7 +8,7 @@ const DASHBOARD_SNAPSHOT: &str = include_str!("snapshots/dashboard.svg");
 const STATS_SNAPSHOT: &str = include_str!("snapshots/stats.svg");
 const README_SNAPSHOT: &str = include_str!("snapshots/coding_activity.md");
 
-fn fixture_data() -> github_stats_core::GithubData {
+fn fixture_data() -> github_personal_stats_core::GithubData {
     let config = GithubStatsConfig::new("octo").unwrap();
     MockGithubClient::success(FIXTURE)
         .fetch_user_data(&config)

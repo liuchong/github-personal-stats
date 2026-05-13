@@ -1,4 +1,4 @@
-use github_stats_core::{
+use github_personal_stats_core::{
     CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig,
     MockGithubClient, RepositoryLanguage, UserStats, aggregate_card_data,
     aggregate_coding_activity, parse_output_kind, render_card, render_readme_section,
@@ -26,8 +26,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let card = option_value(&args, "--card").unwrap_or_else(|| "dashboard".to_owned());
-    let output =
-        option_value(&args, "--output").unwrap_or_else(|| "profile/github-stats.svg".to_owned());
+    let output = option_value(&args, "--output")
+        .unwrap_or_else(|| "profile/github-personal-stats.svg".to_owned());
     let user = option_value(&args, "--user").unwrap_or_else(|| "octo".to_owned());
     let width = option_value(&args, "--width")
         .and_then(|value| value.parse::<u32>().ok())
@@ -64,7 +64,7 @@ fn fixture_data(path: Option<String>) -> Result<GithubData, Box<dyn Error>> {
         let content = fs::read_to_string(path)?;
         let config = GithubStatsConfig::new("fixture")?;
         return Ok(
-            <MockGithubClient as github_stats_core::GithubClient>::fetch_user_data(
+            <MockGithubClient as github_personal_stats_core::GithubClient>::fetch_user_data(
                 &MockGithubClient::success(content),
                 &config,
             )?,

@@ -62,7 +62,7 @@ impl WorkspaceInfo {
 
 pub fn workspace_info() -> WorkspaceInfo {
     WorkspaceInfo {
-        name: "github-stats",
+        name: "github-personal-stats",
         version: env!("CARGO_PKG_VERSION"),
         default_output: OutputKind::Dashboard,
         supported_outputs: vec![

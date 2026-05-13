@@ -25,18 +25,18 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
-      - run: cargo build --release -p github-stats
+      - run: cargo build --release -p github-personal-stats
       - run: |
           mkdir -p dist/${{ matrix.target }}
-          cp target/release/github-stats dist/${{ matrix.target }}/github-stats
-          tar -C dist/${{ matrix.target }} -czf github-stats-${{ matrix.target }}.tar.gz github-stats
-          shasum -a 256 github-stats-${{ matrix.target }}.tar.gz > github-stats-${{ matrix.target }}.sha256
+          cp target/release/github-personal-stats dist/${{ matrix.target }}/github-personal-stats
+          tar -C dist/${{ matrix.target }} -czf github-personal-stats-${{ matrix.target }}.tar.gz github-personal-stats
+          shasum -a 256 github-personal-stats-${{ matrix.target }}.tar.gz > github-personal-stats-${{ matrix.target }}.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: github-stats-${{ matrix.target }}
+          name: github-personal-stats-${{ matrix.target }}
           path: |
-            github-stats-${{ matrix.target }}.tar.gz
-            github-stats-${{ matrix.target }}.sha256
+            github-personal-stats-${{ matrix.target }}.tar.gz
+            github-personal-stats-${{ matrix.target }}.sha256
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -48,7 +48,7 @@ jobs:
           path: dist
       - name: Create checksums
         run: |
-          mapfile -t assets < <(find dist -name 'github-stats-*.tar.gz' -print | sort)
+          mapfile -t assets < <(find dist -name 'github-personal-stats-*.tar.gz' -print | sort)
           shasum -a 256 "${assets[@]}" | sed 's# .*/# #' > checksums.txt
       - name: Publish release assets
         env:
@@ -56,12 +56,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          mapfile -t assets < <(find dist -name 'github-stats-*.tar.gz' -print | sort)
+          mapfile -t assets < <(find dist -name 'github-personal-stats-*.tar.gz' -print | sort)
           assets+=(checksums.txt)
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
             gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
           else
             gh release create "${TAG_NAME}" "${assets[@]}" \
-              --title "GitHub Stats ${TAG_NAME}" \
-              --notes "Release ${TAG_NAME} of the GitHub Stats Action and CLI binaries."
+              --title "GitHub Personal Stats ${TAG_NAME}" \
+              --notes "Release ${TAG_NAME} of the GitHub Personal Stats Action and CLI binaries."
           fi

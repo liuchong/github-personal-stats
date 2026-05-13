@@ -1,4 +1,4 @@
-use github_stats_core::{
+use github_personal_stats_core::{
     CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig, ImageSize,
     OutputKind, RepositoryLanguage, UserStats, aggregate_card_data, aggregate_coding_activity,
     parse_output_kind, render_card, render_readme_section, workspace_info,
@@ -58,7 +58,7 @@ fn render_api(query: &str, fallback: OutputKind) -> HttpResponse {
     let config = GithubStatsConfig {
         username,
         token_env: "GITHUB_TOKEN".to_owned(),
-        cards: github_stats_core::CardSelection {
+        cards: github_personal_stats_core::CardSelection {
             outputs: vec![card],
         },
         size,

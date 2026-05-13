@@ -1,11 +1,11 @@
 **Code is cheap, help out with your tokens!**
 
-# GitHub Stats
+# GitHub Personal Stats
 
 Generate a polished GitHub profile dashboard as one SVG. The renderer owns the layout, so your README does not have to fight tables, image heights, or fragile HTML alignment.
 
 <p align="center">
-  <img src="./examples/dashboard.svg" alt="GitHub Stats dashboard preview" width="100%" />
+  <img src="./examples/dashboard.svg" alt="GitHub Personal Stats dashboard preview" width="100%" />
 </p>
 
 ## Why Use It
@@ -29,10 +29,10 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 
 ## Quick Start
 
-Use the Action from your profile repository and commit the generated dashboard back to `profile/github-stats.svg`.
+Use the Action from your profile repository and commit the generated dashboard back to `profile/github-personal-stats.svg`.
 
 ```yaml
-name: GitHub Stats
+name: GitHub Personal Stats
 
 on:
   workflow_dispatch:
@@ -46,10 +46,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: liuchong/github-stats@v1.0.0
+      - uses: liuchong/github-personal-stats@v1.0.0
         with:
           card: dashboard
-          path: profile/github-stats.svg
+          path: profile/github-personal-stats.svg
           options: --user your-github-login --width 1000 --height 420
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -59,7 +59,7 @@ jobs:
 Then add the generated image to your profile README:
 
 ```md
-![GitHub Stats](./profile/github-stats.svg)
+![GitHub Personal Stats](./profile/github-personal-stats.svg)
 ```
 
 ## Local Preview
@@ -67,7 +67,7 @@ Then add the generated image to your profile README:
 Generate the showcase dashboard from the deterministic example data:
 
 ```sh
-cargo run -p github-stats -- generate \
+cargo run -p github-personal-stats -- generate \
   --fixture examples/showcase.json \
   --user showcase \
   --card dashboard \
@@ -77,7 +77,7 @@ cargo run -p github-stats -- generate \
 Generate an individual card:
 
 ```sh
-cargo run -p github-stats -- generate \
+cargo run -p github-personal-stats -- generate \
   --fixture examples/showcase.json \
   --card languages \
   --width 520 \

@@ -59,3 +59,7 @@ Moved user-facing examples back to the first release tag and consolidated releas
 ## [2026-05-13] release | choose marketplace name
 
 Renamed the Action display name to a more specific Marketplace-safe title while keeping the first release tag unchanged.
+
+## [2026-05-13] rename | align project identity
+
+Renamed package, binary, crate, documentation, Action, deployment, release asset, and default output references to the new project identity.

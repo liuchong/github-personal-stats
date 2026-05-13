@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: github-stats
+  name: github-personal-stats
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: github-stats
+      app: github-personal-stats
   template:
     metadata:
       labels:
-        app: github-stats
+        app: github-personal-stats
     spec:
       containers:
-        - name: github-stats
-          image: ghcr.io/liuchong/github-stats:latest
+        - name: github-personal-stats
+          image: ghcr.io/liuchong/github-personal-stats:latest
           ports:
             - containerPort: 3000
           env:
-            - name: GITHUB_STATS_ADDR
+            - name: GITHUB_PERSONAL_STATS_ADDR
               value: 0.0.0.0:3000
           readinessProbe:
             httpGet:
@@ -28,10 +28,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: github-stats
+  name: github-personal-stats
 spec:
   selector:
-    app: github-stats
+    app: github-personal-stats
   ports:
     - port: 80
       targetPort: 3000

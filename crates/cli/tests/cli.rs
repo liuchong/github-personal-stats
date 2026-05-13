@@ -3,10 +3,10 @@ use std::{fs, process::Command};
 #[test]
 fn cli_generates_dashboard_svg_file() {
     let output = std::env::temp_dir().join(format!(
-        "github-stats-cli-{}-dashboard.svg",
+        "github-personal-stats-cli-{}-dashboard.svg",
         std::process::id()
     ));
-    let status = Command::new(env!("CARGO_BIN_EXE_github-stats"))
+    let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .args([
             "generate",
             "--card",
@@ -26,15 +26,17 @@ fn cli_generates_dashboard_svg_file() {
 
 #[test]
 fn cli_updates_marked_readme_section() {
-    let target =
-        std::env::temp_dir().join(format!("github-stats-cli-{}-README.md", std::process::id()));
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-README.md",
+        std::process::id()
+    ));
     fs::write(
         &target,
         "before\n<!--START_SECTION:waka-->\nold\n<!--END_SECTION:waka-->\nafter\n",
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_github-stats"))
+    let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .args([
             "update-readme",
             "--target",

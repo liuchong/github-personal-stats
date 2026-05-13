@@ -19,7 +19,7 @@ inputs:
   path:
     description: Output path for generated assets
     required: false
-    default: profile/github-stats.svg
+    default: profile/github-personal-stats.svg
   token:
     description: GitHub token
     required: false
@@ -75,9 +75,9 @@ runs:
       shell: bash
       run: |
         if [ "${INPUT_MODE}" = "update-readme" ]; then
-          github-stats update-readme --section "${INPUT_SECTION_NAME}" --target "${INPUT_TARGET_PATH}" ${INPUT_OPTIONS}
+          github-personal-stats update-readme --section "${INPUT_SECTION_NAME}" --target "${INPUT_TARGET_PATH}" ${INPUT_OPTIONS}
         else
-          github-stats generate --card "${INPUT_CARD}" --output "${INPUT_PATH}" ${INPUT_OPTIONS}
+          github-personal-stats generate --card "${INPUT_CARD}" --output "${INPUT_PATH}" ${INPUT_OPTIONS}
         fi
       env:
         INPUT_MODE: ${{ inputs.mode }}

@@ -1,10 +1,10 @@
-use github_stats_core::{OutputKind, parse_output_kind, workspace_info};
+use github_personal_stats_core::{OutputKind, parse_output_kind, workspace_info};
 
 #[test]
 fn workspace_info_exposes_dashboard_as_default() {
     let info = workspace_info();
 
-    assert_eq!(info.name, "github-stats");
+    assert_eq!(info.name, "github-personal-stats");
     assert_eq!(info.default_output, OutputKind::Dashboard);
     assert!(info.supported_outputs.contains(&OutputKind::Dashboard));
     assert!(info.supported_outputs.contains(&OutputKind::WakatimeReadme));
@@ -14,7 +14,7 @@ fn workspace_info_exposes_dashboard_as_default() {
 fn workspace_info_serializes_to_stable_json() {
     let json = workspace_info().to_json();
 
-    assert!(json.contains(r#""name": "github-stats""#));
+    assert!(json.contains(r#""name": "github-personal-stats""#));
     assert!(json.contains(r#""default_output": "dashboard""#));
     assert!(json.contains(r#""wakatime-readme""#));
 }
