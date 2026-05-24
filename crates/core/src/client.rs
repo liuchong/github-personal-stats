@@ -991,7 +991,10 @@ mod tests {
             http_error_kind(403, "API rate limit exceeded"),
             RemoteErrorKind::RateLimit
         );
-        assert_eq!(http_error_kind(403, "access denied"), RemoteErrorKind::Permission);
+        assert_eq!(
+            http_error_kind(403, "access denied"),
+            RemoteErrorKind::Permission
+        );
         assert_eq!(http_error_kind(404, "not found"), RemoteErrorKind::NotFound);
         assert_eq!(http_error_kind(409, "gone"), RemoteErrorKind::NotFound);
         assert_eq!(
@@ -1058,7 +1061,10 @@ mod tests {
             rate_limited.to_string(),
             "remote error RateLimit: API rate limit exceeded"
         );
-        assert_eq!(defaulted.to_string(), "remote error InvalidResponse: GraphQL error");
+        assert_eq!(
+            defaulted.to_string(),
+            "remote error InvalidResponse: GraphQL error"
+        );
     }
 
     fn repository(id: &str, is_fork: bool, language: &str, size: u64) -> RepositoryNode {
