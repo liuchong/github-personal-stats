@@ -945,6 +945,122 @@ mod tests {
         );
     }
 
+    #[test]
+    fn authored_language_scope_without_authored_ids_returns_empty_languages() {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_authored_languages();
+        let repositories = vec![repository("owned-authored", false, "Rust", 500)];
+
+        let languages = aggregate_repository_languages(&config, &repositories, None);
+
+        assert!(languages.is_empty());
+    }
+
+    #[test]
+    fn min_repo_language_share_does_not_filter_when_repository_total_is_zero() {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_min_repo_language_share("5")
+            .unwrap();
+        let mut repository = repository("empty-total", false, "Rust", 10);
+        repository.languages.total_size = 0;
+
+        let languages = aggregate_repository_languages(&config, &[repository], None);
+
+        assert_eq!(
+            languages,
+            vec![RepositoryLanguage {
+                name: "Rust".to_owned(),
+                size: 10,
+            }]
+        );
+    }
+
+    #[test]
+    fn http_error_kind_classifies_status_and_response_body() {
+        assert_eq!(
+            http_error_kind(401, "whatever"),
+            RemoteErrorKind::Authentication
+        );
+        assert_eq!(
+            http_error_kind(500, "Bad credentials"),
+            RemoteErrorKind::Authentication
+        );
+        assert_eq!(
+            http_error_kind(403, "API rate limit exceeded"),
+            RemoteErrorKind::RateLimit
+        );
+        assert_eq!(http_error_kind(403, "access denied"), RemoteErrorKind::Permission);
+        assert_eq!(http_error_kind(404, "not found"), RemoteErrorKind::NotFound);
+        assert_eq!(http_error_kind(409, "gone"), RemoteErrorKind::NotFound);
+        assert_eq!(
+            http_error_kind(502, "server error"),
+            RemoteErrorKind::UpstreamUnavailable
+        );
+    }
+
+    #[test]
+    fn ensure_success_body_accepts_non_status_payloads() {
+        assert!(ensure_success_body("{\"ok\":true}").is_ok());
+        assert!(ensure_success_body("abc\nxyz").is_ok());
+    }
+
+    #[test]
+    fn ensure_success_body_maps_http_error_payload() {
+        let error = ensure_success_body("403\nAPI rate limit exceeded").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "remote error RateLimit: API rate limit exceeded"
+        );
+    }
+
+    #[test]
+    fn retryable_body_only_retries_upstream_unavailable() {
+        let upstream = GithubStatsError::Remote {
+            kind: RemoteErrorKind::UpstreamUnavailable,
+            message: "temporary network error".to_owned(),
+        };
+        let auth = GithubStatsError::Remote {
+            kind: RemoteErrorKind::Authentication,
+            message: "bad token".to_owned(),
+        };
+
+        assert!(retryable_body(&upstream));
+        assert!(!retryable_body(&auth));
+    }
+
+    #[test]
+    fn percent_encode_component_escapes_reserved_characters() {
+        assert_eq!(
+            percent_encode_component("name/with+space@example.com"),
+            "name%2Fwith%2Bspace%40example.com"
+        );
+    }
+
+    #[test]
+    fn graphql_error_maps_extension_codes_and_fallbacks() {
+        let forbidden = graphql_error(vec![GraphqlError {
+            message: "forbidden".to_owned(),
+            extensions: Some(GraphqlErrorExtensions {
+                code: Some("FORBIDDEN".to_owned()),
+            }),
+        }]);
+        let rate_limited = graphql_error(vec![GraphqlError {
+            message: "API rate limit exceeded".to_owned(),
+            extensions: None,
+        }]);
+        let defaulted = graphql_error(vec![]);
+
+        assert_eq!(forbidden.to_string(), "remote error Permission: forbidden");
+        assert_eq!(
+            rate_limited.to_string(),
+            "remote error RateLimit: API rate limit exceeded"
+        );
+        assert_eq!(defaulted.to_string(), "remote error InvalidResponse: GraphQL error");
+    }
+
     fn repository(id: &str, is_fork: bool, language: &str, size: u64) -> RepositoryNode {
         RepositoryNode {
             id: id.to_owned(),
