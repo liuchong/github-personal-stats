@@ -199,12 +199,12 @@ impl GithubGraphqlClient {
                 },
             )
             .await?;
-        let user = profile.user.ok_or_else(|| GithubStatsError::Remote {
+        let mut user = profile.user.ok_or_else(|| GithubStatsError::Remote {
             kind: RemoteErrorKind::NotFound,
             message: format!("user {} not found", config.username),
         })?;
         let repositories = self
-            .fetch_owned_repositories(&token, config, user.repositories)
+            .fetch_owned_repositories(&token, config, std::mem::take(&mut user.repositories))
             .await?;
         let mut contributions = BTreeMap::<String, u32>::new();
         let authored_repository_ids = self
@@ -235,40 +235,13 @@ impl GithubGraphqlClient {
                 }
             }
         }
-        let languages = aggregate_repository_languages(
+        Ok(assemble_github_data(
             config,
-            &repositories.nodes,
+            user,
+            repositories,
             authored_repository_ids.as_ref(),
-        );
-
-        Ok(GithubData {
-            profile: GithubProfile {
-                login: user.login,
-                name: user.name,
-                followers: user.followers.total_count,
-                public_repositories: repositories.total_count,
-            },
-            stats: UserStats {
-                stars: repositories
-                    .nodes
-                    .iter()
-                    .filter(|repository| !repository.is_fork)
-                    .map(|repository| repository.stargazer_count)
-                    .sum(),
-                commits: user.contributions_collection.total_commit_contributions,
-                pull_requests: user.pull_requests.total_count,
-                issues: user.issues.total_count,
-                reviews: user
-                    .contributions_collection
-                    .total_pull_request_review_contributions,
-                contributed_to: user.repositories_contributed_to.total_count,
-            },
-            languages,
-            contributions: contributions
-                .into_iter()
-                .map(|(date, count)| ContributionDay { date, count })
-                .collect(),
-        })
+            contributions,
+        ))
     }
 
     async fn fetch_owned_repositories(
@@ -460,6 +433,46 @@ fn aggregate_repository_languages(
         .collect()
 }
 
+fn assemble_github_data(
+    config: &GithubStatsConfig,
+    user: ProfileUser,
+    repositories: RepositoryConnection,
+    authored_repository_ids: Option<&BTreeSet<String>>,
+    contributions: BTreeMap<String, u32>,
+) -> GithubData {
+    let languages =
+        aggregate_repository_languages(config, &repositories.nodes, authored_repository_ids);
+
+    GithubData {
+        profile: GithubProfile {
+            login: user.login,
+            name: user.name,
+            followers: user.followers.total_count,
+            public_repositories: repositories.total_count,
+        },
+        stats: UserStats {
+            stars: repositories
+                .nodes
+                .iter()
+                .filter(|repository| !repository.is_fork)
+                .map(|repository| repository.stargazer_count)
+                .sum(),
+            commits: user.contributions_collection.total_commit_contributions,
+            pull_requests: user.pull_requests.total_count,
+            issues: user.issues.total_count,
+            reviews: user
+                .contributions_collection
+                .total_pull_request_review_contributions,
+            contributed_to: user.repositories_contributed_to.total_count,
+        },
+        languages,
+        contributions: contributions
+            .into_iter()
+            .map(|(date, count)| ContributionDay { date, count })
+            .collect(),
+    }
+}
+
 fn http_error_kind(status: u16, body: &str) -> RemoteErrorKind {
     if status == 401 || body.contains("Bad credentials") {
         RemoteErrorKind::Authentication
@@ -639,7 +652,7 @@ struct TotalCount {
     total_count: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct RepositoryConnection {
     #[serde(rename = "totalCount")]
     total_count: u64,
@@ -974,6 +987,80 @@ mod tests {
                 name: "Rust".to_owned(),
                 size: 10,
             }]
+        );
+    }
+
+    #[test]
+    fn assembled_live_data_preserves_profile_stats_languages_and_contributions() {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_authored_languages();
+        let user = ProfileUser {
+            login: "octo".to_owned(),
+            name: Some("Octo Cat".to_owned()),
+            followers: TotalCount { total_count: 42 },
+            repositories: RepositoryConnection::default(),
+            pull_requests: TotalCount { total_count: 7 },
+            issues: TotalCount { total_count: 9 },
+            repositories_contributed_to: TotalCount { total_count: 11 },
+            contributions_collection: ContributionsCollection {
+                contribution_years: vec![2025],
+                total_commit_contributions: 123,
+                total_pull_request_review_contributions: 5,
+            },
+        };
+        let mut rust_repository = repository("rust", false, "Rust", 500);
+        rust_repository.stargazer_count = 100;
+        let mut ruby_repository = repository("ruby", false, "Ruby", 300);
+        ruby_repository.stargazer_count = 50;
+        let mut fork_repository = repository("fork", true, "Shell", 900);
+        fork_repository.stargazer_count = 1_000;
+        let repositories = RepositoryConnection {
+            total_count: 3,
+            nodes: vec![rust_repository, ruby_repository, fork_repository],
+            page_info: PageInfo::default(),
+        };
+        let authored_repository_ids = BTreeSet::from(["rust".to_owned()]);
+        let contributions =
+            BTreeMap::from([("2025-01-02".to_owned(), 2), ("2025-01-01".to_owned(), 1)]);
+
+        let data = assemble_github_data(
+            &config,
+            user,
+            repositories,
+            Some(&authored_repository_ids),
+            contributions,
+        );
+
+        assert_eq!(data.profile.login, "octo");
+        assert_eq!(data.profile.name.as_deref(), Some("Octo Cat"));
+        assert_eq!(data.profile.followers, 42);
+        assert_eq!(data.profile.public_repositories, 3);
+        assert_eq!(data.stats.stars, 150);
+        assert_eq!(data.stats.commits, 123);
+        assert_eq!(data.stats.pull_requests, 7);
+        assert_eq!(data.stats.issues, 9);
+        assert_eq!(data.stats.reviews, 5);
+        assert_eq!(data.stats.contributed_to, 11);
+        assert_eq!(
+            data.languages,
+            vec![RepositoryLanguage {
+                name: "Rust".to_owned(),
+                size: 500,
+            }]
+        );
+        assert_eq!(
+            data.contributions,
+            vec![
+                ContributionDay {
+                    date: "2025-01-01".to_owned(),
+                    count: 1,
+                },
+                ContributionDay {
+                    date: "2025-01-02".to_owned(),
+                    count: 2,
+                },
+            ]
         );
     }
 
