@@ -115,3 +115,7 @@ Investigated repeated CI coverage failures and confirmed the job fails at `cargo
 ## [2026-05-24] tests | cover renderer variants and client assembly
 
 After the first coverage fix raised total line coverage to 76.33% but still missed the 85% gate, added deterministic tests for streak, coding-activity, status, theme, fallback-color, and zero-total README rendering paths. Extracted live GitHub response assembly into a pure helper and covered profile, stats, authored-language filtering, fork star exclusion, and contribution ordering without requiring network access.
+
+## [2026-05-24] data-client | cover live response parsing
+
+Added deterministic tests for live GraphQL response deserialization and fixture parser failure paths. The pagination response test exposed that owned repository `pageInfo` was being ignored by serde and therefore defaulting to no next page; fixed the connection field mapping so owned repository pagination metadata is parsed from GraphQL responses.
