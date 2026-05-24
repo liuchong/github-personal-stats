@@ -653,8 +653,8 @@ struct TotalCount {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RepositoryConnection {
-    #[serde(rename = "totalCount")]
     total_count: u64,
     nodes: Vec<RepositoryNode>,
     #[serde(default)]
@@ -1152,6 +1152,164 @@ mod tests {
             defaulted.to_string(),
             "remote error InvalidResponse: GraphQL error"
         );
+    }
+
+    #[test]
+    fn graphql_error_maps_known_extension_codes() {
+        let not_found = graphql_error(vec![GraphqlError {
+            message: "missing".to_owned(),
+            extensions: Some(GraphqlErrorExtensions {
+                code: Some("NOT_FOUND".to_owned()),
+            }),
+        }]);
+        let rate_limited = graphql_error(vec![GraphqlError {
+            message: "limited".to_owned(),
+            extensions: Some(GraphqlErrorExtensions {
+                code: Some("RATE_LIMITED".to_owned()),
+            }),
+        }]);
+        let unknown = graphql_error(vec![GraphqlError {
+            message: "unknown".to_owned(),
+            extensions: Some(GraphqlErrorExtensions {
+                code: Some("OTHER".to_owned()),
+            }),
+        }]);
+
+        assert_eq!(not_found.to_string(), "remote error NotFound: missing");
+        assert_eq!(rate_limited.to_string(), "remote error RateLimit: limited");
+        assert_eq!(unknown.to_string(), "remote error InvalidResponse: unknown");
+    }
+
+    #[test]
+    fn deserializes_live_graphql_response_shapes() {
+        let profile: GraphqlResponse<ProfileData> = serde_json::from_str(
+            r#"{
+              "data": {
+                "user": {
+                  "login": "octo",
+                  "name": null,
+                  "followers": { "totalCount": 2 },
+                  "repositories": {
+                    "totalCount": 1,
+                    "nodes": [{
+                      "id": "repo1",
+                      "nameWithOwner": "octo/repo1",
+                      "isFork": false,
+                      "stargazerCount": 3,
+                      "languages": {
+                        "totalSize": 4,
+                        "edges": [{ "size": 4, "node": { "name": "Rust" } }]
+                      }
+                    }]
+                  },
+                  "pullRequests": { "totalCount": 5 },
+                  "issues": { "totalCount": 6 },
+                  "repositoriesContributedTo": { "totalCount": 7 },
+                  "contributionsCollection": {
+                    "contributionYears": [2026],
+                    "totalCommitContributions": 8,
+                    "totalPullRequestReviewContributions": 9
+                  }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let user = profile.data.unwrap().user.unwrap();
+        assert_eq!(user.login, "octo");
+        assert_eq!(
+            user.repositories.nodes[0].languages.edges[0].node.name,
+            "Rust"
+        );
+        assert!(!user.repositories.page_info.has_next_page);
+
+        let mut calendar: GraphqlResponse<CalendarData> = serde_json::from_str(
+            r#"{
+              "data": {
+                "user": {
+                  "contributionsCollection": {
+                    "contributionCalendar": {
+                      "weeks": [{
+                        "contributionDays": [{
+                          "date": "2026-05-24",
+                          "contributionCount": 4
+                        }]
+                      }]
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let days = calendar
+            .data
+            .as_mut()
+            .unwrap()
+            .user
+            .as_mut()
+            .unwrap()
+            .contributions_collection
+            .contribution_calendar
+            .weeks
+            .remove(0)
+            .contribution_days;
+        assert_eq!(days[0].date, "2026-05-24");
+        assert_eq!(days[0].contribution_count, 4);
+    }
+
+    #[test]
+    fn deserializes_paginated_repository_response_shapes() {
+        let owned: GraphqlResponse<OwnedRepositoriesData> = serde_json::from_str(
+            r#"{
+              "data": {
+                "user": {
+                  "repositories": {
+                    "totalCount": 1,
+                    "pageInfo": { "hasNextPage": true, "endCursor": "next" },
+                    "nodes": [{
+                      "id": "repo2",
+                      "nameWithOwner": "octo/repo2",
+                      "isFork": true,
+                      "stargazerCount": 10,
+                      "languages": {
+                        "totalSize": 20,
+                        "edges": [{ "size": 20, "node": { "name": "TypeScript" } }]
+                      }
+                    }]
+                  }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let repositories = owned.data.unwrap().user.unwrap().repositories;
+        assert!(repositories.page_info.has_next_page);
+        assert_eq!(repositories.page_info.end_cursor.as_deref(), Some("next"));
+        assert!(repositories.nodes[0].is_fork);
+
+        let authored: GraphqlResponse<AuthoredRepositoriesData> = serde_json::from_str(
+            r#"{
+              "data": {
+                "user": {
+                  "repositoriesContributedTo": {
+                    "nodes": [{ "id": "repo2" }],
+                    "pageInfo": { "hasNextPage": false, "endCursor": null }
+                  }
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let repositories = authored
+            .data
+            .unwrap()
+            .user
+            .unwrap()
+            .repositories_contributed_to;
+        assert_eq!(repositories.nodes[0].id, "repo2");
+        assert!(!repositories.page_info.has_next_page);
+        assert_eq!(repositories.page_info.end_cursor, None);
     }
 
     fn repository(id: &str, is_fork: bool, language: &str, size: u64) -> RepositoryNode {
