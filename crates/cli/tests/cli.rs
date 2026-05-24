@@ -67,3 +67,46 @@ fn cli_updates_marked_readme_section() {
     assert!(!readme.contains("old"));
     let _ = fs::remove_file(target);
 }
+
+#[test]
+fn cli_defaults_to_workspace_info() {
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains(r#""name": "github-personal-stats""#));
+    assert!(stdout.contains(r#""default_output": "dashboard""#));
+}
+
+#[test]
+fn cli_reports_unsupported_command() {
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .arg("unknown")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("unsupported command: unknown"));
+}
+
+#[test]
+fn cli_reports_missing_readme_section_marker() {
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-missing-section.md",
+        std::process::id()
+    ));
+    fs::write(&target, "no generated section here\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args(["update-readme", "--target", target.to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("missing section marker: <!--START_SECTION:waka-->"));
+    let _ = fs::remove_file(target);
+}

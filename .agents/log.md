@@ -118,4 +118,4 @@ After the first coverage fix raised total line coverage to 76.33% but still miss
 
 ## [2026-05-24] data-client | cover live response parsing
 
-Added deterministic tests for live GraphQL response deserialization and fixture parser failure paths. The pagination response test exposed that owned repository `pageInfo` was being ignored by serde and therefore defaulting to no next page; fixed the connection field mapping so owned repository pagination metadata is parsed from GraphQL responses.
+Added deterministic tests for live GraphQL response deserialization, fixture parser failure paths, and CLI command/error paths. The pagination response test exposed that owned repository `pageInfo` was being ignored by serde and therefore defaulting to no next page; fixed the connection field mapping so owned repository pagination metadata is parsed from GraphQL responses.
