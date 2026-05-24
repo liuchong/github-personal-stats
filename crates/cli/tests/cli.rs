@@ -110,3 +110,22 @@ fn cli_reports_missing_readme_section_marker() {
     assert!(stderr.contains("missing section marker: <!--START_SECTION:waka-->"));
     let _ = fs::remove_file(target);
 }
+
+#[test]
+fn cli_reports_missing_token_for_live_generation() {
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-live.svg",
+        std::process::id()
+    ));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .env_remove("GITHUB_TOKEN")
+        .args(["generate", "--output", target.to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("missing token environment variable GITHUB_TOKEN"));
+    assert!(!target.exists());
+}
