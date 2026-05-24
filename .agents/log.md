@@ -107,3 +107,7 @@ Made repository pagination metadata optional in live GraphQL response parsing so
 ## [2026-05-13] action | pin installer to action ref
 
 Changed the Action installer default from `latest` to the checked-out Action ref so tagged Action runs download matching release assets. Workflows can still override the binary version explicitly with the `version` input.
+
+## [2026-05-24] tests | raise client logic coverage
+
+Investigated repeated CI coverage failures and confirmed the job fails at `cargo llvm-cov --fail-under-lines 85` with overall line coverage at 72.94%, concentrated in `core/src/client.rs`. Added targeted unit tests for language aggregation guard paths, HTTP error classification, response-body success/error parsing, retryability classification, percent encoding, and GraphQL error mapping so newly added live-fetch client logic has explicit branch coverage.
