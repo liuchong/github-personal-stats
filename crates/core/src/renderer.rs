@@ -457,7 +457,9 @@ fn stacked_language_bar(
 }
 
 fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &RenderTheme) -> String {
-    let side_width = (width - 260 - 32) / 2;
+    let compact = width < 640;
+    let hero_width = if compact { 160 } else { 260 };
+    let side_width = width.saturating_sub(hero_width + 32) / 2;
     let center_x = x + side_width + 16;
     [
         side_streak_metric(SideStreakMetric {
@@ -470,21 +472,33 @@ fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &Rend
             note: streak
                 .current_end
                 .as_deref()
-                .map(format_single_date)
+                .map(|date| {
+                    if compact {
+                        format_short_date(date)
+                    } else {
+                        format_single_date(date)
+                    }
+                })
                 .unwrap_or_default(),
             accent: theme.accent,
+            compact,
             theme,
         }),
-        current_streak_hero(center_x, y, 260, streak, theme),
+        current_streak_hero(center_x, y, hero_width, streak, compact, theme),
         side_streak_metric(SideStreakMetric {
-            x: center_x + 276,
+            x: center_x + hero_width + 16,
             y: y + 12,
             width: side_width,
             label: "Longest Streak",
             value: streak.longest.to_string(),
             unit: "days",
-            note: date_range(&streak.longest_start, &streak.longest_end),
+            note: if compact {
+                short_date_range(&streak.longest_start, &streak.longest_end)
+            } else {
+                date_range(&streak.longest_start, &streak.longest_end)
+            },
             accent: theme.success,
+            compact,
             theme,
         }),
     ]
@@ -500,10 +514,47 @@ struct SideStreakMetric<'a> {
     unit: &'a str,
     note: String,
     accent: &'a str,
+    compact: bool,
     theme: &'a RenderTheme,
 }
 
 fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
+    if metric.compact {
+        let (label_top, label_bottom) = metric.label.split_once(' ').unwrap_or((metric.label, ""));
+        let unit_x = metric.x + 20 + metric.value.len() as u32 * 12;
+        return format!(
+            r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="1.5" rx="0.75" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="9" fill="{}">{}</text></g>"#,
+            metric.x,
+            metric.y,
+            metric.width,
+            metric.theme.accent_soft,
+            metric.theme.border,
+            metric.x + 12,
+            metric.y + 17,
+            metric.theme.muted,
+            escape_xml(label_top),
+            metric.x + 12,
+            metric.y + 29,
+            metric.theme.muted,
+            escape_xml(label_bottom),
+            metric.x + 12,
+            metric.y + 55,
+            metric.theme.text,
+            escape_xml(&metric.value),
+            unit_x,
+            metric.y + 55,
+            metric.theme.muted,
+            escape_xml(metric.unit),
+            metric.x + 12,
+            metric.y + 63,
+            metric.width.saturating_sub(24),
+            metric.accent,
+            metric.x + 12,
+            metric.y + 76,
+            metric.theme.muted,
+            escape_xml(&metric.note)
+        );
+    }
     format!(
         r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="1.5" rx="0.75" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text></g>"#,
         metric.x,
@@ -539,20 +590,24 @@ fn current_streak_hero(
     y: u32,
     width: u32,
     streak: &StreakSummary,
+    compact: bool,
     theme: &RenderTheme,
 ) -> String {
     let center_x = x + width / 2;
-    let radius: u32 = 34;
+    let radius: u32 = if compact { 26 } else { 34 };
     let ring_cy = y + 4 + radius;
     let ring_top = ring_cy - radius;
-    let number_y = ring_cy + 10;
-    let label_y = ring_cy + radius + 18;
-    let date_y = label_y + 16;
+    let number_y = ring_cy + if compact { 8 } else { 10 };
+    let label_y = ring_cy + radius + if compact { 14 } else { 18 };
+    let date_y = label_y + if compact { 13 } else { 16 };
+    let number_size = if compact { 24 } else { 34 };
+    let label_size = if compact { 11 } else { 14 };
+    let date_size = if compact { 9 } else { 12 };
     let flame_color = "#fb8c00";
     let mask_id = "psm-streak-flame-cut";
     let range = date_range(&streak.current_start, &streak.current_end);
     format!(
-        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="10" ry="15" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="2" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="2" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
+        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="10" ry="15" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="2" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="2" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{number_size}" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{label_size}" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{date_size}" fill="{muted}">{range}</text></g>"##,
         mask_id = mask_id,
         center_x = center_x,
         notch_y = ring_top.saturating_sub(6),
@@ -563,10 +618,13 @@ fn current_streak_hero(
         flame_color = flame_color,
         flame = flame_icon(center_x, ring_top.saturating_sub(11), flame_color),
         number_y = number_y,
+        number_size = number_size,
         text_color = theme.text,
         count = streak.current,
         label_y = label_y,
+        label_size = label_size,
         date_y = date_y,
+        date_size = date_size,
         muted = theme.muted,
         range = escape_xml(&range)
     )
@@ -743,6 +801,26 @@ fn format_single_date(date: &str) -> String {
         date.to_owned()
     } else {
         format!("{month_name} {} {}", day.trim_start_matches('0'), year)
+    }
+}
+
+fn format_short_date(date: &str) -> String {
+    let full = format_single_date(date);
+    if full == date {
+        return full;
+    }
+    full.rsplit_once(' ')
+        .map(|(head, _)| head.to_owned())
+        .unwrap_or(full)
+}
+
+fn short_date_range(start: &Option<String>, end: &Option<String>) -> String {
+    match (start.as_deref(), end.as_deref()) {
+        (Some(start), Some(end)) if start == end => format_short_date(start),
+        (Some(start), Some(end)) => {
+            format!("{} - {}", format_short_date(start), format_short_date(end))
+        }
+        _ => String::new(),
     }
 }
 
