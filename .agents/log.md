@@ -119,3 +119,15 @@ After the first coverage fix raised total line coverage to 76.33% but still miss
 ## [2026-05-24] data-client | cover live response parsing
 
 Added deterministic tests for live GraphQL response deserialization, fixture parser failure paths, and CLI command/error paths. The pagination response test exposed that owned repository `pageInfo` was being ignored by serde and therefore defaulting to no next page; fixed the connection field mapping so owned repository pagination metadata is parsed from GraphQL responses.
+
+## [2026-07-21] renderer | refine streak flame and card crispness
+
+Redraw the streak hero flame as a single rounded path with a curled tip and an evenodd bottom cutout, unify flame, ring, and label on the streak accent orange, and enlarge the ring mask notch so the ring tapers cleanly behind the flame. Thin the streak and rank ring strokes, soften the panel drop shadow, and enable geometric precision rendering. Regenerate the dashboard and stats SVG snapshots after visual review of light and dark themes.
+
+## [2026-07-21] renderer | slim strokes across cards
+
+Thinned the streak ring (2), rank ring (3.5), panel accent bar (4), side tile underline (1.5), stacked language bar (height 6), and per-language row bars (height 4) after feedback that card strokes felt heavy. Regenerated both SVG snapshots and confirmed crisp output with 4x rasterized previews.
+
+## [2026-07-21] renderer | lighten typography and redraw row icons
+
+Replaced the filled stat-row icons (star, commit, pull request, issue, code) with thin stroke-based drawings. Moved panel titles, stat labels and values, and side streak numbers from bold weights to `Helvetica Neue` medium (500) since Arial only offers regular and bold; kept the streak hero number and label untouched per feedback. Slimmed the panel accent bar to 2.5 and the rank ring to 2.5. Regenerated both SVG snapshots and confirmed rendering with 4x rasterized previews.
