@@ -243,7 +243,7 @@ fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme) -> Str
 
 fn svg_root(size: &ImageSize, theme: &RenderTheme, body: String) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="{}"/><stop offset="100%" stop-color="{}"/></linearGradient><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.10"/></filter></defs><rect width="100%" height="100%" fill="url(#bg)"/>{}</svg>"##,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img" shape-rendering="geometricPrecision"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="{}"/><stop offset="100%" stop-color="{}"/></linearGradient><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#1f2937" flood-opacity="0.08"/></filter></defs><rect width="100%" height="100%" fill="url(#bg)"/>{}</svg>"##,
         size.width, size.height, size.width, size.height, theme.background, theme.accent_soft, body
     )
 }
@@ -258,7 +258,7 @@ fn panel(
     theme: &RenderTheme,
 ) -> String {
     format!(
-        r#"<g filter="url(#shadow)"><rect x="{}" y="{}" width="{}" height="{}" rx="18" fill="{}" stroke="{}"/><rect x="{}" y="{}" width="5" height="34" rx="2.5" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text></g>"#,
+        r#"<g filter="url(#shadow)"><rect x="{}" y="{}" width="{}" height="{}" rx="18" fill="{}" stroke="{}"/><rect x="{}" y="{}" width="2.5" height="34" rx="1.25" fill="{}"/><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="19" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text></g>"#,
         x,
         y,
         width,
@@ -339,7 +339,7 @@ fn stat_row<T: ToString>(
     theme: &RenderTheme,
 ) -> String {
     format!(
-        r#"<g>{}<text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="800" fill="{}">{}</text></g>"#,
+        r#"<g>{}<text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="500" fill="{}">{}</text></g>"#,
         icon(stat_icon(label), x, y, 16, accent),
         x + 22,
         y + 13,
@@ -355,7 +355,7 @@ fn stat_row<T: ToString>(
 fn rank_ring(x: u32, y: u32, size: u32, rank: &str, score: u64, theme: &RenderTheme) -> String {
     let center = size / 2;
     format!(
-        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="6"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="6" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
+        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="2.5"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="600" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
         x + center,
         y + center,
         theme.panel,
@@ -411,12 +411,12 @@ fn language_bars(
                     x + 94,
                     row_y + 2,
                     bar_width,
-                    5,
-                    3,
+                    4,
+                    2,
                     theme.accent_soft,
                     "none"
                 ),
-                rounded_rect(x + 94, row_y + 2, filled, 5, 3, color, "none")
+                rounded_rect(x + 94, row_y + 2, filled, 4, 2, color, "none")
             )
         })
         .collect::<String>();
@@ -445,15 +445,15 @@ fn stacked_language_bar(
             x + 2 + offset,
             y,
             segment_width,
-            8,
-            4,
+            6,
+            3,
             language_color(&language.name, index),
             "none",
         ));
         offset += segment_width;
     }
 
-    rounded_rect(x, y, width, 8, 4, theme.accent_soft, "none") + &segments
+    rounded_rect(x, y, width, 6, 3, theme.accent_soft, "none") + &segments
 }
 
 fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &RenderTheme) -> String {
@@ -505,7 +505,7 @@ struct SideStreakMetric<'a> {
 
 fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="32" font-weight="900" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="2" rx="1" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text></g>"#,
+        r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="1.5" rx="0.75" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text></g>"#,
         metric.x,
         metric.y,
         metric.width,
@@ -548,20 +548,20 @@ fn current_streak_hero(
     let number_y = ring_cy + 10;
     let label_y = ring_cy + radius + 18;
     let date_y = label_y + 16;
-    let flame_color = "#ff8c1a";
+    let flame_color = "#fb8c00";
     let mask_id = "psm-streak-flame-cut";
     let range = date_range(&streak.current_start, &streak.current_end);
     format!(
-        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="9" ry="12" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="3" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="3" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
+        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="10" ry="15" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="2" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="2" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="{muted}">{range}</text></g>"##,
         mask_id = mask_id,
         center_x = center_x,
-        notch_y = ring_top.saturating_sub(1),
+        notch_y = ring_top.saturating_sub(6),
         ring_cy = ring_cy,
         radius = radius,
         panel = theme.panel,
         accent_soft = theme.accent_soft,
         flame_color = flame_color,
-        flame = flame_icon(center_x, ring_top.saturating_sub(4), flame_color),
+        flame = flame_icon(center_x, ring_top.saturating_sub(11), flame_color),
         number_y = number_y,
         text_color = theme.text,
         count = streak.current,
@@ -609,7 +609,7 @@ fn badge(
     text_fill: &str,
 ) -> String {
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="{}">{}</text></g>"#,
+        r#"<g><rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="15" font-weight="600" fill="{}">{}</text></g>"#,
         x,
         y,
         width,
@@ -641,35 +641,34 @@ fn stat_icon(label: &str) -> IconKind {
     }
 }
 
-fn icon(kind: IconKind, x: u32, y: u32, size: u32, fill: &str) -> String {
+fn icon(kind: IconKind, x: u32, y: u32, size: u32, color: &str) -> String {
     format!(
-        r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 16 16" fill="{}" aria-hidden="true"><path d="{}"/></svg>"#,
+        r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 16 16" aria-hidden="true">{}</svg>"#,
         x,
         y,
         size,
         size,
-        fill,
-        icon_path(kind)
+        icon_markup(kind, color)
     )
 }
 
-fn icon_path(kind: IconKind) -> &'static str {
+fn icon_markup(kind: IconKind, color: &str) -> String {
     match kind {
-        IconKind::Star => {
-            "M8 1.2l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11l-3.8 2 .7-4.3-3.1-3 4.3-.6L8 1.2z"
-        }
-        IconKind::Commit => {
-            "M8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM0 7h4v2H0V7zm12 0h4v2h-4V7z"
-        }
-        IconKind::PullRequest => {
-            "M5 3a2 2 0 1 1-3 1.7V11a2 2 0 1 1-2 0V4.7A2 2 0 0 1 3 3zm8 0a2 2 0 0 1 1 3.7V9a4 4 0 0 1-4 4H8v2L5 12l3-3v2h2a2 2 0 0 0 2-2V6.7A2 2 0 0 1 13 3z"
-        }
-        IconKind::Issue => {
-            "M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 2a1 1 0 0 0-1 1v4a1 1 0 1 0 2 0v-4a1 1 0 0 0-1-1zm0 8.5a1.1 1.1 0 1 0 0-2.2 1.1 1.1 0 0 0 0 2.2z"
-        }
-        IconKind::Code => {
-            "M5.2 4.2 1.4 8l3.8 3.8 1.1-1.1L3.6 8l2.7-2.7-1.1-1.1zm5.6 0-1.1 1.1L12.4 8l-2.7 2.7 1.1 1.1L14.6 8l-3.8-3.8z"
-        }
+        IconKind::Star => format!(
+            r#"<path d="M8 2.1l1.7 3.5 3.9.6-2.8 2.7.6 3.8L8 11.1l-3.4 1.6.6-3.8-2.8-2.7 3.9-.6z" fill="none" stroke="{color}" stroke-width="1.2" stroke-linejoin="round"/>"#
+        ),
+        IconKind::Commit => format!(
+            r#"<circle cx="8" cy="8" r="2.4" fill="none" stroke="{color}" stroke-width="1.3"/><path d="M1 8h4.4M10.6 8H15" fill="none" stroke="{color}" stroke-width="1.3" stroke-linecap="round"/>"#
+        ),
+        IconKind::PullRequest => format!(
+            r#"<circle cx="5" cy="3.9" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><circle cx="5" cy="12.1" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><circle cx="11" cy="3.9" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><path d="M5 5.6v4.8M11 5.6v2.2c0 2-1.6 2.7-3.6 3" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>"#
+        ),
+        IconKind::Issue => format!(
+            r#"<circle cx="8" cy="8" r="6" fill="none" stroke="{color}" stroke-width="1.2"/><path d="M8 4.6v3.9" fill="none" stroke="{color}" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.2" r="0.9" fill="{color}"/>"#
+        ),
+        IconKind::Code => format!(
+            r#"<path d="M6 4.8 2.8 8l3.2 3.2M10 4.8 13.2 8 10 11.2" fill="none" stroke="{color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#
+        ),
     }
 }
 
@@ -750,34 +749,9 @@ fn format_single_date(date: &str) -> String {
 fn flame_icon(cx: u32, base_y: u32, color: &str) -> String {
     let cx = cx as i32;
     let base_y = base_y as i32;
-    let outer = format!(
-        "M {tx} {ty} C {c1x} {c1y} {c2x} {c2y} {rx} {ry} C {c3x} {c3y} {c4x} {c4y} 0 15 C {c5x} {c5y} {c6x} {c6y} {lx} {ly} C {c7x} {c7y} {c8x} {c8y} {tx} {ty} Z",
-        tx = 0,
-        ty = -7,
-        c1x = 4,
-        c1y = -3,
-        c2x = 5,
-        c2y = 1,
-        rx = 5,
-        ry = 5,
-        c3x = 5,
-        c3y = 10,
-        c4x = 3,
-        c4y = 14,
-        c5x = -3,
-        c5y = 14,
-        c6x = -5,
-        c6y = 10,
-        lx = -5,
-        ly = 5,
-        c7x = -5,
-        c7y = 1,
-        c8x = -3,
-        c8y = -1
-    );
-    let inner = "M -1 5 C 1 5 2 7 2 10 C 2 13 1 14 0 14 C -1 14 -2 13 -2 10 C -2 8 -1 6 -1 5 Z";
+    let flame = "M 1.4 -10.8 C 2 -8 2.6 -5.4 2.5 -3.4 C 2.4 -1.2 1 0.4 -0.9 0.4 C -2.8 0.4 -4.2 -1.2 -4.4 -3 C -6.4 -0.8 -8.2 2.8 -8.2 6.4 C -8.2 10.6 -4.4 13.2 0 13.2 C 4.4 13.2 8.2 10.6 8.2 6.4 C 8.2 1 5.6 -4.4 1.4 -10.8 Z M -0.3 10.4 C -2.1 10.4 -3.5 9 -3.5 7.3 C -3.5 5.7 -2.5 4.6 -0.8 4.2 C 1 3.8 2.7 2.9 3.7 1.6 C 4.1 2.8 4.3 4.1 4.3 5.4 C 4.3 8.2 2.3 10.4 -0.3 10.4 Z";
     format!(
-        r##"<g transform="translate({cx},{base_y})"><path d="{outer}" fill="{color}"/><path d="{inner}" fill="#ffd166"/></g>"##
+        r##"<g transform="translate({cx},{base_y})"><path d="{flame}" fill="{color}" fill-rule="evenodd"/></g>"##
     )
 }
 
