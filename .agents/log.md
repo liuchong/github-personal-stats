@@ -131,3 +131,7 @@ Thinned the streak ring (2), rank ring (3.5), panel accent bar (4), side tile un
 ## [2026-07-21] renderer | lighten typography and redraw row icons
 
 Replaced the filled stat-row icons (star, commit, pull request, issue, code) with thin stroke-based drawings. Moved panel titles, stat labels and values, and side streak numbers from bold weights to `Helvetica Neue` medium (500) since Arial only offers regular and bold; kept the streak hero number and label untouched per feedback. Slimmed the panel accent bar to 2.5 and the rank ring to 2.5. Regenerated both SVG snapshots and confirmed rendering with 4x rasterized previews.
+
+## [2026-07-21] renderer | compact streak tile layout for narrow cards
+
+Fixed side streak tiles overflowing their bounds on narrow streak cards (text spilling past tile edges and card bounds at widths below ~640). Added a compact layout: smaller hero ring and typography, two-line side tile labels, inline unit placement based on value width, and short `Mon D` tile notes. Caught during example image review after the visual refresh; example SVGs must be eyeballed before tagging releases.
