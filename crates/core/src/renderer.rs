@@ -3,16 +3,25 @@ use crate::{
     StreakSummary,
 };
 
+const FONT_STACK: &str =
+    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif";
+
+const HEAT_RAMP: [&str; 4] = ["#ffe3ad", "#ffc65c", "#ffa726", "#fb8c00"];
+
+const NARROW_WIDTH: u32 = 440;
+
+const GUTTER: u32 = 24;
+const LANGUAGE_ROWS: usize = 6;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
     pub background: &'static str,
-    pub panel: &'static str,
-    pub text: &'static str,
+    pub ink: &'static str,
     pub muted: &'static str,
+    pub line: &'static str,
+    pub track: &'static str,
     pub accent: &'static str,
-    pub border: &'static str,
-    pub accent_soft: &'static str,
-    pub success: &'static str,
+    pub on_accent: &'static str,
 }
 
 impl RenderTheme {
@@ -20,35 +29,50 @@ impl RenderTheme {
         match name {
             "dark" => Self {
                 background: "#0d1117",
-                panel: "#161b22",
-                text: "#f0f6fc",
+                ink: "#e6edf3",
                 muted: "#8b949e",
-                accent: "#58a6ff",
-                border: "#30363d",
-                accent_soft: "#102542",
-                success: "#3fb950",
+                line: "#21262d",
+                track: "#262c36",
+                accent: "#4493f8",
+                on_accent: "#0d1117",
             },
             "transparent" => Self {
                 background: "transparent",
-                panel: "#ffffffcc",
-                text: "#24292f",
-                muted: "#57606a",
+                ink: "#1f2328",
+                muted: "#59636e",
+                line: "#d8dee6",
+                track: "#dde3ea",
                 accent: "#0969da",
-                border: "#d0d7de",
-                accent_soft: "#ddf4ff",
-                success: "#1a7f37",
+                on_accent: "#ffffff",
             },
             _ => Self {
-                background: "#f6f8ff",
-                panel: "#ffffff",
-                text: "#24292f",
-                muted: "#57606a",
-                accent: "#6f42c1",
-                border: "#d8dee8",
-                accent_soft: "#f0e7ff",
-                success: "#1a7f37",
+                background: "#ffffff",
+                ink: "#15181d",
+                muted: "#656d76",
+                line: "#ebedf0",
+                track: "#e4e8ee",
+                accent: "#0b69d4",
+                on_accent: "#ffffff",
             },
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Rect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl Rect {
+    fn right(self) -> u32 {
+        self.x + self.width
+    }
+
+    fn is_narrow(self) -> bool {
+        self.width < NARROW_WIDTH
     }
 }
 
@@ -95,78 +119,45 @@ fn render_dashboard(
     size: &ImageSize,
     theme: &RenderTheme,
 ) -> String {
-    let padding = 24;
-    let gap = 16;
-    let top_height = (size.height.saturating_sub(padding * 2 + gap)) / 2;
-    let bottom_y = padding + top_height + gap;
-    let panel_width = (size.width.saturating_sub(padding * 2 + gap)) / 2;
-    let bottom_width = size.width.saturating_sub(padding * 2);
+    let pad = padding(size.width);
+    let split = size.height * 53 / 100;
+    let column = size.width.saturating_sub(pad * 2 + GUTTER) / 2;
+    let top_height = split.saturating_sub(pad + 16);
+    let stats_area = Rect {
+        x: pad,
+        y: pad,
+        width: column,
+        height: top_height,
+    };
+    let languages_area = Rect {
+        x: pad + column + GUTTER,
+        y: pad,
+        width: column,
+        height: top_height,
+    };
+    let streak_area = Rect {
+        x: pad,
+        y: split + 20,
+        width: size.width.saturating_sub(pad * 2),
+        height: size.height.saturating_sub(split + 20 + pad),
+    };
 
     svg_root(
         size,
         theme,
         format!(
-            "{}{}{}{}{}{}",
-            panel(
-                padding,
-                padding,
-                panel_width,
-                top_height,
-                "Stats",
-                "Profile overview",
-                theme
-            ),
-            stats_dashboard(stats, padding + 24, padding + 58, panel_width - 48, theme),
-            panel(
-                padding + panel_width + gap,
-                padding,
-                panel_width,
-                top_height,
-                "Languages",
-                "Repository language share",
-                theme
-            ),
-            language_bars(
-                languages,
-                padding + panel_width + gap + 24,
-                padding + 58,
-                panel_width - 48,
-                theme
-            ),
-            panel(
-                padding,
-                bottom_y,
-                bottom_width,
-                top_height,
-                "Streak",
-                "Recent public activity",
-                theme
-            ),
-            streak_tiles(
-                streak,
-                padding + 24,
-                bottom_y + 62,
-                bottom_width - 48,
-                theme
-            )
+            "{}{}{}{}{}",
+            stats_section(stats_area, stats, theme),
+            vertical_rule(pad + column + GUTTER / 2, pad + 2, pad + top_height, theme),
+            languages_section(languages_area, languages, theme),
+            horizontal_rule(pad, size.width - pad, split, theme),
+            streak_section(streak_area, streak, theme),
         ),
     )
 }
 
 fn render_stats_card(stats: &AggregatedStats, size: &ImageSize, theme: &RenderTheme) -> String {
-    svg_root(
-        size,
-        theme,
-        panel(
-            16,
-            16,
-            size.width - 32,
-            size.height - 32,
-            "Stats",
-            "Profile overview",
-            theme,
-        ) + &stats_dashboard(stats, 40, 74, size.width - 80, theme),
-    )
+    svg_root(size, theme, stats_section(card_area(size), stats, theme))
 }
 
 fn render_languages_card(
@@ -177,32 +168,12 @@ fn render_languages_card(
     svg_root(
         size,
         theme,
-        panel(
-            16,
-            16,
-            size.width - 32,
-            size.height - 32,
-            "Languages",
-            "Repository language share",
-            theme,
-        ) + &language_bars(languages, 40, 74, size.width - 80, theme),
+        languages_section(card_area(size), languages, theme),
     )
 }
 
 fn render_streak_card(streak: &StreakSummary, size: &ImageSize, theme: &RenderTheme) -> String {
-    svg_root(
-        size,
-        theme,
-        panel(
-            16,
-            16,
-            size.width - 32,
-            size.height - 32,
-            "Streak",
-            "Recent public activity",
-            theme,
-        ) + &streak_tiles(streak, 40, 82, size.width - 80, theme),
-    )
+    svg_root(size, theme, streak_section(card_area(size), streak, theme))
 }
 
 fn render_wakatime_card(
@@ -213,471 +184,606 @@ fn render_wakatime_card(
     svg_root(
         size,
         theme,
-        panel(
-            16,
-            16,
-            size.width - 32,
-            size.height - 32,
-            "Coding Activity",
-            "Tracked development time",
-            theme,
-        ) + &wakatime_lines(summary, 40, 78, theme),
+        wakatime_section(card_area(size), summary, theme),
     )
 }
 
 fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme) -> String {
+    let area = card_area(size);
     svg_root(
         size,
         theme,
-        panel(
-            16,
-            16,
-            size.width - 32,
-            size.height - 32,
-            "Status",
-            "Service health",
-            theme,
-        ) + &badge(40, 78, 160, 34, state, theme.success, "#ffffff"),
+        format!(
+            "{}{}{}",
+            eyebrow(area.x, area.y + 16, "Status", theme),
+            badge(area.x, area.y + 44, state, theme),
+            text(area.x, area.y + 96, 11.0, theme.muted, "Service health"),
+        ),
     )
+}
+
+fn card_area(size: &ImageSize) -> Rect {
+    let pad = padding(size.width);
+    Rect {
+        x: pad,
+        y: pad,
+        width: size.width.saturating_sub(pad * 2),
+        height: size.height.saturating_sub(pad * 2),
+    }
+}
+
+fn padding(width: u32) -> u32 {
+    (width / 20).clamp(16, 28)
 }
 
 fn svg_root(size: &ImageSize, theme: &RenderTheme, body: String) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}" role="img" shape-rendering="geometricPrecision"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="{}"/><stop offset="100%" stop-color="{}"/></linearGradient><filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#1f2937" flood-opacity="0.08"/></filter></defs><rect width="100%" height="100%" fill="url(#bg)"/>{}</svg>"##,
-        size.width, size.height, size.width, size.height, theme.background, theme.accent_soft, body
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" font-family="{font}" style="font-variant-numeric:tabular-nums"><rect width="100%" height="100%" fill="{background}"/>{body}</svg>"#,
+        width = size.width,
+        height = size.height,
+        font = FONT_STACK,
+        background = theme.background,
+        body = body,
     )
 }
 
-fn panel(
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    title: &str,
-    subtitle: &str,
-    theme: &RenderTheme,
-) -> String {
-    format!(
-        r#"<g filter="url(#shadow)"><rect x="{}" y="{}" width="{}" height="{}" rx="18" fill="{}" stroke="{}"/><rect x="{}" y="{}" width="2.5" height="34" rx="1.25" fill="{}"/><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="19" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text></g>"#,
-        x,
-        y,
-        width,
-        height,
-        theme.panel,
-        theme.border,
-        x + 20,
-        y + 22,
-        theme.accent,
-        x + 36,
-        y + 32,
-        theme.text,
-        escape_xml(title),
-        x + 36,
-        y + 50,
-        theme.muted,
-        escape_xml(subtitle)
-    )
-}
+fn stats_section(area: Rect, stats: &AggregatedStats, theme: &RenderTheme) -> String {
+    let radius = (area.width / 12).clamp(20, 38);
+    let ring_cx = area.right().saturating_sub(radius + 10);
+    let ring_cy = area.y + 34 + area.height.saturating_sub(34) / 2 - 10;
+    let value_x = ring_cx.saturating_sub(radius + 30);
+    let step = (area.height.saturating_sub(58) / 4).clamp(20, 30);
 
-fn stats_dashboard(
-    stats: &AggregatedStats,
-    x: u32,
-    y: u32,
-    width: u32,
-    theme: &RenderTheme,
-) -> String {
-    let list_width = width.saturating_sub(150);
-    [
-        stat_row(
-            x,
-            y,
-            list_width,
-            "Total Stars",
-            stats.total_stars,
-            theme.accent,
-            theme,
-        ),
-        stat_row(
-            x,
-            y + 28,
-            list_width,
-            "Commits",
-            stats.total_commits,
-            theme.success,
-            theme,
-        ),
-        stat_row(
-            x,
-            y + 56,
-            list_width,
+    let rows = [
+        ("Total Stars", stats.total_stars, IconKind::Star),
+        ("Commits", stats.total_commits, IconKind::Commit),
+        (
             "Pull Requests",
             stats.total_pull_requests,
-            "#fb8500",
-            theme,
+            IconKind::PullRequest,
         ),
-        stat_row(
-            x,
-            y + 84,
-            list_width,
-            "Issues",
-            stats.total_issues,
-            "#d63384",
-            theme,
-        ),
-        rank_ring(x + width - 118, y + 4, 96, stats.rank, stats.score, theme),
+        ("Issues", stats.total_issues, IconKind::Issue),
     ]
-    .join("")
+    .into_iter()
+    .enumerate()
+    .map(|(index, (label, value, icon_kind))| {
+        stat_row(
+            area.x,
+            area.y + 54 + index as u32 * step,
+            value_x,
+            label,
+            value,
+            icon_kind,
+            theme,
+        )
+    })
+    .collect::<String>();
+
+    format!(
+        "{}{}{}",
+        eyebrow(area.x, area.y + 16, "Stats", theme),
+        rows,
+        rank_ring(ring_cx, ring_cy, radius, stats, theme),
+    )
 }
 
-fn stat_row<T: ToString>(
+fn stat_row(
     x: u32,
     y: u32,
-    width: u32,
+    value_x: u32,
     label: &str,
-    value: T,
-    accent: &str,
+    value: u64,
+    icon_kind: IconKind,
     theme: &RenderTheme,
 ) -> String {
     format!(
-        r#"<g>{}<text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" text-anchor="end" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="500" fill="{}">{}</text></g>"#,
-        icon(stat_icon(label), x, y, 16, accent),
-        x + 22,
-        y + 13,
-        theme.text,
-        escape_xml(label),
-        x + width,
-        y + 13,
-        theme.text,
-        escape_xml(&value.to_string())
+        "{}{}{}",
+        icon(icon_kind, x, y - 11, 14, theme.muted),
+        text(x + 22, y, 12.5, theme.ink, label),
+        text_end(value_x, y, 12.5, theme.ink, &format_number(value)),
     )
 }
 
-fn rank_ring(x: u32, y: u32, size: u32, rank: &str, score: u64, theme: &RenderTheme) -> String {
-    let center = size / 2;
-    format!(
-        r#"<g><circle cx="{}" cy="{}" r="42" fill="{}" stroke="{}" stroke-width="2.5"/><circle cx="{}" cy="{}" r="42" fill="none" stroke="{}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="205 264" transform="rotate(-90 {} {})"/><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="{}">{}</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="600" fill="{}">RANK</text><text x="{}" y="{}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="{}">score {}</text></g>"#,
-        x + center,
-        y + center,
-        theme.panel,
-        theme.accent_soft,
-        x + center,
-        y + center,
-        rank_color(rank, theme),
-        x + center,
-        y + center,
-        x + center,
-        y + center + 8,
-        theme.text,
-        escape_xml(rank),
-        x + center,
-        y + center - 22,
-        theme.muted,
-        x + center,
-        y + center + 27,
-        theme.muted,
-        score
-    )
-}
-
-fn language_bars(
-    languages: &[LanguageShare],
-    x: u32,
-    y: u32,
-    width: u32,
+fn rank_ring(
+    cx: u32,
+    cy: u32,
+    radius: u32,
+    stats: &AggregatedStats,
     theme: &RenderTheme,
 ) -> String {
-    let bar_width = width.saturating_sub(150);
-    let rows = languages
+    let circumference = 2.0 * std::f64::consts::PI * f64::from(radius);
+    let closure = f64::from(10_000 - stats.percentile_basis_points.min(10_000)) / 10_000.0;
+    let letter_size = (radius * 4 / 5).max(16);
+
+    format!(
+        concat!(
+            r#"<circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{track}" stroke-width="3"/>"#,
+            r#"<circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{accent}" stroke-width="3" stroke-linecap="round" stroke-dasharray="{filled:.1} {circumference:.1}" transform="rotate(-90 {cx} {cy})"/>"#,
+            "{letter}{caption}",
+        ),
+        cx = cx,
+        cy = cy,
+        radius = radius,
+        track = theme.track,
+        accent = theme.accent,
+        filled = circumference * closure,
+        circumference = circumference,
+        letter = text_middle(
+            cx,
+            cy + letter_size / 3,
+            letter_size as f32,
+            600,
+            theme.ink,
+            stats.rank,
+        ),
+        caption = text_middle(
+            cx,
+            cy + radius + 18,
+            10.0,
+            400,
+            theme.muted,
+            &format!("RANK · {}", format_number(stats.score)),
+        ),
+    )
+}
+
+fn languages_section(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
+    let rows = if area.is_narrow() {
+        language_track_rows(area, languages, theme)
+    } else {
+        language_columns(area, languages, theme)
+    };
+
+    format!(
+        "{}{}{}",
+        eyebrow(area.x, area.y + 16, "Languages", theme),
+        stacked_language_bar(area.x, area.y + 32, area.width, languages, theme),
+        rows,
+    )
+}
+
+fn language_columns(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
+    let per_column = LANGUAGE_ROWS / 2;
+    let column = area.width.saturating_sub(GUTTER) / 2;
+
+    languages
         .iter()
-        .take(6)
+        .take(LANGUAGE_ROWS)
         .enumerate()
         .map(|(index, language)| {
-            let row_y = y + 24 + index as u32 * 17;
-            let percentage = language.percentage_basis_points as f32 / 100.0;
-            let filled = bar_width * language.percentage_basis_points / 10_000;
-            let color = language_color(&language.name, index);
+            let x = area.x + (index / per_column) as u32 * (column + GUTTER);
+            let y = area.y + 72 + (index % per_column) as u32 * 24;
             format!(
-                r#"{}{}{}{}{}"#,
-                icon(IconKind::Code, x, row_y, 12, color),
-                text(x + 18, row_y + 8, 11, theme.text, &language.name),
-                text(
-                    x + width - 58,
-                    row_y + 8,
-                    11,
-                    theme.muted,
-                    &format!("{percentage:.1}%")
-                ),
-                rounded_rect(
-                    x + 94,
-                    row_y + 2,
-                    bar_width,
-                    4,
-                    2,
-                    theme.accent_soft,
-                    "none"
-                ),
-                rounded_rect(x + 94, row_y + 2, filled, 4, 2, color, "none")
-            )
-        })
-        .collect::<String>();
-
-    stacked_language_bar(languages, x, y, width, theme) + &rows
-}
-
-fn stacked_language_bar(
-    languages: &[LanguageShare],
-    x: u32,
-    y: u32,
-    width: u32,
-    theme: &RenderTheme,
-) -> String {
-    let mut offset = 0;
-    let total_width = width.saturating_sub(4);
-    let mut segments = String::new();
-
-    for (index, language) in languages.iter().take(6).enumerate() {
-        let segment_width = if index == 5 {
-            total_width.saturating_sub(offset)
-        } else {
-            total_width * language.percentage_basis_points / 10_000
-        };
-        segments.push_str(&rounded_rect(
-            x + 2 + offset,
-            y,
-            segment_width,
-            6,
-            3,
-            language_color(&language.name, index),
-            "none",
-        ));
-        offset += segment_width;
-    }
-
-    rounded_rect(x, y, width, 6, 3, theme.accent_soft, "none") + &segments
-}
-
-fn streak_tiles(streak: &StreakSummary, x: u32, y: u32, width: u32, theme: &RenderTheme) -> String {
-    let compact = width < 640;
-    let hero_width = if compact { 160 } else { 260 };
-    let side_width = width.saturating_sub(hero_width + 32) / 2;
-    let center_x = x + side_width + 16;
-    [
-        side_streak_metric(SideStreakMetric {
-            x,
-            y: y + 12,
-            width: side_width,
-            label: "Total Contributions",
-            value: format_number(streak.total_contributions),
-            unit: "",
-            note: streak
-                .current_end
-                .as_deref()
-                .map(|date| {
-                    if compact {
-                        format_short_date(date)
-                    } else {
-                        format_single_date(date)
-                    }
-                })
-                .unwrap_or_default(),
-            accent: theme.accent,
-            compact,
-            theme,
-        }),
-        current_streak_hero(center_x, y, hero_width, streak, compact, theme),
-        side_streak_metric(SideStreakMetric {
-            x: center_x + hero_width + 16,
-            y: y + 12,
-            width: side_width,
-            label: "Longest Streak",
-            value: streak.longest.to_string(),
-            unit: "days",
-            note: if compact {
-                short_date_range(&streak.longest_start, &streak.longest_end)
-            } else {
-                date_range(&streak.longest_start, &streak.longest_end)
-            },
-            accent: theme.success,
-            compact,
-            theme,
-        }),
-    ]
-    .join("")
-}
-
-struct SideStreakMetric<'a> {
-    x: u32,
-    y: u32,
-    width: u32,
-    label: &'a str,
-    value: String,
-    unit: &'a str,
-    note: String,
-    accent: &'a str,
-    compact: bool,
-    theme: &'a RenderTheme,
-}
-
-fn side_streak_metric(metric: SideStreakMetric<'_>) -> String {
-    if metric.compact {
-        let (label_top, label_bottom) = metric.label.split_once(' ').unwrap_or((metric.label, ""));
-        let unit_x = metric.x + 20 + metric.value.len() as u32 * 12;
-        return format!(
-            r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="1.5" rx="0.75" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="9" fill="{}">{}</text></g>"#,
-            metric.x,
-            metric.y,
-            metric.width,
-            metric.theme.accent_soft,
-            metric.theme.border,
-            metric.x + 12,
-            metric.y + 17,
-            metric.theme.muted,
-            escape_xml(label_top),
-            metric.x + 12,
-            metric.y + 29,
-            metric.theme.muted,
-            escape_xml(label_bottom),
-            metric.x + 12,
-            metric.y + 55,
-            metric.theme.text,
-            escape_xml(&metric.value),
-            unit_x,
-            metric.y + 55,
-            metric.theme.muted,
-            escape_xml(metric.unit),
-            metric.x + 12,
-            metric.y + 63,
-            metric.width.saturating_sub(24),
-            metric.accent,
-            metric.x + 12,
-            metric.y + 76,
-            metric.theme.muted,
-            escape_xml(&metric.note)
-        );
-    }
-    format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="82" rx="16" fill="{}" stroke="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="12" fill="{}">{}</text><text x="{}" y="{}" font-family="'Helvetica Neue', Arial, sans-serif" font-size="32" font-weight="500" fill="{}">{}</text><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="11" fill="{}">{}</text><rect x="{}" y="{}" width="{}" height="1.5" rx="0.75" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="10" fill="{}">{}</text></g>"#,
-        metric.x,
-        metric.y,
-        metric.width,
-        metric.theme.accent_soft,
-        metric.theme.border,
-        metric.x + 18,
-        metric.y + 22,
-        metric.theme.muted,
-        escape_xml(metric.label),
-        metric.x + 18,
-        metric.y + 55,
-        metric.theme.text,
-        escape_xml(&metric.value),
-        metric.x + 76,
-        metric.y + 55,
-        metric.theme.muted,
-        escape_xml(metric.unit),
-        metric.x + 18,
-        metric.y + 62,
-        metric.width.saturating_sub(36),
-        metric.accent,
-        metric.x + 18,
-        metric.y + 76,
-        metric.theme.muted,
-        escape_xml(&metric.note)
-    )
-}
-
-fn current_streak_hero(
-    x: u32,
-    y: u32,
-    width: u32,
-    streak: &StreakSummary,
-    compact: bool,
-    theme: &RenderTheme,
-) -> String {
-    let center_x = x + width / 2;
-    let radius: u32 = if compact { 26 } else { 34 };
-    let ring_cy = y + 4 + radius;
-    let ring_top = ring_cy - radius;
-    let number_y = ring_cy + if compact { 8 } else { 10 };
-    let label_y = ring_cy + radius + if compact { 14 } else { 18 };
-    let date_y = label_y + if compact { 13 } else { 16 };
-    let number_size = if compact { 24 } else { 34 };
-    let label_size = if compact { 11 } else { 14 };
-    let date_size = if compact { 9 } else { 12 };
-    let flame_color = "#fb8c00";
-    let mask_id = "psm-streak-flame-cut";
-    let range = date_range(&streak.current_start, &streak.current_end);
-    format!(
-        r##"<g><defs><mask id="{mask_id}" maskUnits="userSpaceOnUse"><rect x="-1000" y="-1000" width="6000" height="6000" fill="white"/><ellipse cx="{center_x}" cy="{notch_y}" rx="10" ry="15" fill="black"/></mask></defs><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="{panel}" stroke="{accent_soft}" stroke-width="2" mask="url(#{mask_id})"/><circle cx="{center_x}" cy="{ring_cy}" r="{radius}" fill="none" stroke="{flame_color}" stroke-width="2" mask="url(#{mask_id})"/>{flame}<text x="{center_x}" y="{number_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{number_size}" font-weight="800" fill="{text_color}">{count}</text><text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{label_size}" font-weight="700" fill="{flame_color}">Current Streak</text><text x="{center_x}" y="{date_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="{date_size}" fill="{muted}">{range}</text></g>"##,
-        mask_id = mask_id,
-        center_x = center_x,
-        notch_y = ring_top.saturating_sub(6),
-        ring_cy = ring_cy,
-        radius = radius,
-        panel = theme.panel,
-        accent_soft = theme.accent_soft,
-        flame_color = flame_color,
-        flame = flame_icon(center_x, ring_top.saturating_sub(11), flame_color),
-        number_y = number_y,
-        number_size = number_size,
-        text_color = theme.text,
-        count = streak.current,
-        label_y = label_y,
-        label_size = label_size,
-        date_y = date_y,
-        date_size = date_size,
-        muted = theme.muted,
-        range = escape_xml(&range)
-    )
-}
-
-fn rank_color(rank: &str, theme: &RenderTheme) -> &'static str {
-    match rank {
-        "S+" | "S" => "#ff9800",
-        "A+" | "A" | "A-" => theme.accent,
-        "B+" | "B" | "B-" => theme.success,
-        _ => "#57606a",
-    }
-}
-
-fn wakatime_lines(summary: &CodingActivitySummary, x: u32, y: u32, theme: &RenderTheme) -> String {
-    summary
-        .entries
-        .iter()
-        .take(5)
-        .enumerate()
-        .map(|(index, entry)| {
-            text(
-                x,
-                y + index as u32 * 24,
-                14,
-                theme.muted,
-                &format!("{} {}", entry.language, format_duration(entry.seconds)),
+                "{}{}{}",
+                language_dot(x + 4, y - 4, 4.0, language, index),
+                text(x + 16, y, 12.0, theme.ink, &language.name),
+                text_end(x + column, y, 12.0, theme.muted, &share(language)),
             )
         })
         .collect()
 }
 
-fn badge(
+fn language_track_rows(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
+    let name_column = (area.width * 28 / 100).clamp(90, 150);
+    let track_x = area.x + name_column;
+    let track_width = area
+        .width
+        .saturating_sub(name_column + 52)
+        .max(TRACK_MINIMUM);
+    let step = (area.height.saturating_sub(56) / LANGUAGE_ROWS as u32).clamp(15, 20);
+
+    languages
+        .iter()
+        .take(LANGUAGE_ROWS)
+        .enumerate()
+        .map(|(index, language)| {
+            let y = area.y + 56 + index as u32 * step;
+            let filled = track_width * language.percentage_basis_points / 10_000;
+            format!(
+                "{}{}{}{}{}",
+                language_dot(area.x + 4, y - 4, 3.5, language, index),
+                text(area.x + 15, y, 11.5, theme.ink, &language.name),
+                rounded_rect(track_x, y - 7, track_width, 4, theme.track),
+                rounded_rect(
+                    track_x,
+                    y - 7,
+                    filled,
+                    4,
+                    language_color(&language.name, index)
+                ),
+                text_end(area.right(), y, 11.5, theme.muted, &share(language)),
+            )
+        })
+        .collect()
+}
+
+const TRACK_MINIMUM: u32 = 24;
+
+fn stacked_language_bar(
     x: u32,
     y: u32,
     width: u32,
-    height: u32,
-    value: &str,
-    fill: &str,
-    text_fill: &str,
+    languages: &[LanguageShare],
+    theme: &RenderTheme,
 ) -> String {
+    let mut offset = 0;
+    let mut segments = String::new();
+
+    for (index, language) in languages.iter().take(LANGUAGE_ROWS).enumerate() {
+        let is_last = index + 1 == languages.len().min(LANGUAGE_ROWS);
+        let segment = if is_last {
+            width.saturating_sub(offset)
+        } else {
+            width * language.percentage_basis_points / 10_000
+        };
+        segments.push_str(&format!(
+            r#"<rect x="{}" y="{}" width="{}" height="5" fill="{}"/>"#,
+            x + offset,
+            y,
+            segment,
+            language_color(&language.name, index),
+        ));
+        offset += segment;
+    }
+
     format!(
-        r#"<g><rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}"/><text x="{}" y="{}" font-family="Arial, sans-serif" font-size="15" font-weight="600" fill="{}">{}</text></g>"#,
+        concat!(
+            r#"<defs><clipPath id="gps-language-bar"><rect x="{x}" y="{y}" width="{width}" height="5" rx="2.5"/></clipPath></defs>"#,
+            r#"<rect x="{x}" y="{y}" width="{width}" height="5" rx="2.5" fill="{track}"/>"#,
+            r#"<g clip-path="url(#gps-language-bar)">{segments}</g>"#,
+        ),
+        x = x,
+        y = y,
+        width = width,
+        track = theme.track,
+        segments = segments,
+    )
+}
+
+fn streak_section(area: Rect, streak: &StreakSummary, theme: &RenderTheme) -> String {
+    let column = area.width / 3;
+    let compact = area.is_narrow();
+    let (label_y, value_y, note_y) = if compact {
+        (area.y + 44, area.y + 80, area.y + 104)
+    } else {
+        (area.y + 52, area.y + 92, area.y + 118)
+    };
+    let value_size = if compact { 26.0 } else { 34.0 };
+    let ring_radius = if compact { 26 } else { 32 };
+    let ring_cy = area.y + if compact { 62 } else { 70 };
+    let ring_cx = area.x + column + column / 2;
+
+    let total = side_metric(SideMetric {
+        x: area.x,
+        label_y,
+        value_y,
+        note_y,
+        value_size,
+        label: "Total Contributions",
+        value: format_number(streak.total_contributions),
+        unit: "",
+        note: streak
+            .current_end
+            .as_deref()
+            .map(|date| format!("through {}", format_single_date(date)))
+            .unwrap_or_default(),
+        theme,
+    });
+    let longest = side_metric(SideMetric {
+        x: area.x + column * 2,
+        label_y,
+        value_y,
+        note_y,
+        value_size,
+        label: "Longest Streak",
+        value: streak.longest.to_string(),
+        unit: "days",
+        note: date_range(&streak.longest_start, &streak.longest_end, compact),
+        theme,
+    });
+
+    format!(
+        "{}{}{}{}{}{}",
+        eyebrow(area.x, area.y + 12, "Streak", theme),
+        total,
+        vertical_rule(
+            area.x + column - 12,
+            area.y + 20,
+            area.y + area.height,
+            theme
+        ),
+        current_streak_ring(ring_cx, ring_cy, ring_radius, compact, streak, theme),
+        vertical_rule(
+            area.x + column * 2 - 12,
+            area.y + 20,
+            area.y + area.height,
+            theme
+        ),
+        longest,
+    )
+}
+
+struct SideMetric<'a> {
+    x: u32,
+    label_y: u32,
+    value_y: u32,
+    note_y: u32,
+    value_size: f32,
+    label: &'a str,
+    value: String,
+    unit: &'a str,
+    note: String,
+    theme: &'a RenderTheme,
+}
+
+fn side_metric(metric: SideMetric<'_>) -> String {
+    let label_size = if metric.value_size > 30.0 { 11.0 } else { 10.0 };
+    let unit = if metric.unit.is_empty() {
+        String::new()
+    } else {
+        let advance = metric.value.chars().count() as f32 * metric.value_size * 0.6;
+        text(
+            metric.x + advance as u32 + 6,
+            metric.value_y,
+            11.5,
+            metric.theme.muted,
+            metric.unit,
+        )
+    };
+
+    format!(
+        "{}{}{}{}",
+        text(
+            metric.x,
+            metric.label_y,
+            label_size,
+            metric.theme.muted,
+            metric.label
+        ),
+        text_weighted(
+            metric.x,
+            metric.value_y,
+            metric.value_size,
+            600,
+            metric.theme.ink,
+            &metric.value
+        ),
+        unit,
+        text(
+            metric.x,
+            metric.note_y,
+            label_size,
+            metric.theme.muted,
+            &metric.note
+        ),
+    )
+}
+
+fn current_streak_ring(
+    cx: u32,
+    cy: u32,
+    radius: u32,
+    compact: bool,
+    streak: &StreakSummary,
+    theme: &RenderTheme,
+) -> String {
+    let number_size = if compact { 22.0 } else { 26.0 };
+    format!(
+        "{}{}{}{}",
+        heat_ring(cx, cy, radius, compact, &streak.recent_daily_counts, theme),
+        text_middle(
+            cx,
+            cy + number_size as u32 / 3,
+            number_size,
+            600,
+            theme.ink,
+            &streak.current.to_string(),
+        ),
+        text_middle(
+            cx,
+            cy + radius + 26,
+            11.5,
+            400,
+            theme.muted,
+            "Current Streak"
+        ),
+        text_middle(
+            cx,
+            cy + radius + 43,
+            10.5,
+            400,
+            theme.muted,
+            &date_range(&streak.current_start, &streak.current_end, compact),
+        ),
+    )
+}
+
+fn heat_ring(
+    cx: u32,
+    cy: u32,
+    radius: u32,
+    compact: bool,
+    counts: &[u32],
+    theme: &RenderTheme,
+) -> String {
+    if counts.is_empty() {
+        return format!(
+            r#"<circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{track}" stroke-width="3"/>"#,
+            cx = cx,
+            cy = cy,
+            radius = radius,
+            track = theme.track,
+        );
+    }
+
+    let length = if compact { 8.0 } else { 10.0 };
+    let width = if compact { 3.0 } else { 3.6 };
+    let peak = counts.iter().copied().max().unwrap_or(0);
+    let step = 360.0 / counts.len() as f64;
+    let inner = f64::from(radius) - length / 2.0;
+    let outer = f64::from(radius) + length / 2.0;
+
+    counts
+        .iter()
+        .enumerate()
+        .map(|(index, count)| {
+            let angle = (-90.0 + index as f64 * step).to_radians();
+            let (sin, cos) = angle.sin_cos();
+            format!(
+                r#"<path d="M{x0:.2} {y0:.2}L{x1:.2} {y1:.2}" stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>"#,
+                x0 = f64::from(cx) + inner * cos,
+                y0 = f64::from(cy) + inner * sin,
+                x1 = f64::from(cx) + outer * cos,
+                y1 = f64::from(cy) + outer * sin,
+                color = heat_color(*count, peak, theme),
+                width = width,
+            )
+        })
+        .collect()
+}
+
+fn heat_color(count: u32, peak: u32, theme: &RenderTheme) -> &str {
+    if count == 0 {
+        return theme.track;
+    }
+    if peak <= 1 {
+        return HEAT_RAMP[HEAT_RAMP.len() - 1];
+    }
+    let position = f64::from(count - 1) / f64::from(peak - 1) * HEAT_RAMP.len() as f64;
+    HEAT_RAMP[(position as usize).min(HEAT_RAMP.len() - 1)]
+}
+
+fn wakatime_section(area: Rect, summary: &CodingActivitySummary, theme: &RenderTheme) -> String {
+    let step = (area.height.saturating_sub(52) / 5).clamp(18, 26);
+    let rows = summary
+        .entries
+        .iter()
+        .take(5)
+        .enumerate()
+        .map(|(index, entry)| {
+            let y = area.y + 52 + index as u32 * step;
+            format!(
+                "{}{}",
+                text(area.x, y, 12.5, theme.ink, &entry.language),
+                text_end(
+                    area.right(),
+                    y,
+                    12.5,
+                    theme.muted,
+                    &format_duration(entry.seconds)
+                ),
+            )
+        })
+        .collect::<String>();
+
+    format!(
+        "{}{}",
+        eyebrow(area.x, area.y + 16, "Coding Activity", theme),
+        rows
+    )
+}
+
+fn eyebrow(x: u32, y: u32, value: &str, theme: &RenderTheme) -> String {
+    format!(
+        r#"<text x="{}" y="{}" font-size="10.5" font-weight="600" fill="{}" letter-spacing="0.09em">{}</text>"#,
+        x,
+        y,
+        theme.muted,
+        escape_xml(&value.to_uppercase()),
+    )
+}
+
+fn text(x: u32, y: u32, size: f32, fill: &str, value: &str) -> String {
+    text_weighted(x, y, size, 400, fill, value)
+}
+
+fn text_weighted(x: u32, y: u32, size: f32, weight: u32, fill: &str, value: &str) -> String {
+    format!(
+        r#"<text x="{}" y="{}" font-size="{}" font-weight="{}" fill="{}">{}</text>"#,
+        x,
+        y,
+        size,
+        weight,
+        fill,
+        escape_xml(value),
+    )
+}
+
+fn text_end(x: u32, y: u32, size: f32, fill: &str, value: &str) -> String {
+    format!(
+        r#"<text x="{}" y="{}" font-size="{}" font-weight="600" fill="{}" text-anchor="end">{}</text>"#,
+        x,
+        y,
+        size,
+        fill,
+        escape_xml(value),
+    )
+}
+
+fn text_middle(x: u32, y: u32, size: f32, weight: u32, fill: &str, value: &str) -> String {
+    format!(
+        r#"<text x="{}" y="{}" font-size="{}" font-weight="{}" fill="{}" text-anchor="middle">{}</text>"#,
+        x,
+        y,
+        size,
+        weight,
+        fill,
+        escape_xml(value),
+    )
+}
+
+fn horizontal_rule(x1: u32, x2: u32, y: u32, theme: &RenderTheme) -> String {
+    format!(
+        r#"<path d="M{} {}.5H{}" stroke="{}" stroke-width="1"/>"#,
+        x1, y, x2, theme.line
+    )
+}
+
+fn vertical_rule(x: u32, y1: u32, y2: u32, theme: &RenderTheme) -> String {
+    format!(
+        r#"<path d="M{}.5 {}V{}" stroke="{}" stroke-width="1"/>"#,
+        x, y1, y2, theme.line
+    )
+}
+
+fn rounded_rect(x: u32, y: u32, width: u32, height: u32, fill: &str) -> String {
+    format!(
+        r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}"/>"#,
         x,
         y,
         width,
         height,
         height / 2,
         fill,
-        x + 18,
-        y + 23,
-        text_fill,
-        escape_xml(value)
+    )
+}
+
+fn language_dot(cx: u32, cy: u32, radius: f32, language: &LanguageShare, index: usize) -> String {
+    format!(
+        r#"<circle cx="{}" cy="{}" r="{}" fill="{}"/>"#,
+        cx,
+        cy,
+        radius,
+        language_color(&language.name, index),
+    )
+}
+
+fn badge(x: u32, y: u32, value: &str, theme: &RenderTheme) -> String {
+    let width = (value.chars().count() as u32 * 9).max(64) + 28;
+    format!(
+        r#"{}<text x="{}" y="{}" font-size="12.5" font-weight="600" fill="{}">{}</text>"#,
+        rounded_rect(x, y, width, 28, theme.accent),
+        x + 14,
+        y + 19,
+        theme.on_accent,
+        escape_xml(value),
+    )
+}
+
+fn share(language: &LanguageShare) -> String {
+    format!(
+        "{:.1}%",
+        f64::from(language.percentage_basis_points) / 100.0
     )
 }
 
@@ -686,74 +792,35 @@ enum IconKind {
     Commit,
     PullRequest,
     Issue,
-    Code,
-}
-
-fn stat_icon(label: &str) -> IconKind {
-    match label {
-        "Total Stars" => IconKind::Star,
-        "Commits" => IconKind::Commit,
-        "Pull Requests" => IconKind::PullRequest,
-        "Issues" => IconKind::Issue,
-        _ => IconKind::Code,
-    }
 }
 
 fn icon(kind: IconKind, x: u32, y: u32, size: u32, color: &str) -> String {
     format!(
-        r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 16 16" aria-hidden="true">{}</svg>"#,
+        r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 16 16" fill="none" stroke="{}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{}</svg>"#,
         x,
         y,
         size,
         size,
-        icon_markup(kind, color)
+        color,
+        icon_markup(kind, color),
     )
 }
 
 fn icon_markup(kind: IconKind, color: &str) -> String {
     match kind {
-        IconKind::Star => format!(
-            r#"<path d="M8 2.1l1.7 3.5 3.9.6-2.8 2.7.6 3.8L8 11.1l-3.4 1.6.6-3.8-2.8-2.7 3.9-.6z" fill="none" stroke="{color}" stroke-width="1.2" stroke-linejoin="round"/>"#
-        ),
-        IconKind::Commit => format!(
-            r#"<circle cx="8" cy="8" r="2.4" fill="none" stroke="{color}" stroke-width="1.3"/><path d="M1 8h4.4M10.6 8H15" fill="none" stroke="{color}" stroke-width="1.3" stroke-linecap="round"/>"#
-        ),
-        IconKind::PullRequest => format!(
-            r#"<circle cx="5" cy="3.9" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><circle cx="5" cy="12.1" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><circle cx="11" cy="3.9" r="1.7" fill="none" stroke="{color}" stroke-width="1.2"/><path d="M5 5.6v4.8M11 5.6v2.2c0 2-1.6 2.7-3.6 3" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>"#
-        ),
+        IconKind::Star => {
+            r#"<path d="M8 2.6l1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 11.37l-3.44 1.81.66-3.83-2.78-2.71 3.84-.56z"/>"#.to_owned()
+        }
+        IconKind::Commit => {
+            r#"<circle cx="8" cy="8" r="2.4"/><path d="M1.4 8h4.2M10.4 8h4.2"/>"#.to_owned()
+        }
+        IconKind::PullRequest => {
+            r#"<circle cx="4.9" cy="4" r="1.8"/><circle cx="4.9" cy="12" r="1.8"/><circle cx="11.1" cy="4" r="1.8"/><path d="M4.9 5.8v4.4M11.1 5.8v1.9c0 2.1-1.7 2.9-3.7 3.2"/>"#.to_owned()
+        }
         IconKind::Issue => format!(
-            r#"<circle cx="8" cy="8" r="6" fill="none" stroke="{color}" stroke-width="1.2"/><path d="M8 4.6v3.9" fill="none" stroke="{color}" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.2" r="0.9" fill="{color}"/>"#
-        ),
-        IconKind::Code => format!(
-            r#"<path d="M6 4.8 2.8 8l3.2 3.2M10 4.8 13.2 8 10 11.2" fill="none" stroke="{color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#
+            r#"<circle cx="8" cy="8" r="5.7"/><path d="M8 4.9v3.4"/><circle cx="8" cy="11.1" r="0.85" fill="{color}" stroke="none"/>"#
         ),
     }
-}
-
-fn rounded_rect(
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    radius: u32,
-    fill: &str,
-    stroke: &str,
-) -> String {
-    format!(
-        r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}" stroke="{}"/>"#,
-        x, y, width, height, radius, fill, stroke
-    )
-}
-
-fn text(x: u32, y: u32, size: u32, fill: &str, value: &str) -> String {
-    format!(
-        r#"<text x="{}" y="{}" font-family="Arial, sans-serif" font-size="{}" fill="{}">{}</text>"#,
-        x,
-        y,
-        size,
-        fill,
-        escape_xml(value)
-    )
 }
 
 fn format_number(value: u64) -> String {
@@ -768,40 +835,43 @@ fn format_number(value: u64) -> String {
     formatted.chars().rev().collect()
 }
 
-fn date_range(start: &Option<String>, end: &Option<String>) -> String {
+fn date_range(start: &Option<String>, end: &Option<String>, compact: bool) -> String {
+    let format = |value: &str| {
+        if compact {
+            format_short_date(value)
+        } else {
+            format_single_date(value)
+        }
+    };
+
     match (start.as_deref(), end.as_deref()) {
-        (Some(start), Some(end)) if start == end => format_single_date(start),
-        (Some(start), Some(end)) => format!(
-            "{} - {}",
-            format_single_date(start),
-            format_single_date(end)
-        ),
+        (Some(start), Some(end)) if start == end => format(start),
+        (Some(start), Some(end)) => format!("{} – {}", format(start), format(end)),
         _ => String::new(),
     }
 }
 
+const MONTH_NAMES: [&str; 13] = [
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 fn format_single_date(date: &str) -> String {
     let mut parts = date.split('-');
-    let Some(year) = parts.next() else {
-        return date.to_owned();
-    };
+    let year = parts.next().unwrap_or(date);
     let month = parts
         .next()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
     let day = parts.next().unwrap_or("");
-    let month_name = [
-        "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ]
-    .get(month)
-    .copied()
-    .unwrap_or("");
+    let Some(month_name) = MONTH_NAMES
+        .get(month)
+        .copied()
+        .filter(|name| !name.is_empty())
+    else {
+        return date.to_owned();
+    };
 
-    if month_name.is_empty() {
-        date.to_owned()
-    } else {
-        format!("{month_name} {} {}", day.trim_start_matches('0'), year)
-    }
+    format!("{month_name} {} {year}", day.trim_start_matches('0'))
 }
 
 fn format_short_date(date: &str) -> String {
@@ -812,25 +882,6 @@ fn format_short_date(date: &str) -> String {
     full.rsplit_once(' ')
         .map(|(head, _)| head.to_owned())
         .unwrap_or(full)
-}
-
-fn short_date_range(start: &Option<String>, end: &Option<String>) -> String {
-    match (start.as_deref(), end.as_deref()) {
-        (Some(start), Some(end)) if start == end => format_short_date(start),
-        (Some(start), Some(end)) => {
-            format!("{} - {}", format_short_date(start), format_short_date(end))
-        }
-        _ => String::new(),
-    }
-}
-
-fn flame_icon(cx: u32, base_y: u32, color: &str) -> String {
-    let cx = cx as i32;
-    let base_y = base_y as i32;
-    let flame = "M 1.4 -10.8 C 2 -8 2.6 -5.4 2.5 -3.4 C 2.4 -1.2 1 0.4 -0.9 0.4 C -2.8 0.4 -4.2 -1.2 -4.4 -3 C -6.4 -0.8 -8.2 2.8 -8.2 6.4 C -8.2 10.6 -4.4 13.2 0 13.2 C 4.4 13.2 8.2 10.6 8.2 6.4 C 8.2 1 5.6 -4.4 1.4 -10.8 Z M -0.3 10.4 C -2.1 10.4 -3.5 9 -3.5 7.3 C -3.5 5.7 -2.5 4.6 -0.8 4.2 C 1 3.8 2.7 2.9 3.7 1.6 C 4.1 2.8 4.3 4.1 4.3 5.4 C 4.3 8.2 2.3 10.4 -0.3 10.4 Z";
-    format!(
-        r##"<g transform="translate({cx},{base_y})"><path d="{flame}" fill="{color}" fill-rule="evenodd"/></g>"##
-    )
 }
 
 fn language_color(name: &str, fallback_index: usize) -> &'static str {

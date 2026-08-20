@@ -78,6 +78,7 @@ fn renderer_outputs_streak_wakatime_and_status_cards() {
         longest_start: Some("2026-04-01".to_owned()),
         longest_end: Some("2026-04-10".to_owned()),
         mode: StreakMode::Daily,
+        recent_daily_counts: vec![0, 1, 2, 3, 4],
     });
     let wakatime = CardData::Wakatime(aggregate_coding_activity(
         vec![
@@ -101,12 +102,207 @@ fn renderer_outputs_streak_wakatime_and_status_cards() {
     let status_svg = render_card(&status, &config);
 
     assert!(streak_svg.contains("Current Streak"));
-    assert!(streak_svg.contains("May 22 2026 - May 24 2026"));
+    assert!(streak_svg.contains("May 22 2026 – May 24 2026"));
     assert!(streak_svg.contains("1,234"));
-    assert!(wakatime_svg.contains("Coding Activity"));
-    assert!(wakatime_svg.contains("TypeScript 2 hrs 0 mins"));
+    assert!(wakatime_svg.contains("CODING ACTIVITY"));
+    assert!(wakatime_svg.contains(">TypeScript<"));
+    assert!(wakatime_svg.contains(">2 hrs 0 mins<"));
     assert!(status_svg.contains("Service health"));
     assert!(status_svg.contains(">ready<"));
+}
+
+#[test]
+fn rank_ring_closure_follows_ranking_percentile() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(480, 200)
+        .unwrap();
+    let top = CardData::Stats(sample_stats(100));
+    let bottom = CardData::Stats(sample_stats(9_000));
+
+    let top_svg = render_card(&top, &config);
+    let bottom_svg = render_card(&bottom, &config);
+
+    let closed = dash_array(&top_svg);
+    let open = dash_array(&bottom_svg);
+
+    assert!(
+        closed > open,
+        "a better percentile must close more of the ring: {closed} vs {open}"
+    );
+}
+
+#[test]
+fn streak_heat_ring_draws_one_tick_per_recent_day_along_the_fire_ramp() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(500, 220)
+        .unwrap();
+    let counts = vec![0, 1, 2, 3, 4, 5, 0, 2];
+
+    let svg = render_card(&sample_streak(counts.clone()), &config);
+
+    assert_eq!(svg.matches(r#"stroke-width="3.6""#).count(), counts.len());
+    assert!(svg.contains("#fb8c00"), "busiest day uses the hottest tone");
+    assert!(
+        svg.contains("#ffe3ad"),
+        "quietest active day uses the palest tone"
+    );
+    assert!(
+        svg.contains("#e4e8ee"),
+        "days without activity stay neutral"
+    );
+}
+
+#[test]
+fn streak_heat_ring_falls_back_to_a_plain_ring_without_recent_data() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(500, 220)
+        .unwrap();
+    let streak = CardData::Streak(StreakSummary {
+        current: 0,
+        longest: 0,
+        total_active_days: 0,
+        total_contributions: 0,
+        current_start: None,
+        current_end: None,
+        longest_start: None,
+        longest_end: None,
+        mode: StreakMode::Daily,
+        recent_daily_counts: Vec::new(),
+    });
+
+    let svg = render_card(&streak, &config);
+
+    assert!(!svg.contains(r#"stroke-width="3.6""#));
+    assert!(svg.contains(r##"stroke="#e4e8ee" stroke-width="3""##));
+}
+
+#[test]
+fn language_rows_switch_layout_with_available_width() {
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages);
+    let wide = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(900, 260)
+        .unwrap();
+    let narrow = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(420, 240)
+        .unwrap();
+
+    let wide_svg = render_card(&card, &wide);
+    let narrow_svg = render_card(&card, &narrow);
+
+    assert!(
+        !wide_svg.contains(r#"height="4""#),
+        "wide layout drops per-row tracks in favour of two columns"
+    );
+    assert!(
+        narrow_svg.contains(r#"height="4""#),
+        "narrow layout keeps per-row tracks"
+    );
+    assert!(narrow_svg.contains(r#"text-anchor="end""#));
+}
+
+#[test]
+fn narrow_streak_card_shrinks_ticks_and_drops_the_year_from_dates() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(420, 200)
+        .unwrap();
+    let svg = render_card(&sample_streak(vec![0, 2, 4]), &config);
+
+    assert!(svg.contains(r#"stroke-width="3""#));
+    assert!(!svg.contains(r#"stroke-width="3.6""#));
+    assert!(svg.contains("May 20 – May 24"));
+    assert!(!svg.contains("May 20 2026"));
+}
+
+#[test]
+fn flat_recent_window_paints_every_active_day_at_full_heat() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(500, 220)
+        .unwrap();
+    let svg = render_card(&sample_streak(vec![1, 1, 0, 1]), &config);
+
+    assert_eq!(svg.matches("#fb8c00").count(), 3);
+    assert!(!svg.contains("#ffe3ad"));
+}
+
+#[test]
+fn unparsable_dates_render_verbatim() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(420, 200)
+        .unwrap();
+    let mut streak = match sample_streak(vec![1]) {
+        CardData::Streak(streak) => streak,
+        _ => unreachable!(),
+    };
+    streak.current_start = Some("2026-13-40".to_owned());
+    streak.current_end = Some("whenever".to_owned());
+
+    let svg = render_card(&CardData::Streak(streak), &config);
+
+    assert!(svg.contains("2026-13-40 – whenever"));
+}
+
+#[test]
+fn status_badge_keeps_a_legible_foreground_on_every_theme() {
+    for (theme, expected) in [
+        ("default", "#ffffff"),
+        ("transparent", "#ffffff"),
+        ("dark", "#0d1117"),
+    ] {
+        let mut config = GithubStatsConfig::new("octo").unwrap();
+        config.theme = theme.to_owned();
+
+        let svg = render_card(&CardData::Status { state: "ready" }, &config);
+
+        assert!(
+            svg.contains(&format!(r#"fill="{expected}">ready<"#)),
+            "{theme} theme must paint the badge label with {expected}"
+        );
+    }
+}
+
+fn sample_streak(recent_daily_counts: Vec<u32>) -> CardData {
+    CardData::Streak(StreakSummary {
+        current: 5,
+        longest: 6,
+        total_active_days: 6,
+        total_contributions: 17,
+        current_start: Some("2026-05-20".to_owned()),
+        current_end: Some("2026-05-24".to_owned()),
+        longest_start: Some("2026-04-01".to_owned()),
+        longest_end: Some("2026-04-06".to_owned()),
+        mode: StreakMode::Daily,
+        recent_daily_counts,
+    })
+}
+
+fn sample_stats(percentile_basis_points: u32) -> AggregatedStats {
+    AggregatedStats {
+        total_stars: 10,
+        total_commits: 20,
+        total_pull_requests: 30,
+        total_issues: 40,
+        total_reviews: 50,
+        contributed_to: 60,
+        score: 700,
+        rank: "B",
+        percentile_basis_points,
+    }
+}
+
+fn dash_array(svg: &str) -> f64 {
+    let marker = r#"stroke-dasharray=""#;
+    let start = svg.find(marker).expect("ring dash array") + marker.len();
+    let rest = &svg[start..];
+    let end = rest.find(' ').expect("dash array length");
+    rest[..end].parse().expect("numeric dash array")
 }
 
 #[test]
@@ -120,6 +316,7 @@ fn renderer_supports_theme_variants_and_fallback_colors() {
         contributed_to: 6,
         score: 7,
         rank: "C",
+        percentile_basis_points: 9_500,
     };
     let languages = CardData::Languages(vec![
         LanguageShare {
@@ -142,7 +339,8 @@ fn renderer_supports_theme_variants_and_fallback_colors() {
     let transparent_svg = render_card(&languages, &transparent_config);
 
     assert!(dark_svg.contains("#0d1117"));
-    assert!(dark_svg.contains("#57606a"));
+    assert!(dark_svg.contains("#4493f8"));
+    assert!(dark_svg.contains("#8b949e"));
     assert!(transparent_svg.contains("transparent"));
     assert!(transparent_svg.contains("#6f42c1"));
     assert!(transparent_svg.contains("#0969da"));

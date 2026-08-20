@@ -15,12 +15,25 @@ Rendering changes require snapshot review. Snapshot updates must be intentional 
 ## Current Renderer Contract
 
 - `render_card` accepts `CardData` plus `GithubStatsConfig`.
-- Dashboard rendering computes all panel coordinates internally.
-- Default dashboard uses a two-panel top row and a full-width lower streak panel.
-- Small inline SVG icons use a fixed `16x16` viewBox, thin stroke-based drawings (stroke width 1.2–1.4, round caps/joins, no fill), and explicit coordinates so rows keep native SVG alignment without external CSS.
-- The current streak hero uses an SVG mask to cut a notch at the top of the ring so a flame icon can visually plug into the ring; the count sits centered inside the ring, with the streak label and date range stacked below.
-- Streak tiles switch to a compact layout when the available width is below 640: the hero ring shrinks to radius 26 with smaller typography, side tile labels wrap to two lines, and tile notes use short `Mon D` dates so nothing overflows the tile bounds.
-- The streak flame is a single rounded path with a curled tip and a bottom cutout applied through `fill-rule="evenodd"`, drawn in the streak accent orange and sized to overlap the ring top; the mask notch ellipse is wider and taller than the flame base so the ring stroke tapers cleanly behind it.
-- Ring strokes stay fine (streak ring 2, rank ring 2.5), language bars stay slim (stacked bar height 6, row bars height 4), the panel accent bar is 2.5 wide and tile underlines 1.5, and the panel drop shadow stays soft (`dy` 4, blur 10, opacity 0.08) so cards read crisp on both light and dark themes.
-- Prominent text (panel titles, stat labels and values, side streak numbers) uses `Helvetica Neue` medium (500) with Arial fallback because Arial only provides regular and bold; the streak hero keeps its heavier display weights.
+- Dashboard rendering computes all coordinates internally.
+- Default dashboard uses a two-section top row and a full-width lower streak section.
 - Text output for coding activity is deterministic and independent from SVG rendering.
+
+## Region Layout Rule
+
+Every section receives a `Rect` region and derives its own metrics from it, so the dashboard and the individual cards run the same code at any configured size. Sections must degrade on region width, never on card type. A region narrower than `NARROW_WIDTH` (440) switches to the single-column or compact variant: language rows gain per-row tracks, streak metrics shrink, and notes fall back to short `Mon D` dates. The threshold sits just under the dashboard's half-width column so the dashboard stays two-column while the small cards stack.
+
+## Visual System
+
+- Cards are flat: a single background fill, no panels, gradients, or drop shadows. Structure comes from half-pixel hairlines (`stroke-width` 1) on the theme `line` colour.
+- Section headers are a single uppercase, letter-spaced label. Do not reintroduce a title plus subtitle pair; it read as redundant.
+- `font-family` and `font-variant-numeric: tabular-nums` are declared once on the SVG root and inherited, so text elements only carry size, weight, and fill.
+- Inline icons use a fixed `16x16` viewBox and stroke-only drawings at a uniform stroke width of 1.5 with round caps and joins.
+- Themes expose `background`, `ink`, `muted`, `line`, `track`, `accent`, and `on_accent`. Content drawn on top of `accent` must use `on_accent`: the transparent theme's `background` is literally `transparent`, so reusing it silently erases foreground text.
+
+## Rings Carry Data
+
+Both rings encode a real measurement; neither is decoration.
+
+- The rank ring closes in proportion to the account's ranking percentile, so a top-1% account draws an almost complete circle. `rank_for_stats` returns that percentile in basis points alongside the label, since the label is only a coarse band of the same number.
+- The current streak ring is a closed 30-day heat ring: one radial tick per day of `StreakSummary::recent_daily_counts`, shaded along the fire ramp (pale yellow to deep orange) by that day's contribution volume, with zero-contribution days left on the neutral `track`. The ring has no gap and no flame; continuity and intensity come from the shading. When the recent window is empty the ring degrades to a plain track circle.

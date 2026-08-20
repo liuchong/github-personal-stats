@@ -135,3 +135,11 @@ Replaced the filled stat-row icons (star, commit, pull request, issue, code) wit
 ## [2026-07-21] renderer | compact streak tile layout for narrow cards
 
 Fixed side streak tiles overflowing their bounds on narrow streak cards (text spilling past tile edges and card bounds at widths below ~640). Added a compact layout: smaller hero ring and typography, two-line side tile labels, inline unit placement based on value width, and short `Mon D` tile notes. Caught during example image review after the visual refresh; example SVGs must be eyeballed before tagging releases.
+
+## [2026-08-21] renderer | flat hairline visual system with data-driven rings
+
+Replaced the panel, gradient, and drop-shadow chrome with a flat hairline system after feedback that the cards read as heavy and dated. Sections now draw into a `Rect` region so the dashboard and every individual card share one layout path and degrade by region width instead of by card type. Cards sit on a flat background separated by half-pixel hairlines, headers collapse to a single letter-spaced section label, typography moves to the system font stack with tabular numerals declared once on the SVG root, and the accent settles on GitHub blue.
+
+Both rings now carry data instead of decoration. The rank ring closes in proportion to the account's ranking percentile, which required `rank_for_stats` to return the percentile it already computed alongside the label. The current streak ring became a closed 30-day heat ring: one radial tick per day, shaded from pale yellow to deep orange by that day's contribution volume, with quiet days left on the neutral track. This required a trailing `recent_daily_counts` window on `StreakSummary`. The flame was removed; continuity and intensity now come from the data itself.
+
+Added an explicit `on_accent` theme token after the transparent theme exposed that the status badge painted its label with `background`, which is literally `transparent` there and made the label invisible. Regenerated both snapshots and all four example SVGs, and reviewed light, dark, and transparent dashboards plus the narrow streak card as rasterized previews. Workspace line coverage sits at 84.80% against the 85% gate; the shortfall predates this work and lives in `core/src/client.rs` and the untested `server/src/main.rs` socket loop.

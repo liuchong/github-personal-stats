@@ -1,7 +1,7 @@
 use github_personal_stats_core::{
     CodingActivityEntry, ContributionDay, GithubClient, GithubStatsConfig, MockGithubClient,
-    OutputKind, RepositoryLanguage, StreakMode, aggregate_card_data, aggregate_coding_activity,
-    aggregate_languages, aggregate_stats, calculate_streak,
+    OutputKind, RECENT_WINDOW_DAYS, RepositoryLanguage, StreakMode, aggregate_card_data,
+    aggregate_coding_activity, aggregate_languages, aggregate_stats, calculate_streak,
 };
 
 const FIXTURE: &str = include_str!("fixtures/github_user_data.json");
@@ -39,6 +39,57 @@ fn stats_rank_follows_weighted_percentile_model() {
 
     assert_eq!(stats.score, 7_362);
     assert_eq!(stats.rank, "B+");
+}
+
+#[test]
+fn stats_aggregation_exposes_the_percentile_behind_the_rank_label() {
+    let data = fixture_data();
+    let stats = aggregate_stats(&data);
+
+    assert_eq!(stats.rank, "B+");
+    assert!(
+        (3_750..=5_000).contains(&stats.percentile_basis_points),
+        "a B+ label must come from the 37.5%-50% band, got {}",
+        stats.percentile_basis_points
+    );
+}
+
+#[test]
+fn recent_window_covers_a_fixed_span_ending_on_the_last_known_day() {
+    let days = vec![
+        ContributionDay {
+            date: "2026-01-01".to_owned(),
+            count: 9,
+        },
+        ContributionDay {
+            date: "2026-05-01".to_owned(),
+            count: 4,
+        },
+        ContributionDay {
+            date: "2026-05-03".to_owned(),
+            count: 2,
+        },
+    ];
+
+    let streak = calculate_streak(&days, StreakMode::Daily, &[]);
+    let window = streak.recent_daily_counts;
+
+    assert_eq!(window.len(), RECENT_WINDOW_DAYS);
+    assert_eq!(window.last().copied(), Some(2));
+    assert_eq!(window[RECENT_WINDOW_DAYS - 2], 0);
+    assert_eq!(window[RECENT_WINDOW_DAYS - 3], 4);
+    assert_eq!(
+        window.iter().sum::<u32>(),
+        6,
+        "days older than the window are dropped"
+    );
+}
+
+#[test]
+fn recent_window_is_empty_without_contributions() {
+    let streak = calculate_streak(&[], StreakMode::Daily, &[]);
+
+    assert!(streak.recent_daily_counts.is_empty());
 }
 
 #[test]

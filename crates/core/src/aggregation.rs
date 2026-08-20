@@ -2,6 +2,8 @@ use crate::{ContributionDay, GithubData, OutputKind, RepositoryLanguage};
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub const RECENT_WINDOW_DAYS: usize = 30;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregatedStats {
     pub total_stars: u64,
@@ -12,6 +14,7 @@ pub struct AggregatedStats {
     pub contributed_to: u64,
     pub score: u64,
     pub rank: &'static str,
+    pub percentile_basis_points: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +41,7 @@ pub struct StreakSummary {
     pub longest_start: Option<String>,
     pub longest_end: Option<String>,
     pub mode: StreakMode,
+    pub recent_daily_counts: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,7 +103,7 @@ pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
         .saturating_add(stats.issues.saturating_mul(3))
         .saturating_add(stats.reviews.saturating_mul(2))
         .saturating_add(stats.contributed_to.saturating_mul(2));
-    let rank = rank_for_stats(data);
+    let (rank, percentile_basis_points) = rank_for_stats(data);
 
     AggregatedStats {
         total_stars: stats.stars,
@@ -110,6 +114,7 @@ pub fn aggregate_stats(data: &GithubData) -> AggregatedStats {
         contributed_to: stats.contributed_to,
         score,
         rank,
+        percentile_basis_points,
     }
 }
 
@@ -167,7 +172,24 @@ pub fn calculate_streak(
         longest_start: longest.start.map(date_from_ordinal),
         longest_end: longest.end.map(date_from_ordinal),
         mode,
+        recent_daily_counts: recent_daily_counts(&days, RECENT_WINDOW_DAYS),
     }
+}
+
+fn recent_daily_counts(days: &[(i32, u32)], window: usize) -> Vec<u32> {
+    let Some((last_ordinal, _)) = days.last() else {
+        return Vec::new();
+    };
+    let first_ordinal = last_ordinal - (window as i32 - 1);
+    let mut counts = vec![0; window];
+
+    for (ordinal, count) in days {
+        if *ordinal >= first_ordinal {
+            counts[(ordinal - first_ordinal) as usize] = *count;
+        }
+    }
+
+    counts
 }
 
 pub fn aggregate_coding_activity(
@@ -212,7 +234,7 @@ pub fn aggregate_coding_activity(
     }
 }
 
-fn rank_for_stats(data: &GithubData) -> &'static str {
+fn rank_for_stats(data: &GithubData) -> (&'static str, u32) {
     let stats = &data.stats;
     let commits_median = 250.0;
     let total_weight = 12.0;
@@ -224,9 +246,10 @@ fn rank_for_stats(data: &GithubData) -> &'static str {
             + 4.0 * log_normal_cdf(stats.stars as f64 / 50.0)
             + log_normal_cdf(data.profile.followers as f64 / 10.0))
             / total_weight;
-    let percentile = rank * 100.0;
+    let percentile = (rank * 100.0).clamp(0.0, 100.0);
+    let basis_points = (percentile * 100.0).round() as u32;
 
-    if percentile <= 1.0 {
+    let label = if percentile <= 1.0 {
         "S"
     } else if percentile <= 12.5 {
         "A+"
@@ -244,7 +267,9 @@ fn rank_for_stats(data: &GithubData) -> &'static str {
         "C+"
     } else {
         "C"
-    }
+    };
+
+    (label, basis_points)
 }
 
 fn exponential_cdf(value: f64) -> f64 {
