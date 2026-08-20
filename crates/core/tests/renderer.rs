@@ -206,6 +206,35 @@ fn language_rows_switch_layout_with_available_width() {
 }
 
 #[test]
+fn stacked_language_bar_sizes_every_segment_by_its_own_share() {
+    let shares = (0..6)
+        .map(|index| LanguageShare {
+            name: format!("Lang{index}"),
+            size: 100,
+            percentage_basis_points: 1_000,
+        })
+        .collect::<Vec<_>>();
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(1000, 420)
+        .unwrap();
+
+    let svg = render_card(&CardData::Languages(shares), &config);
+    let widths = stacked_bar_widths(&svg);
+
+    assert_eq!(widths.len(), 6);
+    assert!(
+        widths.iter().all(|width| (94..=95).contains(width)),
+        "each segment must be its own 10% of the 944 wide bar, got {widths:?}"
+    );
+    assert_eq!(
+        widths.iter().sum::<u32>(),
+        566,
+        "the 40% held by unlisted languages must stay on the track"
+    );
+}
+
+#[test]
 fn narrow_streak_card_shrinks_ticks_and_drops_the_year_from_dates() {
     let config = GithubStatsConfig::new("octo")
         .unwrap()
@@ -266,6 +295,22 @@ fn status_badge_keeps_a_legible_foreground_on_every_theme() {
             "{theme} theme must paint the badge label with {expected}"
         );
     }
+}
+
+fn stacked_bar_widths(svg: &str) -> Vec<u32> {
+    let marker = r#"<g clip-path="url(#gps-language-bar)">"#;
+    let start = svg.find(marker).expect("stacked bar group") + marker.len();
+    let group = &svg[start..start + svg[start..].find("</g>").expect("group end")];
+
+    group
+        .split(r#"width=""#)
+        .skip(1)
+        .map(|part| {
+            part[..part.find('"').expect("width value")]
+                .parse()
+                .expect("numeric width")
+        })
+        .collect()
 }
 
 fn sample_streak(recent_daily_counts: Vec<u32>) -> CardData {

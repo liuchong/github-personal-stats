@@ -406,24 +406,21 @@ fn stacked_language_bar(
     languages: &[LanguageShare],
     theme: &RenderTheme,
 ) -> String {
-    let mut offset = 0;
+    let mut consumed_basis_points = 0;
+    let mut previous_edge = 0;
     let mut segments = String::new();
 
     for (index, language) in languages.iter().take(LANGUAGE_ROWS).enumerate() {
-        let is_last = index + 1 == languages.len().min(LANGUAGE_ROWS);
-        let segment = if is_last {
-            width.saturating_sub(offset)
-        } else {
-            width * language.percentage_basis_points / 10_000
-        };
+        consumed_basis_points += language.percentage_basis_points;
+        let edge = width * consumed_basis_points.min(10_000) / 10_000;
         segments.push_str(&format!(
             r#"<rect x="{}" y="{}" width="{}" height="5" fill="{}"/>"#,
-            x + offset,
+            x + previous_edge,
             y,
-            segment,
+            edge.saturating_sub(previous_edge),
             language_color(&language.name, index),
         ));
-        offset += segment;
+        previous_edge = edge;
     }
 
     format!(
