@@ -9,8 +9,8 @@ pub mod workspace;
 
 pub use aggregation::{
     AggregatedStats, CardData, CodingActivityEntry, CodingActivitySummary, LanguageShare,
-    StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity, aggregate_languages,
-    aggregate_stats, calculate_streak,
+    RECENT_WINDOW_DAYS, StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity,
+    aggregate_languages, aggregate_stats, calculate_streak,
 };
 pub use client::{GithubClient, GithubGraphqlClient, GithubGraphqlRequest, MockGithubClient};
 pub use config::{CardSelection, GithubStatsConfig, ImageSize, LanguageScope};

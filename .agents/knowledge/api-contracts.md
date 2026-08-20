@@ -24,3 +24,9 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - `--authored-languages` keeps language aggregation API-only and restricts language share to owned non-fork repositories that match contribution data, username commit author data, or configured `--author-email` supplements from the REST commits API. `--author-email` accepts comma-separated values and can be repeated. It is repository-level filtering, not per-line authorship analysis.
 - `--hide-language` removes named languages before aggregation. It accepts comma-separated values and can be repeated.
 - `--min-repo-language-share` filters languages below the configured per-repository percentage before language aggregation, using GraphQL `languages.totalSize`.
+
+## Aggregated Field Conventions
+
+- `AggregatedStats::rank` and `AggregatedStats::percentile_basis_points` come from the same weighted percentile model. The basis-point value is the position in the ranking distribution where lower is better, so `100` means the top 1% of accounts and the letter label is only a coarse band of that number. Renderers that show progress must therefore invert it.
+- `StreakSummary::recent_daily_counts` is a trailing window of `RECENT_WINDOW_DAYS` daily contribution volumes, oldest first, ending on the most recent day present in the calendar rather than on today. Days missing from the calendar are zero-filled so the window always has a fixed length, days older than the window are dropped, and the vector is empty only when there is no contribution data at all.
+- Percentage-style fields use basis points rather than floats so aggregation stays exactly comparable and snapshot output stays deterministic.

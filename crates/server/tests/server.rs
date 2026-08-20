@@ -16,7 +16,7 @@ fn api_endpoint_returns_dashboard_svg_with_fixed_size() {
     assert_eq!(response.content_type, "image/svg+xml; charset=utf-8");
     assert!(response.body.contains(r#"width="640""#));
     assert!(response.body.contains(r#"height="320""#));
-    assert!(response.body.contains("Streak"));
+    assert!(response.body.contains("STREAK"));
 }
 
 #[test]
@@ -24,8 +24,8 @@ fn api_card_route_returns_stats_svg() {
     let response = handle_request("/api/stats?username=octo");
 
     assert_eq!(response.status, 200);
-    assert!(response.body.contains("Stats"));
-    assert!(!response.body.contains("Languages"));
+    assert!(response.body.contains("STATS"));
+    assert!(!response.body.contains("LANGUAGES"));
 }
 
 #[test]
