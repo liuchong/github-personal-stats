@@ -32,3 +32,6 @@ As parameters are added, record their canonical name, aliases, default, accepted
 | `--heat-scale` | `linear` | `linear`, `sqrt`, `log`, `quantile` | Maps a day's contribution count onto the four ramp stops |
 | `--heat-color` | `heat-orange` | `heat-orange`, `github-blue`, `forest`, `violet`, `crimson`, `graphite`, one hex value, or four hex values | Ring ramp; a name or single value resolves against the theme, four values are verbatim on every theme |
 | `--heat-label` | `{Y}`, or `{X}/last {Y}` for a fixed window | free text over `{X}`, `{Y}`, `{Z}` | Ring centre text; longer templates render smaller |
+| `--stat-rows` | `stars,commits,prs,issues` | ordered list of `stars`, `commits`, `prs`, `issues`, `reviews`, `repos`; `pull-requests` and `contributed` are accepted aliases | Which rows the stats panel lists, in the order given; an empty list, an unknown name, or a repeat is an error |
+| `--language-rows` | `6` | `1` to `8`, the ceiling aggregation keeps | How many languages the panel lists; the stacked bar covers exactly those, leaving the rest as visible track |
+| `--streak-sides` | `total,longest` | exactly two of `total`, `longest`, `current`, `active` | Which figure each panel beside the ring reports, left then right; fewer, more, or a repeat is an error |

@@ -138,7 +138,127 @@ impl Default for HeatRing {
     }
 }
 
+/// A row the stats panel can list. `AggregatedStats` carries all six, and every
+/// one of them already feeds the rank score, so any of them can be shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatMetric {
+    Stars,
+    Commits,
+    PullRequests,
+    Issues,
+    Reviews,
+    ContributedTo,
+}
+
+impl StatMetric {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "stars" => Ok(Self::Stars),
+            "commits" => Ok(Self::Commits),
+            "prs" | "pull-requests" => Ok(Self::PullRequests),
+            "issues" => Ok(Self::Issues),
+            "reviews" => Ok(Self::Reviews),
+            "repos" | "contributed" => Ok(Self::ContributedTo),
+            other => Err(GithubStatsError::InvalidConfig {
+                field: "stat_rows",
+                message: format!(
+                    "unknown metric {other}; expected stars, commits, prs, issues, reviews, or repos"
+                ),
+            }),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Stars => "stars",
+            Self::Commits => "commits",
+            Self::PullRequests => "prs",
+            Self::Issues => "issues",
+            Self::Reviews => "reviews",
+            Self::ContributedTo => "repos",
+        }
+    }
+}
+
+/// A figure one of the streak panels can report beside the ring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreakMetric {
+    TotalContributions,
+    LongestStreak,
+    CurrentStreak,
+    ActiveDays,
+}
+
+impl StreakMetric {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "total" => Ok(Self::TotalContributions),
+            "longest" => Ok(Self::LongestStreak),
+            "current" => Ok(Self::CurrentStreak),
+            "active" => Ok(Self::ActiveDays),
+            other => Err(GithubStatsError::InvalidConfig {
+                field: "streak_sides",
+                message: format!(
+                    "unknown metric {other}; expected total, longest, current, or active"
+                ),
+            }),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::TotalContributions => "total",
+            Self::LongestStreak => "longest",
+            Self::CurrentStreak => "current",
+            Self::ActiveDays => "active",
+        }
+    }
+}
+
+/// Both metric lists are ordered and must not repeat a metric: a panel showing
+/// the same figure twice is a typo, not a layout choice, so it is refused rather
+/// than silently collapsed.
+fn parse_metrics<T: Copy + PartialEq>(
+    field: &'static str,
+    value: &str,
+    parse_one: fn(&str) -> Result<T, GithubStatsError>,
+    name: fn(T) -> &'static str,
+) -> Result<Vec<T>, GithubStatsError> {
+    let mut metrics = Vec::new();
+
+    for part in value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        let metric = parse_one(part)?;
+        if metrics.contains(&metric) {
+            return Err(GithubStatsError::InvalidConfig {
+                field,
+                message: format!("{} is listed twice", name(metric)),
+            });
+        }
+        metrics.push(metric);
+    }
+
+    if metrics.is_empty() {
+        return Err(GithubStatsError::InvalidConfig {
+            field,
+            message: "expected a comma separated list of metrics".to_owned(),
+        });
+    }
+
+    Ok(metrics)
+}
+
+pub const DEFAULT_LANGUAGE_ROWS: usize = 6;
+
+/// Aggregation keeps the top eight languages, so the panel cannot promise more
+/// than that, and a taller list would not fit the dashboard column anyway.
+pub const MAX_LANGUAGE_ROWS: usize = 8;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct GithubStatsConfig {
     pub username: String,
     pub token_env: String,
@@ -150,6 +270,9 @@ pub struct GithubStatsConfig {
     pub hidden_languages: Vec<String>,
     pub min_repo_language_share_basis_points: u32,
     pub heat_ring: HeatRing,
+    pub stat_rows: Vec<StatMetric>,
+    pub language_rows: usize,
+    pub streak_sides: [StreakMetric; 2],
 }
 
 impl GithubStatsConfig {
@@ -178,7 +301,58 @@ impl GithubStatsConfig {
             hidden_languages: Vec::new(),
             min_repo_language_share_basis_points: 0,
             heat_ring: HeatRing::default(),
+            stat_rows: vec![
+                StatMetric::Stars,
+                StatMetric::Commits,
+                StatMetric::PullRequests,
+                StatMetric::Issues,
+            ],
+            language_rows: DEFAULT_LANGUAGE_ROWS,
+            streak_sides: [
+                StreakMetric::TotalContributions,
+                StreakMetric::LongestStreak,
+            ],
         })
+    }
+
+    pub fn with_stat_rows(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.stat_rows = parse_metrics("stat_rows", value, StatMetric::parse, StatMetric::name)?;
+        Ok(self)
+    }
+
+    pub fn with_language_rows(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let invalid = || GithubStatsError::InvalidConfig {
+            field: "language_rows",
+            message: format!("expected a row count from 1 to {MAX_LANGUAGE_ROWS}, got {value}"),
+        };
+        let rows = value.trim().parse::<usize>().map_err(|_| invalid())?;
+        if rows == 0 || rows > MAX_LANGUAGE_ROWS {
+            return Err(invalid());
+        }
+
+        self.language_rows = rows;
+        Ok(self)
+    }
+
+    pub fn with_streak_sides(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let sides = parse_metrics(
+            "streak_sides",
+            value,
+            StreakMetric::parse,
+            StreakMetric::name,
+        )?;
+        let [left, right] = sides.as_slice() else {
+            return Err(GithubStatsError::InvalidConfig {
+                field: "streak_sides",
+                message: format!(
+                    "expected two metrics for the left and right panel, got {}",
+                    sides.len()
+                ),
+            });
+        };
+
+        self.streak_sides = [*left, *right];
+        Ok(self)
     }
 
     pub fn with_cards(mut self, value: &str) -> Result<Self, GithubStatsError> {

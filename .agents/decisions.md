@@ -55,3 +55,17 @@ Decision: Make the ramp opaque — a struct wrapping a private enum — so `pars
 Consequences: The panic is unreachable by construction rather than by convention, and the private enum leaves the representation free to change without a major version. Callers lose the ability to match on a ramp's kind, which nothing needed. A wider point holds for the rest of the surface as the crate goes out: an unreachable panic guarded only by which constructors happen to exist is a panic waiting for a consumer.
 
 Review Date: 2026-11-21
+
+## AD-0005: Panel Content Is A Named Metric List, And The Config Struct Stops Being Literal-Constructible
+
+Date: 2026-08-21
+
+Status: Accepted
+
+Context: Six stats figures were aggregated and four were drawn; the streak summary carried an active-day count and a current-streak range that no card could ever show; the language panel hardcoded six rows. Every one of those figures was already computed, so the gap was presentation, not data. The obvious route — one flag per figure, `--show-reviews` and friends — grows a flag per metric and cannot express order. The alternative is a list of metric names, which gives order for free and refuses a contradiction outright. Either way the settings have to live on `GithubStatsConfig`, and that struct now ships on crates.io with public fields, so adding a field breaks literal construction.
+
+Decision: Model panel content as ordered lists of named metrics, `--stat-rows` and `--streak-sides`, plus a plain count for `--language-rows`, all parsed and validated in core so every front end refuses the same mistakes. Reject an empty list, an unknown name, and a repeated metric rather than silently collapsing them. Take the breaking change now: mark `GithubStatsConfig` `#[non_exhaustive]` so the builders become the only way in and every later option is a plain minor release.
+
+Consequences: Default output is unchanged byte for byte, which the committed examples verify. The workspace's own HTTP server had to move off its struct literal onto the builders, which is the change every downstream caller would face and the reason to make it while the only reverse dependency is ours. Layout now derives from the configured count instead of a constant, so the column split had to key on what was asked for rather than what data happened to arrive, or a profile with fewer languages than rows would have silently relaid out. Panel labels stay in the renderer, so a metric name is a stable identifier and the copy beside it can change without breaking a command line.
+
+Review Date: 2026-11-21

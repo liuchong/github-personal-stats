@@ -164,6 +164,59 @@ A heat ramp encodes intensity as distance from the background, so the same stops
 
 Four explicit stops are always taken exactly as given, on every theme, which is how the third example above is produced. If you spell out stops and also want dark support, spell out a second set for the dark card.
 
+## Panel Content
+
+Each panel decides what it reports. The defaults are what the card has always shown, so none of this needs configuring.
+
+### Stats rows
+
+Six figures are collected, and all six already feed the rank score. Four are listed by default; `--stat-rows` chooses which ones appear and in what order.
+
+| Name | Row |
+| --- | --- |
+| `stars` | Total Stars |
+| `commits` | Commits |
+| `prs` | Pull Requests |
+| `issues` | Issues |
+| `reviews` | Reviews |
+| `repos` | Contributed To |
+
+| default | `--stat-rows stars,commits,prs,issues,reviews,repos` | `--stat-rows reviews,repos` |
+| --- | --- | --- |
+| <img src="images/panels/stats-default.svg" alt="The four default stats rows" width="230" /> | <img src="images/panels/stats-all-six.svg" alt="All six stats rows" width="230" /> | <img src="images/panels/stats-two.svg" alt="Two stats rows" width="230" /> |
+| Stars, commits, pull requests, issues | Reviews and repositories contributed to as well | A short list spreads out |
+
+Rows share the height the panel has, so a longer list sits closer together, down to a floor that keeps two rows from touching. A list must name at least one row and cannot name the same row twice.
+
+### Language rows
+
+`--language-rows` sets how many languages the panel lists, from 1 to 8, defaulting to 6. The dashboard splits them across two columns.
+
+| default | `--language-rows 3` |
+| --- | --- |
+| <img src="images/panels/languages-default.svg" alt="Six languages" width="360" /> | <img src="images/panels/languages-three.svg" alt="Three languages" width="360" /> |
+
+The bar above the list covers the languages the list shows, so when a profile has more languages than the panel lists, the remainder stays as visible track rather than being folded into the last segment.
+
+### Streak panels
+
+The panels either side of the ring each report one figure with the dates that figure covers. `--streak-sides` names the left and right one.
+
+| Name | Panel |
+| --- | --- |
+| `total` | Total contributions, all years |
+| `longest` | Longest streak, with its range |
+| `current` | Current streak, with its range |
+| `active` | Days with at least one contribution |
+
+| default | `--heat-window 30 --streak-sides active,current` |
+| --- | --- |
+| <img src="images/panels/streak-default.svg" alt="Total contributions and longest streak" width="470" /> | <img src="images/panels/streak-active-current.svg" alt="Active days and current streak" width="470" /> |
+
+`current` is worth putting in a panel when the ring is not already reporting it, which is the case for a fixed window: the ring then covers the last N days while the panel keeps the streak itself. On the default streak window the ring centre is already the current streak, so a `current` panel repeats it.
+
+A panel cannot be left empty and the two panels cannot report the same figure. Regenerate the images in this section with `python3 scripts/render-panel-samples.py` after building the CLI.
+
 ## Heat Ring
 
 The dashboard and streak cards draw the current streak as a ring, where each node is one day and its depth is that day's contribution count. The ring covers exactly the days the number in its centre reports, so the two never disagree.

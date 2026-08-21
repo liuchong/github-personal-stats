@@ -1,5 +1,6 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, GithubData, GithubGraphqlClient, GithubStatsConfig, MockGithubClient,
+    CodingActivityEntry, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData,
+    GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MockGithubClient,
     aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
     render_readme_section, workspace_info,
 };
@@ -13,6 +14,8 @@ const DEFAULT_HEIGHT: u32 = 420;
 const DEFAULT_THEME: &str = "light";
 const DEFAULT_TARGET: &str = "README.md";
 const DEFAULT_SECTION: &str = "activity";
+const DEFAULT_STAT_ROWS: &str = "stars,commits,prs,issues";
+const DEFAULT_STREAK_SIDES: &str = "total,longest";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
@@ -68,13 +71,21 @@ Generate options:
   --min-repo-language-share <percent>
                           Ignore a language below this share of one repository
 
+Panel content options:
+  --stat-rows <list>      Ordered stats rows from stars, commits, prs, issues,
+                          reviews, repos (default: {DEFAULT_STAT_ROWS})
+  --language-rows <count> Languages to list, 1 to {MAX_LANGUAGE_ROWS} (default: {DEFAULT_LANGUAGE_ROWS})
+  --streak-sides <left,right>
+                          Figures beside the ring from total, longest, current,
+                          active (default: {DEFAULT_STREAK_SIDES})
+
 Heat ring options:
   --heat-window <streak|days>
                           Days the ring covers (default: streak)
   --heat-limit <days|none>
                           Cap the ring without shortening the streak (default: none)
   --heat-shape <shape>    segmented, ticks, arcs, bands (default: segmented)
-  --heat-threshold <days> Where segmented turns ticks into arcs (default: 100)
+  --heat-threshold <days> Where ticks become arcs (default: {DEFAULT_HEAT_THRESHOLD})
   --heat-scale <scale>    linear, sqrt, log, quantile (default: linear)
   --heat-color <palette>  heat-orange, github-blue, forest, violet, crimson,
                           graphite, one hex value, or four hex values
@@ -115,6 +126,15 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     config = config.with_hidden_languages(option_values(&args, "--hide-language"));
     if let Some(value) = option_value(&args, "--min-repo-language-share") {
         config = config.with_min_repo_language_share(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--stat-rows") {
+        config = config.with_stat_rows(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--language-rows") {
+        config = config.with_language_rows(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--streak-sides") {
+        config = config.with_streak_sides(&value)?;
     }
     if let Some(value) = option_value(&args, "--heat-window") {
         config = config.with_heat_window(&value)?;

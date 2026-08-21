@@ -10,7 +10,7 @@ The planned foundation, data client, aggregation, renderer, CLI, Action, server,
 
 ## Active Task
 
-Run final verification and continue hardening production behavior through focused follow-up tasks. The heat ring is fully configurable and themes are selectable from the CLI, with the ramp resolving against the theme; both are documented with illustrations in the user guide. The crates carry the metadata crates.io requires and the manifest version now tracks the release tags.
+Run final verification and continue hardening production behavior through focused follow-up tasks. The heat ring is fully configurable and themes are selectable from the CLI, with the ramp resolving against the theme; both are documented with illustrations in the user guide. The crates carry the metadata crates.io requires and the manifest version now tracks the release tags. Panel content is configurable too: `--stat-rows`, `--language-rows`, and `--streak-sides` choose what each panel reports, and `GithubStatsConfig` is now `#[non_exhaustive]` so later options ship as minor releases.
 
 ## Next Safe Task After Commit
 
