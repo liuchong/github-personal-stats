@@ -81,6 +81,56 @@ fn cli_defaults_to_workspace_info() {
 }
 
 #[test]
+fn cli_renders_each_theme_and_refuses_an_unknown_one() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    for (theme, expected) in [("light", "#ffffff"), ("dark", "#0d1117")] {
+        let output = std::env::temp_dir().join(format!(
+            "github-personal-stats-cli-{}-{theme}.svg",
+            std::process::id()
+        ));
+        let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args([
+                "generate",
+                "--fixture",
+                fixture.to_str().unwrap(),
+                "--theme",
+                theme,
+                "--output",
+                output.to_str().unwrap(),
+            ])
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        let svg = fs::read_to_string(&output).unwrap();
+        assert!(
+            svg.contains(&format!(r#"fill="{expected}""#)),
+            "the {theme} theme must paint the card background {expected}"
+        );
+        let _ = fs::remove_file(output);
+    }
+
+    let refused = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--theme",
+            "drak",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8(refused.stderr)
+            .unwrap()
+            .contains("expected light, dark, or transparent")
+    );
+}
+
+#[test]
 fn cli_reports_unsupported_command() {
     let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .arg("unknown")

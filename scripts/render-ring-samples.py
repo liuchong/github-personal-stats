@@ -66,6 +66,15 @@ SAMPLES["palette-explicit"] = (
     [*PALETTE_SAMPLE, "--heat-color", "#dbe9d5,#a3cf9a,#5aa04f,#1f6f2f"],
 )
 
+# The same ring on both surfaces, to show the ramp turning around rather than
+# keeping light stops that would outshine the busy days on a dark card.
+SAMPLES["theme-light"] = (SHOWCASE, [*PALETTE_SAMPLE, "--theme", "light"])
+SAMPLES["theme-dark"] = (SHOWCASE, [*PALETTE_SAMPLE, "--theme", "dark"])
+SAMPLES["theme-dark-explicit"] = (
+    SHOWCASE,
+    [*PALETTE_SAMPLE, "--theme", "dark", "--heat-color", "#ffe3ad,#ffc65c,#ffa726,#fb8c00"],
+)
+
 
 def ring_centre(svg: str) -> tuple[int, int]:
     """The caption sits a known distance under the ring, so it locates it."""

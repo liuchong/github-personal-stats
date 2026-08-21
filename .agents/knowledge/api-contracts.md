@@ -25,6 +25,8 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - `--hide-language` removes named languages before aggregation. It accepts comma-separated values and can be repeated.
 - `--min-repo-language-share` filters languages below the configured per-repository percentage before language aggregation, using GraphQL `languages.totalSize`.
 - `--heat-window`, `--heat-limit`, `--heat-shape`, `--heat-threshold`, `--heat-scale`, `--heat-color`, and `--heat-label` populate `HeatRing`. They reach the Action through its existing `options` passthrough rather than through dedicated inputs, so the Action surface stays fixed as ring options grow.
+- `--theme` populates `GithubStatsConfig::theme` through the same passthrough. `HeatRing::ramp` holds a `HeatRamp` intent rather than resolved colours, so option order does not matter and one config can render both surfaces.
+- Two cards plus a README `<picture>` element is the supported way to follow a reader's colour scheme. A single SVG carrying its own colour-scheme query is not, because GitHub serves the file as a proxied image.
 
 ## Aggregated Field Conventions
 

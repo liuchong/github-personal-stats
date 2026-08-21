@@ -14,10 +14,10 @@ pub use aggregation::{
     aggregate_stats, calculate_streak,
 };
 pub use client::{GithubClient, GithubGraphqlClient, GithubGraphqlRequest, MockGithubClient};
-pub use color::{HEAT_RAMP_STEPS, named_ramps, parse_heat_ramp};
+pub use color::{HEAT_RAMP_STEPS, HeatRamp, named_ramps};
 pub use config::{
     CardSelection, DEFAULT_HEAT_THRESHOLD, GithubStatsConfig, HeatRing, HeatScale, HeatShape,
-    HeatWindow, ImageSize, LanguageScope,
+    HeatWindow, ImageSize, LanguageScope, Theme,
 };
 pub use data::{ContributionDay, GithubData, GithubProfile, RepositoryLanguage, UserStats};
 pub use error::{GithubStatsError, RemoteErrorKind};

@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.1.0
+      - uses: liuchong/github-personal-stats@v1.2.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -113,6 +113,57 @@ options: --user your-github-login --width 1000 --height 420 --authored-languages
 
 `--min-repo-language-share 2` ignores a language in a repository when that language is less than 2% of that repository's language total. If another repository is actually Python-heavy, Python still counts there.
 
+## Themes
+
+`--theme` picks the palette: `light` (default), `dark`, or `transparent`. An unrecognised name fails the run rather than quietly rendering the default.
+
+```yaml
+options: --user your-github-login --theme dark
+```
+
+`transparent` drops the background but keeps the dark text of the light palette, so it belongs on a light surface. For a dark surface use `dark`.
+
+### Following the reader's colour scheme
+
+GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
+
+```yaml
+      - uses: liuchong/github-personal-stats@v1.2.0
+        with:
+          card: dashboard
+          path: profile/github-personal-stats.svg
+          options: --user your-github-login --theme light
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+      - uses: liuchong/github-personal-stats@v1.2.0
+        with:
+          card: dashboard
+          path: profile/github-personal-stats-dark.svg
+          options: --user your-github-login --theme dark
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+```
+
+Then reference both, keeping the light file as the fallback for clients that ignore the media query:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./profile/github-personal-stats-dark.svg" />
+  <img src="./profile/github-personal-stats.svg" alt="GitHub Personal Stats" width="100%" />
+</picture>
+```
+
+Colour scheme queries inside the SVG are not a substitute. GitHub serves the file as an image through its own proxy, so a single self-switching SVG cannot be relied on; two files and `<picture>` is the supported path.
+
+### What the dark palette changes
+
+A heat ramp encodes intensity as distance from the background, so the same stops cannot serve both surfaces. On a light card the quiet end is pale and recedes; on a dark card that same pale stop is the brightest thing in the ring, which makes a one-commit day outshout a fifty-commit day. The built-in palettes and single-colour ramps therefore turn around on `dark`: the quiet end sinks to just above the ring track and the busy end climbs.
+
+| `--theme light` | `--theme dark` | `dark` with light stops forced |
+| --- | --- | --- |
+| <img src="images/heat-ring/theme-light.svg" alt="Ring on a light card" width="164" /> | <img src="images/heat-ring/theme-dark.svg" alt="Ring on a dark card" width="164" /> | <img src="images/heat-ring/theme-dark-explicit.svg" alt="Light stops on a dark card" width="164" /> |
+| Quiet days recede, busy days read orange | Quiet days recede into the surface, busy days glow | The quiet majority dominates and the ring reads inside out |
+
+Four explicit stops are always taken exactly as given, on every theme, which is how the third example above is produced. If you spell out stops and also want dark support, spell out a second set for the dark card.
+
 ## Heat Ring
 
 The dashboard and streak cards draw the current streak as a ring, where each node is one day and its depth is that day's contribution count. The ring covers exactly the days the number in its centre reports, so the two never disagree.
@@ -185,7 +236,7 @@ Pick `linear` when you want the ring to be literal about volume. Pick `sqrt` whe
 | --- | --- | --- | --- | --- | --- |
 | <img src="images/heat-ring/palette-heat-orange.svg" alt="Heat orange" width="140" /> | <img src="images/heat-ring/palette-github-blue.svg" alt="GitHub blue" width="140" /> | <img src="images/heat-ring/palette-forest.svg" alt="Forest" width="140" /> | <img src="images/heat-ring/palette-violet.svg" alt="Violet" width="140" /> | <img src="images/heat-ring/palette-crimson.svg" alt="Crimson" width="140" /> | <img src="images/heat-ring/palette-graphite.svg" alt="Graphite" width="140" /> |
 
-`--heat-color` also takes colours directly. One hex value becomes the deepest stop and the lighter three are derived from it in OkLab, which keeps the hue instead of fading towards grey. Four hex values, lightest first, are used exactly as given.
+`--heat-color` also takes colours directly. One hex value becomes the busiest stop and the other three are derived from it in OkLab, which keeps the hue instead of fading towards grey; on a dark card the derivation runs the other way, as described under [Themes](#what-the-dark-palette-changes). Four hex values, quietest first, are used exactly as given on every theme.
 
 | `--heat-color "#8250df"` | `--heat-color "#dbe9d5,#a3cf9a,#5aa04f,#1f6f2f"` |
 | --- | --- |
@@ -232,6 +283,8 @@ For a richer profile section:
   <img src="./profile/github-personal-stats.svg" alt="GitHub Personal Stats" width="100%" />
 </p>
 ```
+
+To follow the reader's colour scheme, generate a dark card too and reference both through `<picture>`, as described under [Themes](#following-the-readers-colour-scheme).
 
 ## Card Types
 
