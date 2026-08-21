@@ -64,7 +64,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.0.3
+      - uses: liuchong/github-personal-stats@v1.1.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
