@@ -16,6 +16,8 @@ The HTTP server should expose the same core renderer through request parameters 
 
 Release assets must include platform binaries and checksums. Smoke tests must verify installation and at least one dashboard generation path.
 
+`checksums.txt` records one archive per line under its published basename, in the layout `shasum -a 256` writes, so `shasum -c` and `sha256sum -c` accept the file unchanged. The publish job hashes the archives from a flat directory and verifies the file it wrote before uploading; it must never rewrite the paths afterwards, because that is how the separator was lost before. The installer reads only the first field, so a broken layout survives every Action run and only surfaces when a person verifies a download.
+
 ## Current Action Contract
 
 - `action.yml` calls `scripts/install-action-binary.sh` before invoking `github-personal-stats`.
