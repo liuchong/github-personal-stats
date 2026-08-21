@@ -10,6 +10,10 @@ const MINIMUM_BAND_WIDTH: f64 = 4.0;
 
 const NARROW_WIDTH: u32 = 440;
 
+/// `role="img"` needs an accessible name or assistive technology announces the
+/// card as an unlabelled image, so every card names itself.
+const TITLE_ID: &str = "gps-title";
+
 const GUTTER: u32 = 24;
 const LANGUAGE_ROWS: usize = 6;
 
@@ -82,17 +86,31 @@ impl Rect {
 
 pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
     let theme = RenderTheme::new(config.theme);
+    let title = card_title(card, &config.username);
     match card {
         CardData::Dashboard {
             stats,
             languages,
             streak,
-        } => render_dashboard(stats, languages, streak, config, &theme),
-        CardData::Stats(stats) => render_stats_card(stats, &config.size, &theme),
-        CardData::Languages(languages) => render_languages_card(languages, &config.size, &theme),
-        CardData::Streak(streak) => render_streak_card(streak, config, &theme),
-        CardData::Activity(summary) => render_activity_card(summary, &config.size, &theme),
-        CardData::Status { state } => render_status_card(state, &config.size, &theme),
+        } => render_dashboard(stats, languages, streak, config, &theme, &title),
+        CardData::Stats(stats) => render_stats_card(stats, &config.size, &theme, &title),
+        CardData::Languages(languages) => {
+            render_languages_card(languages, &config.size, &theme, &title)
+        }
+        CardData::Streak(streak) => render_streak_card(streak, config, &theme, &title),
+        CardData::Activity(summary) => render_activity_card(summary, &config.size, &theme, &title),
+        CardData::Status { state } => render_status_card(state, &config.size, &theme, &title),
+    }
+}
+
+fn card_title(card: &CardData, username: &str) -> String {
+    match card {
+        CardData::Dashboard { .. } => format!("GitHub profile summary for {username}"),
+        CardData::Stats(_) => format!("GitHub stats for {username}"),
+        CardData::Languages(_) => format!("Top languages for {username}"),
+        CardData::Streak(_) => format!("Contribution streak for {username}"),
+        CardData::Activity(_) => format!("Coding activity for {username}"),
+        CardData::Status { state } => format!("Service status: {state}"),
     }
 }
 
@@ -122,6 +140,7 @@ fn render_dashboard(
     streak: &StreakSummary,
     config: &GithubStatsConfig,
     theme: &RenderTheme,
+    title: &str,
 ) -> String {
     let size = &config.size;
     let pad = padding(size.width);
@@ -150,6 +169,7 @@ fn render_dashboard(
     svg_root(
         size,
         theme,
+        title,
         format!(
             "{}{}{}{}{}",
             stats_section(stats_area, stats, theme),
@@ -161,18 +181,30 @@ fn render_dashboard(
     )
 }
 
-fn render_stats_card(stats: &AggregatedStats, size: &ImageSize, theme: &RenderTheme) -> String {
-    svg_root(size, theme, stats_section(card_area(size), stats, theme))
+fn render_stats_card(
+    stats: &AggregatedStats,
+    size: &ImageSize,
+    theme: &RenderTheme,
+    title: &str,
+) -> String {
+    svg_root(
+        size,
+        theme,
+        title,
+        stats_section(card_area(size), stats, theme),
+    )
 }
 
 fn render_languages_card(
     languages: &[LanguageShare],
     size: &ImageSize,
     theme: &RenderTheme,
+    title: &str,
 ) -> String {
     svg_root(
         size,
         theme,
+        title,
         languages_section(card_area(size), languages, theme),
     )
 }
@@ -181,11 +213,13 @@ fn render_streak_card(
     streak: &StreakSummary,
     config: &GithubStatsConfig,
     theme: &RenderTheme,
+    title: &str,
 ) -> String {
     let size = &config.size;
     svg_root(
         size,
         theme,
+        title,
         streak_section(card_area(size), streak, theme, &config.heat_ring),
     )
 }
@@ -194,19 +228,22 @@ fn render_activity_card(
     summary: &CodingActivitySummary,
     size: &ImageSize,
     theme: &RenderTheme,
+    title: &str,
 ) -> String {
     svg_root(
         size,
         theme,
+        title,
         activity_section(card_area(size), summary, theme),
     )
 }
 
-fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme) -> String {
+fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme, title: &str) -> String {
     let area = card_area(size);
     svg_root(
         size,
         theme,
+        title,
         format!(
             "{}{}{}",
             eyebrow(area.x, area.y + 16, "Status", theme),
@@ -230,12 +267,13 @@ fn padding(width: u32) -> u32 {
     (width / 20).clamp(16, 28)
 }
 
-fn svg_root(size: &ImageSize, theme: &RenderTheme, body: String) -> String {
+fn svg_root(size: &ImageSize, theme: &RenderTheme, title: &str, body: String) -> String {
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" font-family="{font}" style="font-variant-numeric:tabular-nums"><rect width="100%" height="100%" fill="{background}"/>{body}</svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{TITLE_ID}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" font-family="{font}" style="font-variant-numeric:tabular-nums"><title id="{TITLE_ID}">{title}</title><rect width="100%" height="100%" fill="{background}"/>{body}</svg>"#,
         width = size.width,
         height = size.height,
         font = FONT_STACK,
+        title = escape_xml(title),
         background = theme.background,
         body = body,
     )

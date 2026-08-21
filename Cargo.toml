@@ -7,8 +7,14 @@ members = [
 resolver = "3"
 
 [workspace.package]
+authors = ["Liu Chong <mail@liuchong.dev>"]
 edition = "2024"
+homepage = "https://github.com/liuchong/github-personal-stats"
+keywords = ["github", "svg", "statistics", "profile", "readme"]
 license-file = "LICENSE"
 repository = "https://github.com/liuchong/github-personal-stats"
 rust-version = "1.85"
-version = "0.1.0"
+version = "1.2.1"
+
+[workspace.dependencies]
+github-personal-stats-core = { path = "crates/core", version = "1.2.1" }

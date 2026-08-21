@@ -26,6 +26,8 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - `--min-repo-language-share` filters languages below the configured per-repository percentage before language aggregation, using GraphQL `languages.totalSize`.
 - `--heat-window`, `--heat-limit`, `--heat-shape`, `--heat-threshold`, `--heat-scale`, `--heat-color`, and `--heat-label` populate `HeatRing`. They reach the Action through its existing `options` passthrough rather than through dedicated inputs, so the Action surface stays fixed as ring options grow.
 - `--theme` populates `GithubStatsConfig::theme` through the same passthrough. `HeatRing::ramp` holds a `HeatRamp` intent rather than resolved colours, so option order does not matter and one config can render both surfaces.
+- The crates are published, so the library surface is a compatibility promise: `HeatRamp` is opaque and constructed only through `parse` or `Default`, and any new public type must not be able to describe a state its methods cannot serve.
+- Workspace `version` tracks the release tags, and `info` reports it, so a bump belongs in the same commit as the release. `github-personal-stats-core` is declared once in `[workspace.dependencies]` with the version its dependents must publish against. `cli` and `server` can only be packaged after `core` reaches the index, which fixes the publish order.
 - Two cards plus a README `<picture>` element is the supported way to follow a reader's colour scheme. A single SVG carrying its own colour-scheme query is not, because GitHub serves the file as a proxied image.
 
 ## Aggregated Field Conventions
