@@ -36,4 +36,17 @@ Every section receives a `Rect` region and derives its own metrics from it, so t
 Both rings encode a real measurement; neither is decoration.
 
 - The rank ring closes in proportion to the account's ranking percentile, so a top-1% account draws an almost complete circle. `rank_for_stats` returns that percentile in basis points alongside the label, since the label is only a coarse band of the same number.
-- The current streak ring is a closed 30-day heat ring: one radial tick per day of `StreakSummary::recent_daily_counts`, shaded along the fire ramp (pale yellow to deep orange) by that day's contribution volume, with zero-contribution days left on the neutral `track`. The ring has no gap and no flame; continuity and intensity come from the shading. When the recent window is empty the ring degrades to a plain track circle.
+- The current streak ring is a closed heat ring over `StreakSummary::recent_daily_counts`, shaded along the configured ramp by each day's contribution volume, with zero-contribution days left on the neutral `track`. The ring has no gap and no flame; continuity and intensity come from the shading. When the window is empty the ring degrades to a plain track circle.
+
+## Heat Ring Contract
+
+`config::HeatRing` owns every ring choice, and `aggregation` owns the window it describes. The renderer never decides how many days to draw.
+
+- The window and the centre number are the same measurement. `HeatRing::span` returns the day count, `daily_window` fills exactly that many slots, and `{Y}` reports the slot count. Nothing may report a number the ring does not span.
+- A streak window anchors on the streak's last day; a fixed window anchors on the latest known day. `window_start` and `window_end` travel on `StreakSummary` so the date line under the ring describes the ring, not the streak behind it. A limit shortens the ring without touching `current`, so `{Z}` still reports the real streak.
+- Above `threshold` days, ticks overlap into a furred edge, so the ring switches to arcs and averages days into bands of at least `MINIMUM_BAND_WIDTH`. One arc per day at streak lengths past a hundred leaves each under two pixels, which reads as alternating stripes rather than a gradient. The averaged ring therefore draws fewer bands than the days it spans; the span is what stays honest, not the band count.
+- Adjacent arcs extend past their own share so antialiasing cannot leave a seam between them. Arcs paint in window order, so a later band overpaints its neighbour's tail.
+- `heat_levels` maps a whole window at once because a quantile scale needs the distribution rather than one day against the peak. Quantile ties fall to the lighter bucket so the quietest days keep the lightest stop.
+- Real contribution counts are heavy-tailed, so `linear` leaves ordinary days pale and only bursts deep. That is faithful and is the default; `sqrt` is the alternative worth reaching for when the ring looks washed out.
+- The centre label is free text over `{X}`, `{Y}`, and `{Z}`. `centre_text_size` steps the size down for longer templates so a configured label can never spill across the ring itself.
+- A fixed window is not a streak, so its caption reads `Last N Days` instead of `Current Streak`.

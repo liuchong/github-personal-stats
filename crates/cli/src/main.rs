@@ -43,9 +43,30 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     if let Some(value) = option_value(&args, "--min-repo-language-share") {
         config = config.with_min_repo_language_share(&value)?;
     }
+    if let Some(value) = option_value(&args, "--heat-window") {
+        config = config.with_heat_window(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-limit") {
+        config = config.with_heat_limit(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-shape") {
+        config = config.with_heat_shape(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-threshold") {
+        config = config.with_heat_threshold(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-scale") {
+        config = config.with_heat_scale(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-color") {
+        config = config.with_heat_color(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--heat-label") {
+        config = config.with_heat_label(&value);
+    }
     let mut data = github_data(&config, option_value(&args, "--fixture"))?;
     hide_languages(&mut data, &config.hidden_languages);
-    let card_data = aggregate_card_data(&data, parse_output_kind(&card)?);
+    let card_data = aggregate_card_data(&data, parse_output_kind(&card)?, &config.heat_ring);
     let rendered = render_card(&card_data, &config);
 
     write_output(PathBuf::from(output), rendered)?;

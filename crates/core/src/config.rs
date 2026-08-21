@@ -50,6 +50,72 @@ pub enum LanguageScope {
     Authored,
 }
 
+pub const DEFAULT_HEAT_THRESHOLD: u32 = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeatWindow {
+    Streak,
+    Fixed(u32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeatShape {
+    Segmented,
+    Ticks,
+    Arcs,
+    Bands,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeatScale {
+    Linear,
+    Sqrt,
+    Log,
+    Quantile,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeatRing {
+    pub window: HeatWindow,
+    pub limit: Option<u32>,
+    pub shape: HeatShape,
+    pub threshold: u32,
+    pub scale: HeatScale,
+    pub ramp: Vec<String>,
+    pub label: Option<String>,
+}
+
+impl HeatRing {
+    pub fn span(&self, streak: u32) -> u32 {
+        let span = match self.window {
+            HeatWindow::Streak => streak,
+            HeatWindow::Fixed(days) => days,
+        };
+        self.limit.map_or(span, |limit| span.min(limit))
+    }
+
+    pub fn label_template(&self) -> &str {
+        self.label.as_deref().unwrap_or(match self.window {
+            HeatWindow::Streak => "{Y}",
+            HeatWindow::Fixed(_) => "{X}/last {Y}",
+        })
+    }
+}
+
+impl Default for HeatRing {
+    fn default() -> Self {
+        Self {
+            window: HeatWindow::Streak,
+            limit: None,
+            shape: HeatShape::Segmented,
+            threshold: DEFAULT_HEAT_THRESHOLD,
+            scale: HeatScale::Linear,
+            ramp: crate::parse_heat_ramp("heat-orange").expect("built-in ramp"),
+            label: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GithubStatsConfig {
     pub username: String,
@@ -61,6 +127,7 @@ pub struct GithubStatsConfig {
     pub author_emails: Vec<String>,
     pub hidden_languages: Vec<String>,
     pub min_repo_language_share_basis_points: u32,
+    pub heat_ring: HeatRing,
 }
 
 impl GithubStatsConfig {
@@ -88,6 +155,7 @@ impl GithubStatsConfig {
             author_emails: Vec::new(),
             hidden_languages: Vec::new(),
             min_repo_language_share_basis_points: 0,
+            heat_ring: HeatRing::default(),
         })
     }
 
@@ -149,5 +217,87 @@ impl GithubStatsConfig {
         }
         self.min_repo_language_share_basis_points = (percentage * 100.0).round() as u32;
         Ok(self)
+    }
+
+    pub fn with_heat_window(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let trimmed = value.trim();
+        self.heat_ring.window = if trimmed.eq_ignore_ascii_case("streak") {
+            HeatWindow::Streak
+        } else {
+            HeatWindow::Fixed(positive_days("heat_window", trimmed)?)
+        };
+        Ok(self)
+    }
+
+    pub fn with_heat_limit(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let trimmed = value.trim();
+        self.heat_ring.limit = if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("none") {
+            None
+        } else {
+            Some(positive_days("heat_limit", trimmed)?)
+        };
+        Ok(self)
+    }
+
+    pub fn with_heat_shape(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.heat_ring.shape = match value.trim().to_ascii_lowercase().as_str() {
+            "segmented" => HeatShape::Segmented,
+            "ticks" => HeatShape::Ticks,
+            "arcs" => HeatShape::Arcs,
+            "bands" => HeatShape::Bands,
+            _ => {
+                return Err(GithubStatsError::InvalidConfig {
+                    field: "heat_shape",
+                    message: "expected segmented, ticks, arcs, or bands".to_owned(),
+                });
+            }
+        };
+        Ok(self)
+    }
+
+    pub fn with_heat_threshold(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.heat_ring.threshold = positive_days("heat_threshold", value.trim())?;
+        Ok(self)
+    }
+
+    pub fn with_heat_scale(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.heat_ring.scale = match value.trim().to_ascii_lowercase().as_str() {
+            "linear" => HeatScale::Linear,
+            "sqrt" => HeatScale::Sqrt,
+            "log" => HeatScale::Log,
+            "quantile" => HeatScale::Quantile,
+            _ => {
+                return Err(GithubStatsError::InvalidConfig {
+                    field: "heat_scale",
+                    message: "expected linear, sqrt, log, or quantile".to_owned(),
+                });
+            }
+        };
+        Ok(self)
+    }
+
+    pub fn with_heat_color(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.heat_ring.ramp = crate::parse_heat_ramp(value)?;
+        Ok(self)
+    }
+
+    pub fn with_heat_label(mut self, value: &str) -> Self {
+        let trimmed = value.trim();
+        self.heat_ring.label = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_owned())
+        };
+        self
+    }
+}
+
+fn positive_days(field: &'static str, value: &str) -> Result<u32, GithubStatsError> {
+    match value.parse::<u32>() {
+        Ok(days) if days > 0 => Ok(days),
+        _ => Err(GithubStatsError::InvalidConfig {
+            field,
+            message: "must be a whole number of days above zero".to_owned(),
+        }),
     }
 }

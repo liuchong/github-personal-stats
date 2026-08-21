@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    AggregatedStats, CardData, CodingActivityEntry, GithubClient, GithubStatsConfig, LanguageShare,
-    MockGithubClient, OutputKind, StreakMode, StreakSummary, aggregate_card_data,
+    AggregatedStats, CardData, CodingActivityEntry, GithubClient, GithubStatsConfig, HeatRing,
+    LanguageShare, MockGithubClient, OutputKind, StreakMode, StreakSummary, aggregate_card_data,
     aggregate_coding_activity, render_card, render_readme_section,
 };
 
@@ -19,7 +19,7 @@ fn fixture_data() -> github_personal_stats_core::GithubData {
 #[test]
 fn dashboard_renderer_matches_snapshot() {
     let config = GithubStatsConfig::new("octo").unwrap();
-    let card = aggregate_card_data(&fixture_data(), OutputKind::Dashboard);
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Dashboard, &HeatRing::default());
     let svg = render_card(&card, &config);
 
     assert_eq!(svg, DASHBOARD_SNAPSHOT.trim_end());
@@ -31,7 +31,7 @@ fn stats_renderer_matches_snapshot() {
         .unwrap()
         .with_size(420, 220)
         .unwrap();
-    let card = aggregate_card_data(&fixture_data(), OutputKind::Stats);
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Stats, &HeatRing::default());
     let svg = render_card(&card, &config);
 
     assert_eq!(svg, STATS_SNAPSHOT.trim_end());
@@ -43,7 +43,7 @@ fn renderer_sets_fixed_svg_dimensions() {
         .unwrap()
         .with_size(700, 300)
         .unwrap();
-    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages);
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages, &HeatRing::default());
     let svg = render_card(&card, &config);
 
     assert!(svg.contains(r#"width="700""#));
@@ -54,7 +54,7 @@ fn renderer_sets_fixed_svg_dimensions() {
 #[test]
 fn language_renderer_uses_language_specific_colors() {
     let config = GithubStatsConfig::new("octo").unwrap();
-    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages);
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages, &HeatRing::default());
     let svg = render_card(&card, &config);
 
     assert!(svg.contains("#dea584"));
@@ -79,6 +79,8 @@ fn renderer_outputs_streak_wakatime_and_status_cards() {
         longest_end: Some("2026-04-10".to_owned()),
         mode: StreakMode::Daily,
         recent_daily_counts: vec![0, 1, 2, 3, 4],
+        window_start: Some("2026-05-22".to_owned()),
+        window_end: Some("2026-05-24".to_owned()),
     });
     let wakatime = CardData::Wakatime(aggregate_coding_activity(
         vec![
@@ -171,6 +173,8 @@ fn streak_heat_ring_falls_back_to_a_plain_ring_without_recent_data() {
         longest_end: None,
         mode: StreakMode::Daily,
         recent_daily_counts: Vec::new(),
+        window_start: Some("2026-05-22".to_owned()),
+        window_end: Some("2026-05-24".to_owned()),
     });
 
     let svg = render_card(&streak, &config);
@@ -181,7 +185,7 @@ fn streak_heat_ring_falls_back_to_a_plain_ring_without_recent_data() {
 
 #[test]
 fn language_rows_switch_layout_with_available_width() {
-    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages);
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Languages, &HeatRing::default());
     let wide = GithubStatsConfig::new("octo")
         .unwrap()
         .with_size(900, 260)
@@ -270,8 +274,8 @@ fn unparsable_dates_render_verbatim() {
         CardData::Streak(streak) => streak,
         _ => unreachable!(),
     };
-    streak.current_start = Some("2026-13-40".to_owned());
-    streak.current_end = Some("whenever".to_owned());
+    streak.window_start = Some("2026-13-40".to_owned());
+    streak.window_end = Some("whenever".to_owned());
 
     let svg = render_card(&CardData::Streak(streak), &config);
 
@@ -325,6 +329,8 @@ fn sample_streak(recent_daily_counts: Vec<u32>) -> CardData {
         longest_end: Some("2026-04-06".to_owned()),
         mode: StreakMode::Daily,
         recent_daily_counts,
+        window_start: Some("2026-05-20".to_owned()),
+        window_end: Some("2026-05-24".to_owned()),
     })
 }
 

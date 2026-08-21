@@ -1,12 +1,12 @@
 use crate::{
-    AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, ImageSize, LanguageShare,
-    StreakSummary,
+    AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing,
+    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StreakSummary,
 };
 
 const FONT_STACK: &str =
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif";
 
-const HEAT_RAMP: [&str; 4] = ["#ffe3ad", "#ffc65c", "#ffa726", "#fb8c00"];
+const MINIMUM_BAND_WIDTH: f64 = 4.0;
 
 const NARROW_WIDTH: u32 = 440;
 
@@ -83,10 +83,10 @@ pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
             stats,
             languages,
             streak,
-        } => render_dashboard(stats, languages, streak, &config.size, &theme),
+        } => render_dashboard(stats, languages, streak, config, &theme),
         CardData::Stats(stats) => render_stats_card(stats, &config.size, &theme),
         CardData::Languages(languages) => render_languages_card(languages, &config.size, &theme),
-        CardData::Streak(streak) => render_streak_card(streak, &config.size, &theme),
+        CardData::Streak(streak) => render_streak_card(streak, config, &theme),
         CardData::Wakatime(summary) => render_wakatime_card(summary, &config.size, &theme),
         CardData::Status { state } => render_status_card(state, &config.size, &theme),
     }
@@ -116,9 +116,10 @@ fn render_dashboard(
     stats: &AggregatedStats,
     languages: &[LanguageShare],
     streak: &StreakSummary,
-    size: &ImageSize,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
 ) -> String {
+    let size = &config.size;
     let pad = padding(size.width);
     let split = size.height * 53 / 100;
     let column = size.width.saturating_sub(pad * 2 + GUTTER) / 2;
@@ -151,7 +152,7 @@ fn render_dashboard(
             vertical_rule(pad + column + GUTTER / 2, pad + 2, pad + top_height, theme),
             languages_section(languages_area, languages, theme),
             horizontal_rule(pad, size.width - pad, split, theme),
-            streak_section(streak_area, streak, theme),
+            streak_section(streak_area, streak, theme, &config.heat_ring),
         ),
     )
 }
@@ -172,8 +173,17 @@ fn render_languages_card(
     )
 }
 
-fn render_streak_card(streak: &StreakSummary, size: &ImageSize, theme: &RenderTheme) -> String {
-    svg_root(size, theme, streak_section(card_area(size), streak, theme))
+fn render_streak_card(
+    streak: &StreakSummary,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+) -> String {
+    let size = &config.size;
+    svg_root(
+        size,
+        theme,
+        streak_section(card_area(size), streak, theme, &config.heat_ring),
+    )
 }
 
 fn render_wakatime_card(
@@ -437,7 +447,12 @@ fn stacked_language_bar(
     )
 }
 
-fn streak_section(area: Rect, streak: &StreakSummary, theme: &RenderTheme) -> String {
+fn streak_section(
+    area: Rect,
+    streak: &StreakSummary,
+    theme: &RenderTheme,
+    config: &HeatRing,
+) -> String {
     let column = area.width / 3;
     let compact = area.is_narrow();
     let (label_y, value_y, note_y) = if compact {
@@ -489,7 +504,17 @@ fn streak_section(area: Rect, streak: &StreakSummary, theme: &RenderTheme) -> St
             area.y + area.height,
             theme
         ),
-        current_streak_ring(ring_cx, ring_cy, ring_radius, compact, streak, theme),
+        current_streak_ring(
+            &Ring {
+                cx: ring_cx,
+                cy: ring_cy,
+                radius: ring_radius,
+                compact,
+                theme,
+                config,
+            },
+            streak
+        ),
         vertical_rule(
             area.x + column * 2 - 12,
             area.y + 20,
@@ -556,98 +581,218 @@ fn side_metric(metric: SideMetric<'_>) -> String {
     )
 }
 
-fn current_streak_ring(
+struct Ring<'a> {
     cx: u32,
     cy: u32,
     radius: u32,
     compact: bool,
-    streak: &StreakSummary,
-    theme: &RenderTheme,
-) -> String {
-    let number_size = if compact { 22.0 } else { 26.0 };
+    theme: &'a RenderTheme,
+    config: &'a HeatRing,
+}
+
+fn current_streak_ring(ring: &Ring, streak: &StreakSummary) -> String {
+    let label = ring_label(ring.config, streak);
+    let number_size = centre_text_size(&label, ring);
     format!(
         "{}{}{}{}",
-        heat_ring(cx, cy, radius, compact, &streak.recent_daily_counts, theme),
+        heat_ring(ring, &streak.recent_daily_counts),
         text_middle(
-            cx,
-            cy + number_size as u32 / 3,
+            ring.cx,
+            ring.cy + number_size as u32 / 3,
             number_size,
             600,
-            theme.ink,
-            &streak.current.to_string(),
+            ring.theme.ink,
+            &label,
         ),
         text_middle(
-            cx,
-            cy + radius + 26,
+            ring.cx,
+            ring.cy + ring.radius + 26,
             11.5,
             400,
-            theme.muted,
-            "Current Streak"
+            ring.theme.muted,
+            &ring_caption(ring.config, streak.recent_daily_counts.len()),
         ),
         text_middle(
-            cx,
-            cy + radius + 43,
+            ring.cx,
+            ring.cy + ring.radius + 43,
             10.5,
             400,
-            theme.muted,
-            &date_range(&streak.current_start, &streak.current_end, compact),
+            ring.theme.muted,
+            &date_range(&streak.window_start, &streak.window_end, ring.compact),
         ),
     )
 }
 
-fn heat_ring(
-    cx: u32,
-    cy: u32,
-    radius: u32,
-    compact: bool,
-    counts: &[u32],
-    theme: &RenderTheme,
-) -> String {
+fn centre_text_size(label: &str, ring: &Ring) -> f32 {
+    let base = if ring.compact { 22.0 } else { 26.0 };
+    let band = if ring.compact { 8.0 } else { 10.0 };
+    let inner = (ring.radius as f32 - band / 2.0) * 2.0 - 6.0;
+    let width_per_point = label.chars().count() as f32 * 0.54;
+
+    (inner / width_per_point).clamp(9.0, base)
+}
+
+fn ring_caption(config: &HeatRing, span: usize) -> String {
+    match config.window {
+        HeatWindow::Streak => "Current Streak".to_owned(),
+        HeatWindow::Fixed(_) => format!("Last {span} Days"),
+    }
+}
+
+fn ring_label(config: &HeatRing, streak: &StreakSummary) -> String {
+    let window = &streak.recent_daily_counts;
+    let active = window.iter().filter(|count| **count > 0).count();
+
+    config
+        .label_template()
+        .replace("{X}", &active.to_string())
+        .replace("{Y}", &window.len().to_string())
+        .replace("{Z}", &streak.current.to_string())
+}
+
+fn heat_ring(ring: &Ring, counts: &[u32]) -> String {
     if counts.is_empty() {
         return format!(
             r#"<circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" stroke="{track}" stroke-width="3"/>"#,
-            cx = cx,
-            cy = cy,
-            radius = radius,
-            track = theme.track,
+            cx = ring.cx,
+            cy = ring.cy,
+            radius = ring.radius,
+            track = ring.theme.track,
         );
     }
 
-    let length = if compact { 8.0 } else { 10.0 };
-    let width = if compact { 3.0 } else { 3.6 };
-    let peak = counts.iter().copied().max().unwrap_or(0);
-    let step = 360.0 / counts.len() as f64;
-    let inner = f64::from(radius) - length / 2.0;
-    let outer = f64::from(radius) + length / 2.0;
+    match ring.config.shape {
+        HeatShape::Ticks => heat_tick_ring(ring, counts),
+        HeatShape::Arcs => heat_band_ring(ring, counts, false),
+        HeatShape::Bands => heat_band_ring(ring, counts, true),
+        HeatShape::Segmented => {
+            if counts.len() as u32 > ring.config.threshold {
+                heat_band_ring(ring, counts, true)
+            } else {
+                heat_tick_ring(ring, counts)
+            }
+        }
+    }
+}
 
-    counts
+fn heat_tick_ring(ring: &Ring, counts: &[u32]) -> String {
+    let length = if ring.compact { 8.0 } else { 10.0 };
+    let width = if ring.compact { 3.0 } else { 3.6 };
+    let levels = heat_levels(counts, ring.config.scale);
+    let step = 360.0 / counts.len() as f64;
+    let inner = f64::from(ring.radius) - length / 2.0;
+    let outer = f64::from(ring.radius) + length / 2.0;
+
+    levels
         .iter()
         .enumerate()
-        .map(|(index, count)| {
+        .map(|(index, level)| {
             let angle = (-90.0 + index as f64 * step).to_radians();
             let (sin, cos) = angle.sin_cos();
             format!(
                 r#"<path d="M{x0:.2} {y0:.2}L{x1:.2} {y1:.2}" stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>"#,
-                x0 = f64::from(cx) + inner * cos,
-                y0 = f64::from(cy) + inner * sin,
-                x1 = f64::from(cx) + outer * cos,
-                y1 = f64::from(cy) + outer * sin,
-                color = heat_color(*count, peak, theme),
+                x0 = f64::from(ring.cx) + inner * cos,
+                y0 = f64::from(ring.cy) + inner * sin,
+                x1 = f64::from(ring.cx) + outer * cos,
+                y1 = f64::from(ring.cy) + outer * sin,
+                color = level_color(*level, ring),
                 width = width,
             )
         })
         .collect()
 }
 
-fn heat_color(count: u32, peak: u32, theme: &RenderTheme) -> &str {
-    if count == 0 {
-        return theme.track;
-    }
-    if peak <= 1 {
-        return HEAT_RAMP[HEAT_RAMP.len() - 1];
-    }
-    let position = f64::from(count - 1) / f64::from(peak - 1) * HEAT_RAMP.len() as f64;
-    HEAT_RAMP[(position as usize).min(HEAT_RAMP.len() - 1)]
+fn heat_band_ring(ring: &Ring, counts: &[u32], average: bool) -> String {
+    let thickness = if ring.compact { 8.0 } else { 10.0 };
+    let radius = f64::from(ring.radius);
+    let bands = if average {
+        band_heat(counts, radius)
+    } else {
+        counts.to_vec()
+    };
+    let levels = heat_levels(&bands, ring.config.scale);
+    let step = 360.0 / bands.len() as f64;
+
+    levels
+        .iter()
+        .enumerate()
+        .map(|(index, level)| {
+            let start = (-90.0 + index as f64 * step).to_radians();
+            let end = (-90.0 + (index as f64 + 1.35) * step).to_radians();
+            format!(
+                r#"<path d="M{x0:.2} {y0:.2}A{radius} {radius} 0 0 1 {x1:.2} {y1:.2}" fill="none" stroke="{color}" stroke-width="{thickness}"/>"#,
+                x0 = f64::from(ring.cx) + radius * start.cos(),
+                y0 = f64::from(ring.cy) + radius * start.sin(),
+                x1 = f64::from(ring.cx) + radius * end.cos(),
+                y1 = f64::from(ring.cy) + radius * end.sin(),
+                radius = radius,
+                color = level_color(*level, ring),
+                thickness = thickness,
+            )
+        })
+        .collect()
+}
+
+fn band_heat(counts: &[u32], radius: f64) -> Vec<u32> {
+    let capacity = (std::f64::consts::TAU * radius / MINIMUM_BAND_WIDTH) as usize;
+    let bands = capacity.clamp(1, counts.len());
+
+    (0..bands)
+        .map(|index| {
+            let start = index * counts.len() / bands;
+            let end = ((index + 1) * counts.len() / bands).max(start + 1);
+            let slice = &counts[start..end.min(counts.len())];
+            let total: u32 = slice.iter().sum();
+            total.div_ceil(slice.len() as u32)
+        })
+        .collect()
+}
+
+fn heat_levels(counts: &[u32], scale: HeatScale) -> Vec<Option<usize>> {
+    let top = HEAT_RAMP_STEPS - 1;
+    let peak = counts.iter().copied().max().unwrap_or(0);
+    let steps = HEAT_RAMP_STEPS as f64;
+
+    let cuts = if scale == HeatScale::Quantile {
+        let mut active = counts
+            .iter()
+            .copied()
+            .filter(|count| *count > 0)
+            .collect::<Vec<_>>();
+        active.sort_unstable();
+        (1..HEAT_RAMP_STEPS)
+            .filter_map(|index| active.get(active.len() * index / HEAT_RAMP_STEPS).copied())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    counts
+        .iter()
+        .map(|count| {
+            if *count == 0 {
+                return None;
+            }
+            if peak <= 1 {
+                return Some(top);
+            }
+            let span = f64::from(peak - 1);
+            let offset = f64::from(count - 1);
+            let level = match scale {
+                HeatScale::Linear => (offset / span * steps) as usize,
+                HeatScale::Sqrt => ((offset / span).sqrt() * steps) as usize,
+                HeatScale::Log => (f64::from(*count).ln() / f64::from(peak).ln() * steps) as usize,
+                HeatScale::Quantile => cuts.iter().filter(|cut| *count > **cut).count(),
+            };
+            Some(level.min(top))
+        })
+        .collect()
+}
+
+fn level_color<'a>(level: Option<usize>, ring: &'a Ring) -> &'a str {
+    level.map_or(ring.theme.track, |index| {
+        ring.config.ramp[index.min(ring.config.ramp.len() - 1)].as_str()
+    })
 }
 
 fn wakatime_section(area: Rect, summary: &CodingActivitySummary, theme: &RenderTheme) -> String {

@@ -12,6 +12,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 
 - One default dashboard for stats, language share, total contributions, current streak, and longest streak.
 - Optional individual cards when you want a custom README layout.
+- A heat ring that shows each day of your streak, configurable down to its window, shape, scale, palette, and centre label.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.
 - Deterministic rendering backed by fixtures and snapshot tests.
@@ -26,6 +27,19 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 <p align="center">
   <img src="./examples/streak.svg" alt="Streak card preview" width="100%" />
 </p>
+
+## Heat Ring
+
+Each node on the ring is one day of your current streak, shaded by that day's contribution count, and the ring always covers exactly the days the centre reports. Long streaks switch from ticks to averaged bands so the ring stays readable.
+
+<p align="center">
+  <img src="./docs/images/heat-ring/window-streak.svg" alt="A 117 day streak" width="150" />
+  <img src="./docs/images/heat-ring/window-fixed-30.svg" alt="A fixed 30 day window" width="150" />
+  <img src="./docs/images/heat-ring/scale-sqrt.svg" alt="Square root scale" width="150" />
+  <img src="./docs/images/heat-ring/palette-github-blue.svg" alt="GitHub blue palette" width="150" />
+</p>
+
+The window, day limit, shape, threshold, scale, palette, and centre label are all configurable. See [Heat Ring](docs/user-guide.md#heat-ring) for the options and what each one looks like.
 
 ## Quick Start
 
