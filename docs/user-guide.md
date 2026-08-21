@@ -303,6 +303,12 @@ cargo run -p github-personal-stats -- generate --fixture examples/showcase.json 
 cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --card streak --width 1000 --height 220 --output examples/streak.svg
 ```
 
+`examples/showcase.json` covers 30 days with a few quiet ones, which is what a fixed window needs to show. `examples/streak-117.json` carries a 117 day streak, which is where the ring changes geometry:
+
+```sh
+cargo run -p github-personal-stats -- generate --fixture examples/streak-117.json --card streak --width 1000 --height 220 --output /tmp/long-streak.svg
+```
+
 ## Coding Activity Section
 
 Update a marked README section:
