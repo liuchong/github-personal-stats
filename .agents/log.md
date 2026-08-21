@@ -171,3 +171,13 @@ The CLI had no help at all, so nineteen options were discoverable only through t
 Defaults had been inline literals at their use sites, which would have let the usage text drift away from behaviour on the first change. They are now named constants that both the parser and the usage text read, and a test asserts each documented default appears.
 
 Added a drift guard that extracts every option literal the CLI parses out of its own source and asserts the usage page mentions all of them. It immediately earned its place by catching that `--help` itself was undocumented.
+
+## [2026-08-21] release | v1.1.0 and a verifiable checksum file
+
+Pinned the quick start and user guide to `v1.1.0` and tagged the release. The configurable ring changes visible output on default settings, so it takes a minor bump rather than another patch.
+
+Downloading the published archive to run its own usage output caught that `checksums.txt` could not be verified. The publish step reduced `shasum` output with `sed 's# .*/# #'`, and the greedy match started at the first of the two spaces `shasum` writes between hash and name, collapsing the pair into one. That is not a valid checksum line, so `shasum -c` and `sha256sum -c` both refused the whole file. The Action never noticed because its install script pulls the hash with `awk '{print $1}'`, which is why every release since the first shipped an unverifiable file.
+
+Removed the rewrite instead of correcting the pattern: the publish job now copies the archives into one flat directory and runs `shasum` there, so the names it records are the names it hashed, and it verifies the file it just wrote before uploading. Dropped the per-target `.sha256` files, which were uploaded as build artifacts and never published or read.
+
+Republished the corrected `checksums.txt` on `v1.1.0` after confirming the hashes matched the ones already there, so the only change to the release was the separator.
