@@ -10,7 +10,7 @@ The planned foundation, data client, aggregation, renderer, CLI, Action, server,
 
 ## Active Task
 
-Run final verification and continue hardening production behavior through focused follow-up tasks.
+Run final verification and continue hardening production behavior through focused follow-up tasks. The heat ring is now fully configurable; its options and illustrations live in the user guide.
 
 ## Next Safe Task After Commit
 

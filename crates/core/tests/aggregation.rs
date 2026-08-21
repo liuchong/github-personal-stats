@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, ContributionDay, GithubClient, GithubStatsConfig, MockGithubClient,
-    OutputKind, RECENT_WINDOW_DAYS, RepositoryLanguage, StreakMode, aggregate_card_data,
+    CodingActivityEntry, ContributionDay, GithubClient, GithubStatsConfig, HeatRing, HeatWindow,
+    MockGithubClient, OutputKind, RepositoryLanguage, StreakMode, aggregate_card_data,
     aggregate_coding_activity, aggregate_languages, aggregate_stats, calculate_streak,
 };
 
@@ -71,13 +71,17 @@ fn recent_window_covers_a_fixed_span_ending_on_the_last_known_day() {
         },
     ];
 
-    let streak = calculate_streak(&days, StreakMode::Daily, &[]);
+    let ring = HeatRing {
+        window: HeatWindow::Fixed(30),
+        ..HeatRing::default()
+    };
+    let streak = calculate_streak(&days, StreakMode::Daily, &[], &ring);
     let window = streak.recent_daily_counts;
 
-    assert_eq!(window.len(), RECENT_WINDOW_DAYS);
+    assert_eq!(window.len(), 30);
     assert_eq!(window.last().copied(), Some(2));
-    assert_eq!(window[RECENT_WINDOW_DAYS - 2], 0);
-    assert_eq!(window[RECENT_WINDOW_DAYS - 3], 4);
+    assert_eq!(window[28], 0);
+    assert_eq!(window[27], 4);
     assert_eq!(
         window.iter().sum::<u32>(),
         6,
@@ -86,8 +90,50 @@ fn recent_window_covers_a_fixed_span_ending_on_the_last_known_day() {
 }
 
 #[test]
+fn streak_window_covers_the_streak_so_every_node_is_an_active_day() {
+    let days = (1u32..=6)
+        .map(|day| ContributionDay {
+            date: format!("2026-05-{day:02}"),
+            count: if day == 3 { 0 } else { day },
+        })
+        .collect::<Vec<_>>();
+
+    let streak = calculate_streak(&days, StreakMode::Daily, &[], &HeatRing::default());
+
+    assert_eq!(streak.current, 3);
+    assert_eq!(
+        streak.recent_daily_counts,
+        vec![4, 5, 6],
+        "the default window tracks the streak itself"
+    );
+}
+
+#[test]
+fn streak_window_stops_at_the_configured_limit() {
+    let days = (1u32..=20)
+        .map(|day| ContributionDay {
+            date: format!("2026-05-{day:02}"),
+            count: day,
+        })
+        .collect::<Vec<_>>();
+    let ring = HeatRing {
+        limit: Some(5),
+        ..HeatRing::default()
+    };
+
+    let streak = calculate_streak(&days, StreakMode::Daily, &[], &ring);
+
+    assert_eq!(streak.current, 20, "the streak itself is not truncated");
+    assert_eq!(
+        streak.recent_daily_counts,
+        vec![16, 17, 18, 19, 20],
+        "the ring keeps the most recent days up to the limit"
+    );
+}
+
+#[test]
 fn recent_window_is_empty_without_contributions() {
-    let streak = calculate_streak(&[], StreakMode::Daily, &[]);
+    let streak = calculate_streak(&[], StreakMode::Daily, &[], &HeatRing::default());
 
     assert!(streak.recent_daily_counts.is_empty());
 }
@@ -145,7 +191,7 @@ fn daily_streak_handles_gaps() {
         },
     ];
 
-    let streak = calculate_streak(&days, StreakMode::Daily, &[]);
+    let streak = calculate_streak(&days, StreakMode::Daily, &[], &HeatRing::default());
 
     assert_eq!(streak.longest, 2);
     assert_eq!(streak.current, 2);
@@ -176,7 +222,7 @@ fn weekly_streak_deduplicates_active_days_in_same_week_bucket() {
         },
     ];
 
-    let streak = calculate_streak(&days, StreakMode::Weekly, &[]);
+    let streak = calculate_streak(&days, StreakMode::Weekly, &[], &HeatRing::default());
     let expected_start = ordinal_to_date(previous_week);
     let expected_end = ordinal_to_date(current_week);
 
@@ -209,7 +255,7 @@ fn weekly_streak_breaks_when_middle_week_has_no_contributions() {
         },
     ];
 
-    let streak = calculate_streak(&days, StreakMode::Weekly, &[]);
+    let streak = calculate_streak(&days, StreakMode::Weekly, &[], &HeatRing::default());
     let expected_current_week = ordinal_to_date(current_week);
 
     assert_eq!(streak.longest, 1);
@@ -245,7 +291,7 @@ fn daily_streak_keeps_yesterday_streak_when_today_is_empty() {
         },
     ];
 
-    let streak = calculate_streak(&days, StreakMode::Daily, &[]);
+    let streak = calculate_streak(&days, StreakMode::Daily, &[], &HeatRing::default());
 
     assert_eq!(streak.current, 2);
     assert_eq!(streak.longest, 2);
@@ -256,7 +302,7 @@ fn daily_streak_keeps_yesterday_streak_when_today_is_empty() {
 
 #[test]
 fn streak_handles_empty_contributions() {
-    let streak = calculate_streak(&[], StreakMode::Daily, &[]);
+    let streak = calculate_streak(&[], StreakMode::Daily, &[], &HeatRing::default());
 
     assert_eq!(streak.current, 0);
     assert_eq!(streak.longest, 0);
@@ -286,7 +332,7 @@ fn daily_streak_ignores_far_future_days_and_keeps_tomorrow_with_activity() {
         },
     ];
 
-    let streak = calculate_streak(&contributions, StreakMode::Daily, &[]);
+    let streak = calculate_streak(&contributions, StreakMode::Daily, &[], &HeatRing::default());
     let expected_start = ordinal_to_date(today - 1);
     let expected_end = ordinal_to_date(today + 1);
 
@@ -365,7 +411,7 @@ fn coding_activity_merges_ignores_limits_and_masks_total() {
 #[test]
 fn card_data_dashboard_reuses_shared_aggregations() {
     let data = fixture_data();
-    let card = aggregate_card_data(&data, OutputKind::Dashboard);
+    let card = aggregate_card_data(&data, OutputKind::Dashboard, &HeatRing::default());
 
     match card {
         github_personal_stats_core::CardData::Dashboard {

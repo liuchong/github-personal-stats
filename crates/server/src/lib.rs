@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig, ImageSize,
-    LanguageScope, OutputKind, RepositoryLanguage, UserStats, aggregate_card_data,
+    CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig, HeatRing,
+    ImageSize, LanguageScope, OutputKind, RepositoryLanguage, UserStats, aggregate_card_data,
     aggregate_coding_activity, parse_output_kind, render_card, render_readme_section,
     workspace_info,
 };
@@ -68,8 +68,12 @@ fn render_api(query: &str, fallback: OutputKind) -> HttpResponse {
         author_emails: Vec::new(),
         hidden_languages: Vec::new(),
         min_repo_language_share_basis_points: 0,
+        heat_ring: HeatRing::default(),
     };
-    let body = render_card(&aggregate_card_data(&sample_github_data(), card), &config);
+    let body = render_card(
+        &aggregate_card_data(&sample_github_data(), card, &config.heat_ring),
+        &config,
+    );
 
     HttpResponse {
         status: 200,

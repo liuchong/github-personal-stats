@@ -1,8 +1,6 @@
-use crate::{ContributionDay, GithubData, OutputKind, RepositoryLanguage};
+use crate::{ContributionDay, GithubData, HeatRing, HeatWindow, OutputKind, RepositoryLanguage};
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-pub const RECENT_WINDOW_DAYS: usize = 30;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AggregatedStats {
@@ -42,6 +40,8 @@ pub struct StreakSummary {
     pub longest_end: Option<String>,
     pub mode: StreakMode,
     pub recent_daily_counts: Vec<u32>,
+    pub window_start: Option<String>,
+    pub window_end: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,12 +73,12 @@ pub enum CardData {
     },
 }
 
-pub fn aggregate_card_data(data: &GithubData, output: OutputKind) -> CardData {
+pub fn aggregate_card_data(data: &GithubData, output: OutputKind, ring: &HeatRing) -> CardData {
     match output {
         OutputKind::Dashboard => CardData::Dashboard {
             stats: aggregate_stats(data),
             languages: aggregate_languages(&data.languages, 8),
-            streak: calculate_streak(&data.contributions, StreakMode::Daily, &[]),
+            streak: calculate_streak(&data.contributions, StreakMode::Daily, &[], ring),
         },
         OutputKind::Stats => CardData::Stats(aggregate_stats(data)),
         OutputKind::Languages => CardData::Languages(aggregate_languages(&data.languages, 8)),
@@ -86,6 +86,7 @@ pub fn aggregate_card_data(data: &GithubData, output: OutputKind) -> CardData {
             &data.contributions,
             StreakMode::Daily,
             &[],
+            ring,
         )),
         OutputKind::Activity | OutputKind::ActivityReadme => {
             CardData::Activity(aggregate_coding_activity(Vec::new(), 8, &[], false))
@@ -153,6 +154,7 @@ pub fn calculate_streak(
     contributions: &[ContributionDay],
     mode: StreakMode,
     excluded_weekdays: &[u8],
+    ring: &HeatRing,
 ) -> StreakSummary {
     let days = normalized_days(contributions);
     let total_contributions = days.iter().map(|(_, count)| u64::from(*count)).sum();
@@ -161,6 +163,15 @@ pub fn calculate_streak(
         StreakMode::Daily => daily_streak(&days, excluded_weekdays),
         StreakMode::Weekly => weekly_streak(&days),
     };
+
+    let anchor = match ring.window {
+        HeatWindow::Streak => current.end,
+        HeatWindow::Fixed(_) => days.last().map(|(ordinal, _)| *ordinal),
+    };
+    let span = ring.span(current.length);
+    let window = daily_window(&days, anchor, span);
+    let window_end = anchor.filter(|_| !window.is_empty());
+    let window_start = window_end.map(|ordinal| ordinal - (window.len() as i32 - 1));
 
     StreakSummary {
         current: current.length,
@@ -172,19 +183,25 @@ pub fn calculate_streak(
         longest_start: longest.start.map(date_from_ordinal),
         longest_end: longest.end.map(date_from_ordinal),
         mode,
-        recent_daily_counts: recent_daily_counts(&days, RECENT_WINDOW_DAYS),
+        recent_daily_counts: window,
+        window_start: window_start.map(date_from_ordinal),
+        window_end: window_end.map(date_from_ordinal),
     }
 }
 
-fn recent_daily_counts(days: &[(i32, u32)], window: usize) -> Vec<u32> {
-    let Some((last_ordinal, _)) = days.last() else {
+fn daily_window(days: &[(i32, u32)], anchor: Option<i32>, window: u32) -> Vec<u32> {
+    let Some(last_ordinal) = anchor else {
         return Vec::new();
     };
+    if window == 0 {
+        return Vec::new();
+    }
+
     let first_ordinal = last_ordinal - (window as i32 - 1);
-    let mut counts = vec![0; window];
+    let mut counts = vec![0; window as usize];
 
     for (ordinal, count) in days {
-        if *ordinal >= first_ordinal {
+        if *ordinal >= first_ordinal && *ordinal <= last_ordinal {
             counts[(ordinal - first_ordinal) as usize] = *count;
         }
     }
