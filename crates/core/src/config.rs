@@ -132,7 +132,7 @@ impl Default for HeatRing {
             shape: HeatShape::Segmented,
             threshold: DEFAULT_HEAT_THRESHOLD,
             scale: HeatScale::Linear,
-            ramp: HeatRamp::Named("heat-orange"),
+            ramp: HeatRamp::default(),
             label: None,
         }
     }

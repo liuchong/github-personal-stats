@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.2.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -128,13 +128,13 @@ options: --user your-github-login --theme dark
 GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
 
 ```yaml
-      - uses: liuchong/github-personal-stats@v1.2.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.2.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg
@@ -355,9 +355,9 @@ cargo run -p github-personal-stats -- generate \
 Preview individual cards:
 
 ```sh
-cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --card stats --width 520 --height 260 --output examples/stats.svg
-cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --card languages --width 520 --height 260 --output examples/languages.svg
-cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --card streak --width 1000 --height 220 --output examples/streak.svg
+cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card stats --width 520 --height 260 --output examples/stats.svg
+cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card languages --width 520 --height 260 --output examples/languages.svg
+cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card streak --width 1000 --height 220 --output examples/streak.svg
 ```
 
 `examples/showcase.json` covers 30 days with a few quiet ones, which is what a fixed window needs to show. `examples/streak-117.json` carries a 117 day streak, which is where the ring changes geometry:

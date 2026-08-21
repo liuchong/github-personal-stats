@@ -191,3 +191,15 @@ Rendering the first dark card exposed a worse bug than the missing flag. A heat 
 The dark quiet stop lands at OkLab lightness 0.32, just above the dark ring track at 0.292, so a barely-active day stays distinguishable from a gap without competing with the busy end. A first attempt at 0.40 read as a brown donut.
 
 Light output is byte-identical: the twenty-three existing ring illustrations regenerated with no diff, and the snapshots did not move. Three illustrations were added, including the same ring on a dark card with the light stops forced, which shows the inverted reading the derivation exists to prevent. Documented `--theme` with the `<picture>` recipe for following a reader's colour scheme, and recorded that a single self-switching SVG is not a substitute, since GitHub serves the file as a proxied image.
+
+## [2026-08-21] release | 1.2.1 closes the gaps that publishing would have frozen
+
+Preparing the crates.io release turned up three things worth fixing before any of them became permanent.
+
+`HeatRamp` was a public enum whose `stops` looked up its own variant in the palette table and called `expect` on the result. Every path inside the crate was safe, since only `parse` built one, but a library consumer could write `HeatRamp::Named("nonsense")` and reach the panic — and once published, closing that hole would have been a breaking change. The ramp is now an opaque struct wrapping a private enum, so `parse` and `Default` are the only ways in and every value resolves. The palette table holds byte triples parsed by a `const fn`, which moves a malformed stop from a colour nobody notices to a build failure. Output is unchanged: the twenty-three ring illustrations regenerated with an identical set of colours.
+
+The SVG root declared `role="img"` with nothing to name it, so assistive technology could only announce an unlabelled image. Every card now opens with a `<title>` naming what it shows and the profile it belongs to, referenced by `aria-labelledby`. This is the whole of the snapshot and illustration diff.
+
+The manifest still read `version = "0.1.0"` after three tagged releases, so `info` on a `v1.2.0` binary reported `0.1.0`. Versions now track the tags. Added the description, keywords, categories, and per-crate README that crates.io needs, and moved the core dependency into `[workspace.dependencies]` so its version lives beside the one it must match. Packaging `core` verifies; `cli` and `server` cannot resolve until `core` is on the index, which fixes the publish order rather than being a problem to solve.
+
+Generating the per-card examples straight from the documented commands showed they omitted `--user`, so three of the four committed samples were titled for `octo` while sharing showcase data with a dashboard titled for `showcase`. The commands now pass the user the fixture describes.

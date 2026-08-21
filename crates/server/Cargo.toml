@@ -1,10 +1,16 @@
 [package]
 name = "github-personal-stats-server"
+description = "HTTP service that renders GitHub profile statistics cards as SVG on request."
+categories = ["web-programming::http-server"]
+readme = "README.md"
+authors.workspace = true
 edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
 license-file.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-github-personal-stats-core = { path = "../core" }
+github-personal-stats-core.workspace = true

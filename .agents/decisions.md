@@ -41,3 +41,17 @@ Consequences: Option order stops mattering, since `--theme` and `--heat-color` n
 
 Review Date: 2026-11-21
 
+
+## AD-0004: A Published Type Cannot Be Allowed To Describe A State It Cannot Serve
+
+Date: 2026-08-21
+
+Status: Accepted
+
+Context: `HeatRamp` was a public enum carrying a palette name, and `stops` resolved that name against the palette table with `expect`. Nothing inside the crate could reach the panic, because `parse` was the only constructor and it only names entries that exist. Publishing to crates.io changes that calculation: the variants become part of the public surface, so `HeatRamp::Named("nonsense")` becomes something a consumer can write, and the panic becomes reachable through documented API. Narrowing it afterwards would be a breaking change.
+
+Decision: Make the ramp opaque — a struct wrapping a private enum — so `parse` and `Default` remain the only ways to obtain one and every value resolves for every theme. Store colours as byte triples inside the variants rather than names to look up or strings to parse, and read the palette table through a `const fn` so a malformed stop fails the build.
+
+Consequences: The panic is unreachable by construction rather than by convention, and the private enum leaves the representation free to change without a major version. Callers lose the ability to match on a ramp's kind, which nothing needed. A wider point holds for the rest of the surface as the crate goes out: an unreachable panic guarded only by which constructors happen to exist is a panic waiting for a consumer.
+
+Review Date: 2026-11-21

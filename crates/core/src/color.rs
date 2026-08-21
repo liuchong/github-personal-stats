@@ -2,24 +2,93 @@ use crate::{GithubStatsError, Theme};
 
 pub const HEAT_RAMP_STEPS: usize = 4;
 
-const NAMED_RAMPS: [(&str, [&str; HEAT_RAMP_STEPS]); 6] = [
-    ("heat-orange", ["#ffe3ad", "#ffc65c", "#ffa726", "#fb8c00"]),
-    ("github-blue", ["#cfe0fa", "#8fbdf2", "#3b82d6", "#0b69d4"]),
-    ("forest", ["#d3ecd5", "#9fd6a6", "#4caf67", "#2e7d32"]),
-    ("violet", ["#e5dbf7", "#c0a7ee", "#8a63d2", "#6532c4"]),
-    ("crimson", ["#fbd7db", "#f3a3ac", "#e0576c", "#c62443"]),
-    ("graphite", ["#e4e8ee", "#c2c9d3", "#8b95a3", "#5b6572"]),
+type Rgb = [u8; 3];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NamedRamp {
+    name: &'static str,
+    stops: [Rgb; HEAT_RAMP_STEPS],
+}
+
+const HEAT_ORANGE: NamedRamp = NamedRamp {
+    name: "heat-orange",
+    stops: [
+        rgb("#ffe3ad"),
+        rgb("#ffc65c"),
+        rgb("#ffa726"),
+        rgb("#fb8c00"),
+    ],
+};
+
+const NAMED_RAMPS: [&NamedRamp; 6] = [
+    &HEAT_ORANGE,
+    &NamedRamp {
+        name: "github-blue",
+        stops: [
+            rgb("#cfe0fa"),
+            rgb("#8fbdf2"),
+            rgb("#3b82d6"),
+            rgb("#0b69d4"),
+        ],
+    },
+    &NamedRamp {
+        name: "forest",
+        stops: [
+            rgb("#d3ecd5"),
+            rgb("#9fd6a6"),
+            rgb("#4caf67"),
+            rgb("#2e7d32"),
+        ],
+    },
+    &NamedRamp {
+        name: "violet",
+        stops: [
+            rgb("#e5dbf7"),
+            rgb("#c0a7ee"),
+            rgb("#8a63d2"),
+            rgb("#6532c4"),
+        ],
+    },
+    &NamedRamp {
+        name: "crimson",
+        stops: [
+            rgb("#fbd7db"),
+            rgb("#f3a3ac"),
+            rgb("#e0576c"),
+            rgb("#c62443"),
+        ],
+    },
+    &NamedRamp {
+        name: "graphite",
+        stops: [
+            rgb("#e4e8ee"),
+            rgb("#c2c9d3"),
+            rgb("#8b95a3"),
+            rgb("#5b6572"),
+        ],
+    },
 ];
 
 pub fn named_ramps() -> impl Iterator<Item = &'static str> {
-    NAMED_RAMPS.iter().map(|(name, _)| *name)
+    NAMED_RAMPS.iter().map(|ramp| ramp.name)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HeatRamp {
-    Named(&'static str),
-    Seed(String),
-    Explicit(Vec<String>),
+/// A ramp is opaque so a caller cannot describe one that does not resolve. The
+/// only ways in are `parse` and `default`, and both produce stops for any theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeatRamp(Ramp);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ramp {
+    Named(&'static NamedRamp),
+    Seed(Rgb),
+    Explicit([Rgb; HEAT_RAMP_STEPS]),
+}
+
+impl Default for HeatRamp {
+    fn default() -> Self {
+        Self(Ramp::Named(&HEAT_ORANGE))
+    }
 }
 
 impl HeatRamp {
@@ -29,29 +98,25 @@ impl HeatRamp {
             return Err(invalid("a colour name, one hex value, or four hex values"));
         }
 
-        if let Some((name, _)) = NAMED_RAMPS
+        if let Some(named) = NAMED_RAMPS
             .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case(trimmed))
+            .find(|ramp| ramp.name.eq_ignore_ascii_case(trimmed))
         {
-            return Ok(Self::Named(name));
+            return Ok(Self(Ramp::Named(named)));
         }
 
         let stops = trimmed
             .split(',')
             .map(str::trim)
             .filter(|stop| !stop.is_empty())
-            .collect::<Vec<_>>();
+            .map(parse_hex)
+            .collect::<Result<Vec<_>, _>>()?;
 
         match stops.len() {
-            1 => {
-                parse_hex(stops[0])?;
-                Ok(Self::Seed(normalize_hex(stops[0])))
-            }
-            HEAT_RAMP_STEPS => stops
-                .into_iter()
-                .map(|stop| parse_hex(stop).map(|_| normalize_hex(stop)))
-                .collect::<Result<Vec<_>, _>>()
-                .map(Self::Explicit),
+            1 => Ok(Self(Ramp::Seed(stops[0]))),
+            HEAT_RAMP_STEPS => Ok(Self(Ramp::Explicit([
+                stops[0], stops[1], stops[2], stops[3],
+            ]))),
             _ => Err(invalid(
                 "expected a colour name, one hex value, or four comma separated hex values",
             )),
@@ -59,28 +124,16 @@ impl HeatRamp {
     }
 
     pub fn stops(&self, theme: Theme) -> Vec<String> {
-        match self {
-            Self::Explicit(stops) => stops.clone(),
-            Self::Named(name) => {
-                let light = NAMED_RAMPS
-                    .iter()
-                    .find(|(candidate, _)| candidate == name)
-                    .map(|(_, ramp)| ramp)
-                    .expect("named ramps are constructed from the table");
-                match theme {
-                    Theme::Dark => {
-                        derive_dark(parse_hex(light[HEAT_RAMP_STEPS - 1]).unwrap_or_default())
-                    }
-                    _ => light.iter().map(|stop| (*stop).to_owned()).collect(),
-                }
-            }
-            Self::Seed(seed) => {
-                let channels = parse_hex(seed).unwrap_or_default();
-                match theme {
-                    Theme::Dark => derive_dark(channels),
-                    _ => derive_light(channels),
-                }
-            }
+        match self.0 {
+            Ramp::Explicit(stops) => stops.iter().copied().map(to_hex).collect(),
+            Ramp::Named(named) => match theme {
+                Theme::Dark => derive_dark(named.stops[HEAT_RAMP_STEPS - 1]),
+                _ => named.stops.iter().copied().map(to_hex).collect(),
+            },
+            Ramp::Seed(seed) => match theme {
+                Theme::Dark => derive_dark(seed),
+                _ => derive_light(seed),
+            },
         }
     }
 }
@@ -88,8 +141,8 @@ impl HeatRamp {
 /// Walks from a light tint down to the seed so the quiet end recedes into a
 /// light background. Interpolating towards white in sRGB drains the hue out of
 /// the middle stops, so the walk happens in OkLab.
-fn derive_light(seed: [f64; 3]) -> Vec<String> {
-    let (lightness, a, b) = to_oklab(seed);
+fn derive_light(seed: Rgb) -> Vec<String> {
+    let (lightness, a, b) = to_oklab(unit(seed));
     let chroma = a.hypot(b);
     let hue = b.atan2(a);
     let quietest = lightness.max(0.55) + (1.0 - lightness.max(0.55)) * 0.82;
@@ -105,8 +158,8 @@ fn derive_light(seed: [f64; 3]) -> Vec<String> {
 const DARK_QUIET_LIGHTNESS: f64 = 0.32;
 const DARK_BUSY_LIGHTNESS: f64 = 0.82;
 
-fn derive_dark(seed: [f64; 3]) -> Vec<String> {
-    let (lightness, a, b) = to_oklab(seed);
+fn derive_dark(seed: Rgb) -> Vec<String> {
+    let (lightness, a, b) = to_oklab(unit(seed));
     let chroma = a.hypot(b);
     let hue = b.atan2(a);
 
@@ -131,11 +184,11 @@ fn ramp_between(
             let progress = index as f64 / (HEAT_RAMP_STEPS - 1) as f64;
             let step_lightness = quiet_lightness + (busy_lightness - quiet_lightness) * progress;
             let step_chroma = chroma * (quiet_chroma_share + (1.0 - quiet_chroma_share) * progress);
-            to_hex(from_oklab(
+            to_hex(quantize(from_oklab(
                 step_lightness,
                 step_chroma * hue.cos(),
                 step_chroma * hue.sin(),
-            ))
+            )))
         })
         .collect()
 }
@@ -147,7 +200,7 @@ fn invalid(message: &str) -> GithubStatsError {
     }
 }
 
-fn parse_hex(value: &str) -> Result<[f64; 3], GithubStatsError> {
+fn parse_hex(value: &str) -> Result<Rgb, GithubStatsError> {
     let digits = value.strip_prefix('#').unwrap_or(value);
     if digits.len() != 6 || !digits.chars().all(|char| char.is_ascii_hexdigit()) {
         return Err(invalid("hex values must look like #rrggbb"));
@@ -155,26 +208,43 @@ fn parse_hex(value: &str) -> Result<[f64; 3], GithubStatsError> {
 
     let channel = |start: usize| {
         u8::from_str_radix(&digits[start..start + 2], 16)
-            .map(|value| f64::from(value) / 255.0)
             .map_err(|_| invalid("hex values must look like #rrggbb"))
     };
 
     Ok([channel(0)?, channel(2)?, channel(4)?])
 }
 
-fn normalize_hex(value: &str) -> String {
-    let digits = value.strip_prefix('#').unwrap_or(value);
-    format!("#{}", digits.to_ascii_lowercase())
+/// The palette table is written as hex so it stays readable, and parsed at
+/// compile time so a typo in a stop is a build failure rather than a colour
+/// nobody notices.
+const fn rgb(hex: &str) -> Rgb {
+    let digits = hex.as_bytes();
+    [byte_at(digits, 1), byte_at(digits, 3), byte_at(digits, 5)]
 }
 
-fn to_hex(channels: [f64; 3]) -> String {
-    let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
-    format!(
-        "#{:02x}{:02x}{:02x}",
-        byte(channels[0]),
-        byte(channels[1]),
-        byte(channels[2])
-    )
+const fn byte_at(digits: &[u8], index: usize) -> u8 {
+    nibble(digits[index]) * 16 + nibble(digits[index + 1])
+}
+
+const fn nibble(digit: u8) -> u8 {
+    match digit {
+        b'0'..=b'9' => digit - b'0',
+        b'a'..=b'f' => digit - b'a' + 10,
+        b'A'..=b'F' => digit - b'A' + 10,
+        _ => panic!("palette stops must look like #rrggbb"),
+    }
+}
+
+fn unit(channels: Rgb) -> [f64; 3] {
+    channels.map(|channel| f64::from(channel) / 255.0)
+}
+
+fn to_hex(channels: Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", channels[0], channels[1], channels[2])
+}
+
+fn quantize(channels: [f64; 3]) -> Rgb {
+    channels.map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
 fn to_linear(value: f64) -> f64 {

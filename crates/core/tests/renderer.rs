@@ -39,6 +39,42 @@ fn stats_renderer_matches_snapshot() {
 }
 
 #[test]
+fn every_card_names_itself_so_a_screen_reader_can_describe_it() {
+    let config = GithubStatsConfig::new("octo").unwrap();
+    let data = fixture_data();
+    let named = [
+        (OutputKind::Dashboard, "GitHub profile summary for octo"),
+        (OutputKind::Stats, "GitHub stats for octo"),
+        (OutputKind::Languages, "Top languages for octo"),
+        (OutputKind::Streak, "Contribution streak for octo"),
+    ];
+
+    for (kind, expected) in named {
+        let card = aggregate_card_data(&data, kind, &HeatRing::default());
+        let svg = render_card(&card, &config);
+
+        assert!(
+            svg.contains(r#"role="img" aria-labelledby="gps-title""#),
+            "{kind:?} left role=img without an accessible name"
+        );
+        assert!(
+            svg.contains(&format!(r#"<title id="gps-title">{expected}</title>"#)),
+            "{kind:?} did not describe itself as {expected}"
+        );
+    }
+}
+
+#[test]
+fn a_username_carrying_markup_cannot_break_out_of_the_title() {
+    let config = GithubStatsConfig::new("a&b<script>").unwrap();
+    let card = aggregate_card_data(&fixture_data(), OutputKind::Stats, &HeatRing::default());
+    let svg = render_card(&card, &config);
+
+    assert!(svg.contains("GitHub stats for a&amp;b&lt;script&gt;"));
+    assert!(!svg.contains("<script>"));
+}
+
+#[test]
 fn renderer_sets_fixed_svg_dimensions() {
     let config = GithubStatsConfig::new("octo")
         .unwrap()
