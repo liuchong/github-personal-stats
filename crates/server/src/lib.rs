@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig, HeatRing,
-    ImageSize, LanguageScope, OutputKind, RepositoryLanguage, Theme, UserStats,
+    CardSelection, CodingActivityEntry, ContributionDay, GithubData, GithubProfile,
+    GithubStatsConfig, ImageSize, OutputKind, RepositoryLanguage, Theme, UserStats,
     aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
     render_readme_section, workspace_info,
 };
@@ -51,27 +51,19 @@ fn render_api(query: &str, fallback: OutputKind) -> HttpResponse {
     let height = query_value(query, "height")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(420);
-    let username = query_value(query, "username").unwrap_or_else(|| "octo".to_owned());
-    let size = ImageSize::new(width, height).unwrap_or(ImageSize {
-        width: 1000,
-        height: 420,
-    });
-    let config = GithubStatsConfig {
-        username,
-        token_env: "GITHUB_TOKEN".to_owned(),
-        cards: github_personal_stats_core::CardSelection {
-            outputs: vec![card],
-        },
-        size,
-        theme: query_value(query, "theme")
-            .and_then(|value| Theme::parse(&value).ok())
-            .unwrap_or_default(),
-        language_scope: LanguageScope::Owned,
-        author_emails: Vec::new(),
-        hidden_languages: Vec::new(),
-        min_repo_language_share_basis_points: 0,
-        heat_ring: HeatRing::default(),
+    let username = query_value(query, "username")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "octo".to_owned());
+    let Ok(mut config) = GithubStatsConfig::new(username) else {
+        return text_response(400, "username is required");
     };
+    config.cards = CardSelection {
+        outputs: vec![card],
+    };
+    config.size = ImageSize::new(width, height).unwrap_or(config.size);
+    config.theme = query_value(query, "theme")
+        .and_then(|value| Theme::parse(&value).ok())
+        .unwrap_or_default();
     let body = render_card(
         &aggregate_card_data(&sample_github_data(), card, &config.heat_ring),
         &config,

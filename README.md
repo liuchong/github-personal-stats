@@ -13,6 +13,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 - One default dashboard for stats, language share, total contributions, current streak, and longest streak.
 - Optional individual cards when you want a custom README layout.
 - A heat ring that shows each day of your streak, configurable down to its window, shape, scale, palette, and centre label.
+- Panels that report what you choose: which stats rows, how many languages, and which figures sit beside the ring.
 - Light, dark, and transparent themes, so a profile can follow the reader's colour scheme.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.

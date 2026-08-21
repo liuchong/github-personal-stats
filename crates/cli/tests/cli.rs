@@ -131,6 +131,67 @@ fn cli_renders_each_theme_and_refuses_an_unknown_one() {
 }
 
 #[test]
+fn cli_configures_panel_content_and_refuses_a_list_it_cannot_draw() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    let output = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-panels.svg",
+        std::process::id()
+    ));
+    let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--stat-rows",
+            "reviews,repos",
+            "--language-rows",
+            "2",
+            "--streak-sides",
+            "active,current",
+            "--output",
+            output.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    let svg = fs::read_to_string(&output).unwrap();
+    assert!(svg.contains(">Reviews<"));
+    assert!(svg.contains(">Contributed To<"));
+    assert!(svg.contains(">Active Days<"));
+    assert!(!svg.contains(">Total Stars<"));
+    assert!(!svg.contains(">Total Contributions<"));
+    let _ = fs::remove_file(output);
+
+    for (option, value, expected) in [
+        ("--stat-rows", "stars,stars", "stars is listed twice"),
+        ("--stat-rows", "starz", "unknown metric starz"),
+        ("--streak-sides", "total", "expected two metrics"),
+        ("--language-rows", "9", "expected a row count from 1 to 8"),
+    ] {
+        let refused = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args([
+                "generate",
+                "--fixture",
+                fixture.to_str().unwrap(),
+                option,
+                value,
+            ])
+            .output()
+            .unwrap();
+
+        assert!(!refused.status.success(), "{option} {value} should fail");
+        assert!(
+            String::from_utf8(refused.stderr)
+                .unwrap()
+                .contains(expected),
+            "{option} {value} should explain: {expected}"
+        );
+    }
+}
+
+#[test]
 fn cli_reports_unsupported_command() {
     let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .arg("unknown")

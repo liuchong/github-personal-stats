@@ -1,6 +1,7 @@
 use crate::{
     AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing,
-    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StreakSummary, Theme,
+    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StatMetric, StreakMetric,
+    StreakSummary, Theme,
 };
 
 const FONT_STACK: &str =
@@ -15,7 +16,6 @@ const NARROW_WIDTH: u32 = 440;
 const TITLE_ID: &str = "gps-title";
 
 const GUTTER: u32 = 24;
-const LANGUAGE_ROWS: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
@@ -93,10 +93,8 @@ pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
             languages,
             streak,
         } => render_dashboard(stats, languages, streak, config, &theme, &title),
-        CardData::Stats(stats) => render_stats_card(stats, &config.size, &theme, &title),
-        CardData::Languages(languages) => {
-            render_languages_card(languages, &config.size, &theme, &title)
-        }
+        CardData::Stats(stats) => render_stats_card(stats, config, &theme, &title),
+        CardData::Languages(languages) => render_languages_card(languages, config, &theme, &title),
         CardData::Streak(streak) => render_streak_card(streak, config, &theme, &title),
         CardData::Wakatime(summary) => render_wakatime_card(summary, &config.size, &theme, &title),
         CardData::Status { state } => render_status_card(state, &config.size, &theme, &title),
@@ -172,40 +170,48 @@ fn render_dashboard(
         title,
         format!(
             "{}{}{}{}{}",
-            stats_section(stats_area, stats, theme),
+            stats_section(stats_area, stats, theme, &config.stat_rows),
             vertical_rule(pad + column + GUTTER / 2, pad + 2, pad + top_height, theme),
-            languages_section(languages_area, languages, theme),
+            languages_section(languages_area, languages, theme, config.language_rows),
             horizontal_rule(pad, size.width - pad, split, theme),
-            streak_section(streak_area, streak, theme, &config.heat_ring),
+            streak_section(
+                streak_area,
+                streak,
+                theme,
+                &config.heat_ring,
+                config.streak_sides,
+            ),
         ),
     )
 }
 
 fn render_stats_card(
     stats: &AggregatedStats,
-    size: &ImageSize,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
 ) -> String {
+    let size = &config.size;
     svg_root(
         size,
         theme,
         title,
-        stats_section(card_area(size), stats, theme),
+        stats_section(card_area(size), stats, theme, &config.stat_rows),
     )
 }
 
 fn render_languages_card(
     languages: &[LanguageShare],
-    size: &ImageSize,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
 ) -> String {
+    let size = &config.size;
     svg_root(
         size,
         theme,
         title,
-        languages_section(card_area(size), languages, theme),
+        languages_section(card_area(size), languages, theme, config.language_rows),
     )
 }
 
@@ -220,7 +226,13 @@ fn render_streak_card(
         size,
         theme,
         title,
-        streak_section(card_area(size), streak, theme, &config.heat_ring),
+        streak_section(
+            card_area(size),
+            streak,
+            theme,
+            &config.heat_ring,
+            config.streak_sides,
+        ),
     )
 }
 
@@ -279,37 +291,34 @@ fn svg_root(size: &ImageSize, theme: &RenderTheme, title: &str, body: String) ->
     )
 }
 
-fn stats_section(area: Rect, stats: &AggregatedStats, theme: &RenderTheme) -> String {
+fn stats_section(
+    area: Rect,
+    stats: &AggregatedStats,
+    theme: &RenderTheme,
+    metrics: &[StatMetric],
+) -> String {
     let radius = (area.width / 12).clamp(20, 38);
     let ring_cx = area.right().saturating_sub(radius + 10);
     let ring_cy = area.y + 34 + area.height.saturating_sub(34) / 2 - 10;
     let value_x = ring_cx.saturating_sub(radius + 30);
-    let step = (area.height.saturating_sub(58) / 4).clamp(20, 30);
+    let step = (area.height.saturating_sub(58) / metrics.len().max(1) as u32).clamp(20, 30);
 
-    let rows = [
-        ("Total Stars", stats.total_stars, IconKind::Star),
-        ("Commits", stats.total_commits, IconKind::Commit),
-        (
-            "Pull Requests",
-            stats.total_pull_requests,
-            IconKind::PullRequest,
-        ),
-        ("Issues", stats.total_issues, IconKind::Issue),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (label, value, icon_kind))| {
-        stat_row(
-            area.x,
-            area.y + 54 + index as u32 * step,
-            value_x,
-            label,
-            value,
-            icon_kind,
-            theme,
-        )
-    })
-    .collect::<String>();
+    let rows = metrics
+        .iter()
+        .enumerate()
+        .map(|(index, metric)| {
+            let (label, value, icon_kind) = stat_metric(*metric, stats);
+            stat_row(
+                area.x,
+                area.y + 54 + index as u32 * step,
+                value_x,
+                label,
+                value,
+                icon_kind,
+                theme,
+            )
+        })
+        .collect::<String>();
 
     format!(
         "{}{}{}",
@@ -317,6 +326,21 @@ fn stats_section(area: Rect, stats: &AggregatedStats, theme: &RenderTheme) -> St
         rows,
         rank_ring(ring_cx, ring_cy, radius, stats, theme),
     )
+}
+
+fn stat_metric(metric: StatMetric, stats: &AggregatedStats) -> (&'static str, u64, IconKind) {
+    match metric {
+        StatMetric::Stars => ("Total Stars", stats.total_stars, IconKind::Star),
+        StatMetric::Commits => ("Commits", stats.total_commits, IconKind::Commit),
+        StatMetric::PullRequests => (
+            "Pull Requests",
+            stats.total_pull_requests,
+            IconKind::PullRequest,
+        ),
+        StatMetric::Issues => ("Issues", stats.total_issues, IconKind::Issue),
+        StatMetric::Reviews => ("Reviews", stats.total_reviews, IconKind::Review),
+        StatMetric::ContributedTo => ("Contributed To", stats.contributed_to, IconKind::Repository),
+    }
 }
 
 fn stat_row(
@@ -379,28 +403,45 @@ fn rank_ring(
     )
 }
 
-fn languages_section(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
+fn languages_section(
+    area: Rect,
+    languages: &[LanguageShare],
+    theme: &RenderTheme,
+    rows_wanted: usize,
+) -> String {
     let rows = if area.is_narrow() {
-        language_track_rows(area, languages, theme)
+        language_track_rows(area, languages, theme, rows_wanted)
     } else {
-        language_columns(area, languages, theme)
+        language_columns(area, languages, theme, rows_wanted)
     };
 
     format!(
         "{}{}{}",
         eyebrow(area.x, area.y + 16, "Languages", theme),
-        stacked_language_bar(area.x, area.y + 32, area.width, languages, theme),
+        stacked_language_bar(
+            area.x,
+            area.y + 32,
+            area.width,
+            languages,
+            theme,
+            rows_wanted
+        ),
         rows,
     )
 }
 
-fn language_columns(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
-    let per_column = LANGUAGE_ROWS / 2;
+fn language_columns(
+    area: Rect,
+    languages: &[LanguageShare],
+    theme: &RenderTheme,
+    rows_wanted: usize,
+) -> String {
+    let per_column = rows_wanted.div_ceil(2).max(1);
     let column = area.width.saturating_sub(GUTTER) / 2;
 
     languages
         .iter()
-        .take(LANGUAGE_ROWS)
+        .take(rows_wanted)
         .enumerate()
         .map(|(index, language)| {
             let x = area.x + (index / per_column) as u32 * (column + GUTTER);
@@ -415,18 +456,23 @@ fn language_columns(area: Rect, languages: &[LanguageShare], theme: &RenderTheme
         .collect()
 }
 
-fn language_track_rows(area: Rect, languages: &[LanguageShare], theme: &RenderTheme) -> String {
+fn language_track_rows(
+    area: Rect,
+    languages: &[LanguageShare],
+    theme: &RenderTheme,
+    rows_wanted: usize,
+) -> String {
     let name_column = (area.width * 28 / 100).clamp(90, 150);
     let track_x = area.x + name_column;
     let track_width = area
         .width
         .saturating_sub(name_column + 52)
         .max(TRACK_MINIMUM);
-    let step = (area.height.saturating_sub(56) / LANGUAGE_ROWS as u32).clamp(15, 20);
+    let step = (area.height.saturating_sub(56) / rows_wanted.max(1) as u32).clamp(15, 20);
 
     languages
         .iter()
-        .take(LANGUAGE_ROWS)
+        .take(rows_wanted)
         .enumerate()
         .map(|(index, language)| {
             let y = area.y + 56 + index as u32 * step;
@@ -457,12 +503,13 @@ fn stacked_language_bar(
     width: u32,
     languages: &[LanguageShare],
     theme: &RenderTheme,
+    rows_wanted: usize,
 ) -> String {
     let mut consumed_basis_points = 0;
     let mut previous_edge = 0;
     let mut segments = String::new();
 
-    for (index, language) in languages.iter().take(LANGUAGE_ROWS).enumerate() {
+    for (index, language) in languages.iter().take(rows_wanted).enumerate() {
         consumed_basis_points += language.percentage_basis_points;
         let edge = width * consumed_basis_points.min(10_000) / 10_000;
         segments.push_str(&format!(
@@ -494,6 +541,7 @@ fn streak_section(
     streak: &StreakSummary,
     theme: &RenderTheme,
     config: &HeatRing,
+    sides: [StreakMetric; 2],
 ) -> String {
     let column = area.width / 3;
     let compact = area.is_narrow();
@@ -507,34 +555,32 @@ fn streak_section(
     let ring_cy = area.y + if compact { 62 } else { 70 };
     let ring_cx = area.x + column + column / 2;
 
-    let total = side_metric(SideMetric {
-        x: area.x,
-        label_y,
-        value_y,
-        note_y,
-        value_size,
-        label: "Total Contributions",
-        value: format_number(streak.total_contributions),
-        unit: "",
-        note: streak
-            .current_end
-            .as_deref()
-            .map(|date| format!("through {}", format_single_date(date)))
-            .unwrap_or_default(),
+    let total = side_metric(streak_side(
+        sides[0],
+        area.x,
+        SidePlacement {
+            label_y,
+            value_y,
+            note_y,
+            value_size,
+            compact,
+        },
+        streak,
         theme,
-    });
-    let longest = side_metric(SideMetric {
-        x: area.x + column * 2,
-        label_y,
-        value_y,
-        note_y,
-        value_size,
-        label: "Longest Streak",
-        value: streak.longest.to_string(),
-        unit: "days",
-        note: date_range(&streak.longest_start, &streak.longest_end, compact),
+    ));
+    let longest = side_metric(streak_side(
+        sides[1],
+        area.x + column * 2,
+        SidePlacement {
+            label_y,
+            value_y,
+            note_y,
+            value_size,
+            compact,
+        },
+        streak,
         theme,
-    });
+    ));
 
     format!(
         "{}{}{}{}{}{}",
@@ -566,6 +612,80 @@ fn streak_section(
         ),
         longest,
     )
+}
+
+struct SidePlacement {
+    label_y: u32,
+    value_y: u32,
+    note_y: u32,
+    value_size: f32,
+    compact: bool,
+}
+
+/// Each panel reports one figure with the date range that figure actually covers,
+/// so the note never describes a span other than the number above it.
+fn streak_side<'a>(
+    metric: StreakMetric,
+    x: u32,
+    placement: SidePlacement,
+    streak: &StreakSummary,
+    theme: &'a RenderTheme,
+) -> SideMetric<'a> {
+    let (label, value, unit, note) = match metric {
+        StreakMetric::TotalContributions => (
+            "Total Contributions",
+            format_number(streak.total_contributions),
+            "",
+            streak
+                .current_end
+                .as_deref()
+                .map(|date| format!("through {}", format_single_date(date)))
+                .unwrap_or_default(),
+        ),
+        StreakMetric::LongestStreak => (
+            "Longest Streak",
+            streak.longest.to_string(),
+            "days",
+            date_range(
+                &streak.longest_start,
+                &streak.longest_end,
+                placement.compact,
+            ),
+        ),
+        StreakMetric::CurrentStreak => (
+            "Current Streak",
+            streak.current.to_string(),
+            "days",
+            date_range(
+                &streak.current_start,
+                &streak.current_end,
+                placement.compact,
+            ),
+        ),
+        StreakMetric::ActiveDays => (
+            "Active Days",
+            format_number(u64::from(streak.total_active_days)),
+            "",
+            streak
+                .current_end
+                .as_deref()
+                .map(|date| format!("through {}", format_single_date(date)))
+                .unwrap_or_default(),
+        ),
+    };
+
+    SideMetric {
+        x,
+        label_y: placement.label_y,
+        value_y: placement.value_y,
+        note_y: placement.note_y,
+        value_size: placement.value_size,
+        label,
+        value,
+        unit,
+        note,
+        theme,
+    }
 }
 
 struct SideMetric<'a> {
@@ -978,6 +1098,8 @@ enum IconKind {
     Commit,
     PullRequest,
     Issue,
+    Review,
+    Repository,
 }
 
 fn icon(kind: IconKind, x: u32, y: u32, size: u32, color: &str) -> String {
@@ -1006,6 +1128,12 @@ fn icon_markup(kind: IconKind, color: &str) -> String {
         IconKind::Issue => format!(
             r#"<circle cx="8" cy="8" r="5.7"/><path d="M8 4.9v3.4"/><circle cx="8" cy="11.1" r="0.85" fill="{color}" stroke="none"/>"#
         ),
+        IconKind::Review => {
+            r#"<rect x="2.4" y="3.2" width="11.2" height="7.6" rx="1.6"/><path d="M5.6 13.3l2.3-2.5"/><path d="M5.9 6.8l1.7 1.7 2.6-3"/>"#.to_owned()
+        }
+        IconKind::Repository => {
+            r#"<rect x="3.1" y="2.6" width="9.8" height="10.8" rx="1.5"/><path d="M6.1 2.6v6.7l1.9-1.3 1.9 1.3V2.6"/>"#.to_owned()
+        }
     }
 }
 

@@ -28,6 +28,8 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - `--theme` populates `GithubStatsConfig::theme` through the same passthrough. `HeatRing::ramp` holds a `HeatRamp` intent rather than resolved colours, so option order does not matter and one config can render both surfaces.
 - The crates are published, so the library surface is a compatibility promise: `HeatRamp` is opaque and constructed only through `parse` or `Default`, and any new public type must not be able to describe a state its methods cannot serve.
 - Workspace `version` tracks the release tags, and `info` reports it, so a bump belongs in the same commit as the release. `github-personal-stats-core` is declared once in `[workspace.dependencies]` with the version its dependents must publish against. `cli` and `server` can only be packaged after `core` reaches the index, which fixes the publish order.
+- `--stat-rows`, `--language-rows`, and `--streak-sides` populate `GithubStatsConfig` through the same `options` passthrough as the ring flags. Parsing and validation live in the builders, so the CLI, the Action, and any library caller refuse the same lists.
+- `GithubStatsConfig` is `#[non_exhaustive]`: the builders are the only way to construct one, which is what lets a later option ship as a minor release. The workspace HTTP server is the reference for that path — it mutates public fields on a builder-made value rather than writing a struct literal.
 - Two cards plus a README `<picture>` element is the supported way to follow a reader's colour scheme. A single SVG carrying its own colour-scheme query is not, because GitHub serves the file as a proxied image.
 
 ## Aggregated Field Conventions

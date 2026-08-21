@@ -41,6 +41,17 @@ Both rings encode a real measurement; neither is decoration.
 - The rank ring closes in proportion to the account's ranking percentile, so a top-1% account draws an almost complete circle. `rank_for_stats` returns that percentile in basis points alongside the label, since the label is only a coarse band of the same number.
 - The current streak ring is a closed heat ring over `StreakSummary::recent_daily_counts`, shaded along the configured ramp by each day's contribution volume, with zero-contribution days left on the neutral `track`. The ring has no gap and no flame; continuity and intensity come from the shading. When the window is empty the ring degrades to a plain track circle.
 
+## Panel Content Contract
+
+`GithubStatsConfig` owns what each panel reports; the renderer owns how it reads. A metric name on the command line is a stable identifier, and the label drawn beside it is copy the renderer may reword.
+
+- Every figure a panel can report is already aggregated. `--stat-rows` reaches all six of `AggregatedStats`, and `--streak-sides` reaches the total, longest, current, and active-day figures on `StreakSummary`. Adding a metric means naming an existing field, not fetching more.
+- A panel's note dates the figure above it. `longest` and `current` carry their own ranges; `total` and `active` say how current they are. A panel must never caption one figure with another figure's span.
+- Row spacing divides the space the panel has by the rows asked for, clamped to a floor that keeps two rows from touching and a ceiling that stops four rows drifting apart. Layout keys on the configured count, not the count that arrived, so a profile with fewer languages than rows keeps the layout its neighbours have.
+- The stacked language bar covers exactly the rows the list shows. What is left of the width stays as visible track, which is what tells a reader the list is a top slice rather than the whole picture.
+- Metric lists are ordered and refuse an empty list, an unknown name, or a repeat. A panel drawing the same figure twice is a typo, and silently collapsing it would hide the typo.
+- Every stats row draws its own icon, so no two rows share a glyph.
+
 ## Heat Ring Contract
 
 `config::HeatRing` owns every ring choice, and `aggregation` owns the window it describes. The renderer never decides how many days to draw.
