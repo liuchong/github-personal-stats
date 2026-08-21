@@ -1,4 +1,4 @@
-use crate::{GithubStatsError, OutputKind, parse_output_kind};
+use crate::{GithubStatsError, HeatRamp, OutputKind, parse_output_kind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageSize {
@@ -50,6 +50,28 @@ pub enum LanguageScope {
     Authored,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Theme {
+    #[default]
+    Light,
+    Dark,
+    Transparent,
+}
+
+impl Theme {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "light" | "default" => Ok(Self::Light),
+            "dark" => Ok(Self::Dark),
+            "transparent" => Ok(Self::Transparent),
+            _ => Err(GithubStatsError::InvalidConfig {
+                field: "theme",
+                message: "expected light, dark, or transparent".to_owned(),
+            }),
+        }
+    }
+}
+
 pub const DEFAULT_HEAT_THRESHOLD: u32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +103,7 @@ pub struct HeatRing {
     pub shape: HeatShape,
     pub threshold: u32,
     pub scale: HeatScale,
-    pub ramp: Vec<String>,
+    pub ramp: HeatRamp,
     pub label: Option<String>,
 }
 
@@ -110,7 +132,7 @@ impl Default for HeatRing {
             shape: HeatShape::Segmented,
             threshold: DEFAULT_HEAT_THRESHOLD,
             scale: HeatScale::Linear,
-            ramp: crate::parse_heat_ramp("heat-orange").expect("built-in ramp"),
+            ramp: HeatRamp::Named("heat-orange"),
             label: None,
         }
     }
@@ -122,7 +144,7 @@ pub struct GithubStatsConfig {
     pub token_env: String,
     pub cards: CardSelection,
     pub size: ImageSize,
-    pub theme: String,
+    pub theme: Theme,
     pub language_scope: LanguageScope,
     pub author_emails: Vec<String>,
     pub hidden_languages: Vec<String>,
@@ -150,7 +172,7 @@ impl GithubStatsConfig {
                 width: 1000,
                 height: 420,
             },
-            theme: "default".to_owned(),
+            theme: Theme::Light,
             language_scope: LanguageScope::Owned,
             author_emails: Vec::new(),
             hidden_languages: Vec::new(),
@@ -166,6 +188,11 @@ impl GithubStatsConfig {
 
     pub fn with_size(mut self, width: u32, height: u32) -> Result<Self, GithubStatsError> {
         self.size = ImageSize::new(width, height)?;
+        Ok(self)
+    }
+
+    pub fn with_theme(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.theme = Theme::parse(value)?;
         Ok(self)
     }
 
@@ -277,7 +304,7 @@ impl GithubStatsConfig {
     }
 
     pub fn with_heat_color(mut self, value: &str) -> Result<Self, GithubStatsError> {
-        self.heat_ring.ramp = crate::parse_heat_ramp(value)?;
+        self.heat_ring.ramp = HeatRamp::parse(value)?;
         Ok(self)
     }
 

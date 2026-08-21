@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    CardData, ContributionDay, GithubStatsConfig, HeatRing, StreakMode, calculate_streak,
-    parse_heat_ramp, render_card,
+    CardData, ContributionDay, GithubStatsConfig, HeatRamp, HeatRing, StreakMode, Theme,
+    calculate_streak, render_card,
 };
 
 const TICK: &str = r#"stroke-width="3.6" stroke-linecap="round""#;
@@ -244,7 +244,7 @@ fn a_quantile_scale_spreads_a_heavy_tail_across_the_whole_ramp() {
         40,
         |offset| if offset % 13 == 0 { 60 } else { offset % 3 + 1 },
     );
-    let ramp = parse_heat_ramp("heat-orange").unwrap();
+    let ramp = HeatRamp::parse("heat-orange").unwrap().stops(Theme::Light);
     let shades = |svg: &str| {
         ramp.iter()
             .filter(|stop| svg.contains(stop.as_str()))
@@ -277,7 +277,7 @@ fn a_named_palette_repaints_the_ring() {
     let svg = render(
         &streak_days(13, |offset| offset % 4 + 1),
         HeatRing {
-            ramp: parse_heat_ramp("github-blue").unwrap(),
+            ramp: HeatRamp::parse("github-blue").unwrap(),
             ..HeatRing::default()
         },
     );
@@ -289,45 +289,65 @@ fn a_named_palette_repaints_the_ring() {
 #[test]
 fn heat_orange_stays_the_default() {
     assert_eq!(
-        HeatRing::default().ramp,
+        HeatRing::default().ramp.stops(Theme::Light),
         vec!["#ffe3ad", "#ffc65c", "#ffa726", "#fb8c00"]
     );
 }
 
 #[test]
-fn one_colour_derives_a_ramp_that_only_deepens() {
-    let ramp = parse_heat_ramp("#fb8c00").unwrap();
+fn one_colour_derives_a_ramp_that_only_deepens_on_a_light_card() {
+    let ramp = HeatRamp::parse("#fb8c00").unwrap().stops(Theme::Light);
 
     assert_eq!(ramp.len(), 4);
     assert_eq!(ramp.last().map(String::as_str), Some("#fb8c00"));
-    let luminance = ramp
-        .iter()
+    assert!(
+        brightness(&ramp).windows(2).all(|pair| pair[0] > pair[1]),
+        "each stop must be darker than the one before it, got {ramp:?}"
+    );
+}
+
+#[test]
+fn a_dark_card_brightens_towards_the_busy_end_instead() {
+    for palette in ["heat-orange", "#fb8c00"] {
+        let ramp = HeatRamp::parse(palette).unwrap().stops(Theme::Dark);
+
+        assert_eq!(ramp.len(), 4);
+        assert!(
+            brightness(&ramp).windows(2).all(|pair| pair[0] < pair[1]),
+            "{palette} must climb towards its busiest stop on dark, got {ramp:?}"
+        );
+    }
+}
+
+#[test]
+fn four_colours_are_taken_verbatim_on_every_theme() {
+    let ramp = HeatRamp::parse("#111111, #222222,#333333 , #444444").unwrap();
+
+    for theme in [Theme::Light, Theme::Dark, Theme::Transparent] {
+        assert_eq!(
+            ramp.stops(theme),
+            vec!["#111111", "#222222", "#333333", "#444444"]
+        );
+    }
+}
+
+#[test]
+fn a_palette_needs_a_name_one_colour_or_four() {
+    assert!(HeatRamp::parse("#111111,#222222").is_err());
+    assert!(HeatRamp::parse("mauve").is_err());
+    assert!(HeatRamp::parse("#12345").is_err());
+    assert!(HeatRamp::parse("").is_err());
+}
+
+fn brightness(ramp: &[String]) -> Vec<u32> {
+    ramp.iter()
         .map(|stop| {
             let channel = |start: usize| {
                 u32::from_str_radix(&stop[start..start + 2], 16).expect("hex channel")
             };
             channel(1) + channel(3) + channel(5)
         })
-        .collect::<Vec<_>>();
-    assert!(
-        luminance.windows(2).all(|pair| pair[0] > pair[1]),
-        "each stop must be darker than the one before it, got {luminance:?}"
-    );
-}
-
-#[test]
-fn four_colours_are_taken_verbatim() {
-    let ramp = parse_heat_ramp("#111111, #222222,#333333 , #444444").unwrap();
-
-    assert_eq!(ramp, vec!["#111111", "#222222", "#333333", "#444444"]);
-}
-
-#[test]
-fn a_palette_needs_a_name_one_colour_or_four() {
-    assert!(parse_heat_ramp("#111111,#222222").is_err());
-    assert!(parse_heat_ramp("mauve").is_err());
-    assert!(parse_heat_ramp("#12345").is_err());
-    assert!(parse_heat_ramp("").is_err());
+        .collect()
 }
 
 #[test]

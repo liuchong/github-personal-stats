@@ -1,7 +1,8 @@
 use github_personal_stats_core::{
-    AggregatedStats, CardData, CodingActivityEntry, GithubClient, GithubStatsConfig, HeatRing,
-    LanguageShare, MockGithubClient, OutputKind, StreakMode, StreakSummary, aggregate_card_data,
-    aggregate_coding_activity, render_card, render_readme_section,
+    AggregatedStats, CardData, CodingActivityEntry, GithubClient, GithubStatsConfig,
+    GithubStatsError, HeatRing, LanguageShare, MockGithubClient, OutputKind, StreakMode,
+    StreakSummary, aggregate_card_data, aggregate_coding_activity, render_card,
+    render_readme_section,
 };
 
 const FIXTURE: &str = include_str!("fixtures/github_user_data.json");
@@ -285,12 +286,14 @@ fn unparsable_dates_render_verbatim() {
 #[test]
 fn status_badge_keeps_a_legible_foreground_on_every_theme() {
     for (theme, expected) in [
-        ("default", "#ffffff"),
+        ("light", "#ffffff"),
         ("transparent", "#ffffff"),
         ("dark", "#0d1117"),
     ] {
-        let mut config = GithubStatsConfig::new("octo").unwrap();
-        config.theme = theme.to_owned();
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_theme(theme)
+            .unwrap();
 
         let svg = render_card(&CardData::Status { state: "ready" }, &config);
 
@@ -381,10 +384,14 @@ fn renderer_supports_theme_variants_and_fallback_colors() {
             percentage_basis_points: 5_000,
         },
     ]);
-    let mut dark_config = GithubStatsConfig::new("octo").unwrap();
-    dark_config.theme = "dark".to_owned();
-    let mut transparent_config = GithubStatsConfig::new("octo").unwrap();
-    transparent_config.theme = "transparent".to_owned();
+    let dark_config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_theme("dark")
+        .unwrap();
+    let transparent_config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_theme("transparent")
+        .unwrap();
 
     let dark_svg = render_card(&CardData::Stats(stats), &dark_config);
     let transparent_svg = render_card(&languages, &transparent_config);
@@ -395,6 +402,56 @@ fn renderer_supports_theme_variants_and_fallback_colors() {
     assert!(transparent_svg.contains("transparent"));
     assert!(transparent_svg.contains("#6f42c1"));
     assert!(transparent_svg.contains("#0969da"));
+}
+
+#[test]
+fn theme_names_are_checked_instead_of_falling_back_to_light() {
+    for name in ["light", "LIGHT", " dark ", "transparent", "default"] {
+        assert!(
+            GithubStatsConfig::new("octo")
+                .unwrap()
+                .with_theme(name)
+                .is_ok(),
+            "{name} must be an accepted theme"
+        );
+    }
+
+    let error = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_theme("drak")
+        .expect_err("a misspelled theme must not render as light");
+
+    assert!(matches!(
+        error,
+        GithubStatsError::InvalidConfig { field: "theme", .. }
+    ));
+}
+
+#[test]
+fn light_and_dark_cards_differ_only_by_their_palette() {
+    let light = render_card(
+        &CardData::Status { state: "ready" },
+        &GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_theme("light")
+            .unwrap(),
+    );
+    let dark = render_card(
+        &CardData::Status { state: "ready" },
+        &GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_theme("dark")
+            .unwrap(),
+    );
+
+    assert!(light.contains(r##"fill="#ffffff""##));
+    assert!(dark.contains(r##"fill="#0d1117""##));
+    assert!(!dark.contains(r##"fill="#ffffff""##));
+    assert_eq!(
+        light.matches("<text").count(),
+        dark.matches("<text").count(),
+        "a theme must repaint the card, not change what it says"
+    );
 }
 
 #[test]

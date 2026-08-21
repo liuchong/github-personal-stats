@@ -10,6 +10,7 @@ const DEFAULT_OUTPUT: &str = "profile/github-personal-stats.svg";
 const DEFAULT_USER: &str = "octo";
 const DEFAULT_WIDTH: u32 = 1000;
 const DEFAULT_HEIGHT: u32 = 420;
+const DEFAULT_THEME: &str = "light";
 const DEFAULT_TARGET: &str = "README.md";
 const DEFAULT_SECTION: &str = "activity";
 
@@ -59,6 +60,7 @@ Generate options:
   --output <path>         Where to write the card (default: {DEFAULT_OUTPUT})
   --width <pixels>        Card width (default: {DEFAULT_WIDTH})
   --height <pixels>       Card height (default: {DEFAULT_HEIGHT})
+  --theme <name>          light, dark, transparent (default: {DEFAULT_THEME})
   --fixture <path>        Read sanitized fixture JSON instead of the network
   --authored-languages    Count only repositories the profile contributed to
   --author-email <email>  Extra commit email for authorship matching, repeatable
@@ -103,6 +105,9 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(DEFAULT_HEIGHT);
     let mut config = GithubStatsConfig::new(user)?.with_size(width, height)?;
+    if let Some(value) = option_value(&args, "--theme") {
+        config = config.with_theme(&value)?;
+    }
     if option_flag(&args, "--authored-languages") {
         config = config.with_authored_languages();
     }

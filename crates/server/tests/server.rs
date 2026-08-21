@@ -20,6 +20,16 @@ fn api_endpoint_returns_dashboard_svg_with_fixed_size() {
 }
 
 #[test]
+fn api_theme_query_selects_a_palette_and_ignores_an_unknown_name() {
+    let dark = handle_request("/api?username=octo&theme=dark");
+    let unknown = handle_request("/api?username=octo&theme=drak");
+    let default = handle_request("/api?username=octo");
+
+    assert!(dark.body.contains(r##"fill="#0d1117""##));
+    assert_eq!(unknown.body, default.body);
+}
+
+#[test]
 fn api_card_route_returns_stats_svg() {
     let response = handle_request("/api/stats?username=octo");
 

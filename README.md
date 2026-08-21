@@ -13,6 +13,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 - One default dashboard for stats, language share, total contributions, current streak, and longest streak.
 - Optional individual cards when you want a custom README layout.
 - A heat ring that shows each day of your streak, configurable down to its window, shape, scale, palette, and centre label.
+- Light, dark, and transparent themes, so a profile can follow the reader's colour scheme.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.
 - Deterministic rendering backed by fixtures and snapshot tests.
@@ -41,6 +42,15 @@ Each node on the ring is one day of your current streak, shaded by that day's co
 
 The window, day limit, shape, threshold, scale, palette, and centre label are all configurable. See [Heat Ring](docs/user-guide.md#heat-ring) for the options and what each one looks like.
 
+## Themes
+
+<p align="center">
+  <img src="./docs/images/heat-ring/theme-light.svg" alt="Ring on a light card" width="150" />
+  <img src="./docs/images/heat-ring/theme-dark.svg" alt="Ring on a dark card" width="150" />
+</p>
+
+`--theme light`, `dark`, or `transparent`. The heat ramp re-anchors on a dark card so busy days stay the brightest thing in the ring. Generate one card per surface and reference both through `<picture>` to follow the reader's colour scheme; see [Themes](docs/user-guide.md#themes).
+
 ## Quick Start
 
 Use the Action from your profile repository and commit the generated dashboard back to `profile/github-personal-stats.svg`.
@@ -64,7 +74,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.1.0
+      - uses: liuchong/github-personal-stats@v1.2.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg

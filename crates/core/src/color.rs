@@ -1,4 +1,4 @@
-use crate::GithubStatsError;
+use crate::{GithubStatsError, Theme};
 
 pub const HEAT_RAMP_STEPS: usize = 4;
 
@@ -15,48 +15,122 @@ pub fn named_ramps() -> impl Iterator<Item = &'static str> {
     NAMED_RAMPS.iter().map(|(name, _)| *name)
 }
 
-pub fn parse_heat_ramp(value: &str) -> Result<Vec<String>, GithubStatsError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(invalid("a colour name, one hex value, or four hex values"));
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeatRamp {
+    Named(&'static str),
+    Seed(String),
+    Explicit(Vec<String>),
+}
+
+impl HeatRamp {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(invalid("a colour name, one hex value, or four hex values"));
+        }
+
+        if let Some((name, _)) = NAMED_RAMPS
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(trimmed))
+        {
+            return Ok(Self::Named(name));
+        }
+
+        let stops = trimmed
+            .split(',')
+            .map(str::trim)
+            .filter(|stop| !stop.is_empty())
+            .collect::<Vec<_>>();
+
+        match stops.len() {
+            1 => {
+                parse_hex(stops[0])?;
+                Ok(Self::Seed(normalize_hex(stops[0])))
+            }
+            HEAT_RAMP_STEPS => stops
+                .into_iter()
+                .map(|stop| parse_hex(stop).map(|_| normalize_hex(stop)))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::Explicit),
+            _ => Err(invalid(
+                "expected a colour name, one hex value, or four comma separated hex values",
+            )),
+        }
     }
 
-    if let Some((_, ramp)) = NAMED_RAMPS
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(trimmed))
-    {
-        return Ok(ramp.iter().map(|stop| (*stop).to_owned()).collect());
-    }
-
-    let stops = trimmed
-        .split(',')
-        .map(str::trim)
-        .filter(|stop| !stop.is_empty())
-        .collect::<Vec<_>>();
-
-    match stops.len() {
-        1 => Ok(derive_ramp(parse_hex(stops[0])?)),
-        HEAT_RAMP_STEPS => stops
-            .into_iter()
-            .map(|stop| parse_hex(stop).map(|_| normalize_hex(stop)))
-            .collect(),
-        _ => Err(invalid(
-            "expected a colour name, one hex value, or four comma separated hex values",
-        )),
+    pub fn stops(&self, theme: Theme) -> Vec<String> {
+        match self {
+            Self::Explicit(stops) => stops.clone(),
+            Self::Named(name) => {
+                let light = NAMED_RAMPS
+                    .iter()
+                    .find(|(candidate, _)| candidate == name)
+                    .map(|(_, ramp)| ramp)
+                    .expect("named ramps are constructed from the table");
+                match theme {
+                    Theme::Dark => {
+                        derive_dark(parse_hex(light[HEAT_RAMP_STEPS - 1]).unwrap_or_default())
+                    }
+                    _ => light.iter().map(|stop| (*stop).to_owned()).collect(),
+                }
+            }
+            Self::Seed(seed) => {
+                let channels = parse_hex(seed).unwrap_or_default();
+                match theme {
+                    Theme::Dark => derive_dark(channels),
+                    _ => derive_light(channels),
+                }
+            }
+        }
     }
 }
 
-fn derive_ramp(seed: [f64; 3]) -> Vec<String> {
+/// Walks from a light tint down to the seed so the quiet end recedes into a
+/// light background. Interpolating towards white in sRGB drains the hue out of
+/// the middle stops, so the walk happens in OkLab.
+fn derive_light(seed: [f64; 3]) -> Vec<String> {
     let (lightness, a, b) = to_oklab(seed);
     let chroma = a.hypot(b);
     let hue = b.atan2(a);
-    let lightest = lightness.max(0.55) + (1.0 - lightness.max(0.55)) * 0.82;
+    let quietest = lightness.max(0.55) + (1.0 - lightness.max(0.55)) * 0.82;
 
+    ramp_between(quietest, lightness, chroma, 0.28, hue)
+}
+
+/// The mirror of `derive_light`. On a dark card the quiet end has to sink
+/// towards the background and the busy end has to climb, otherwise a one-commit
+/// day outshines a fifty-commit day and the ring reads inside out. The quiet end
+/// stops just above the dark ring track so a barely-active day stays
+/// distinguishable from a gap.
+const DARK_QUIET_LIGHTNESS: f64 = 0.32;
+const DARK_BUSY_LIGHTNESS: f64 = 0.82;
+
+fn derive_dark(seed: [f64; 3]) -> Vec<String> {
+    let (lightness, a, b) = to_oklab(seed);
+    let chroma = a.hypot(b);
+    let hue = b.atan2(a);
+
+    ramp_between(
+        DARK_QUIET_LIGHTNESS,
+        lightness.max(DARK_BUSY_LIGHTNESS),
+        chroma,
+        0.34,
+        hue,
+    )
+}
+
+fn ramp_between(
+    quiet_lightness: f64,
+    busy_lightness: f64,
+    chroma: f64,
+    quiet_chroma_share: f64,
+    hue: f64,
+) -> Vec<String> {
     (0..HEAT_RAMP_STEPS)
         .map(|index| {
             let progress = index as f64 / (HEAT_RAMP_STEPS - 1) as f64;
-            let step_lightness = lightest + (lightness - lightest) * progress;
-            let step_chroma = chroma * (0.28 + 0.72 * progress);
+            let step_lightness = quiet_lightness + (busy_lightness - quiet_lightness) * progress;
+            let step_chroma = chroma * (quiet_chroma_share + (1.0 - quiet_chroma_share) * progress);
             to_hex(from_oklab(
                 step_lightness,
                 step_chroma * hue.cos(),

@@ -1,6 +1,6 @@
 use crate::{
     AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing,
-    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StreakSummary,
+    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StreakSummary, Theme,
 };
 
 const FONT_STACK: &str =
@@ -15,6 +15,7 @@ const LANGUAGE_ROWS: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
+    pub kind: Theme,
     pub background: &'static str,
     pub ink: &'static str,
     pub muted: &'static str,
@@ -25,9 +26,10 @@ pub struct RenderTheme {
 }
 
 impl RenderTheme {
-    pub fn named(name: &str) -> Self {
-        match name {
-            "dark" => Self {
+    pub fn new(theme: Theme) -> Self {
+        match theme {
+            Theme::Dark => Self {
+                kind: theme,
                 background: "#0d1117",
                 ink: "#e6edf3",
                 muted: "#8b949e",
@@ -36,7 +38,8 @@ impl RenderTheme {
                 accent: "#4493f8",
                 on_accent: "#0d1117",
             },
-            "transparent" => Self {
+            Theme::Transparent => Self {
+                kind: theme,
                 background: "transparent",
                 ink: "#1f2328",
                 muted: "#59636e",
@@ -45,7 +48,8 @@ impl RenderTheme {
                 accent: "#0969da",
                 on_accent: "#ffffff",
             },
-            _ => Self {
+            Theme::Light => Self {
+                kind: theme,
                 background: "#ffffff",
                 ink: "#15181d",
                 muted: "#656d76",
@@ -77,7 +81,7 @@ impl Rect {
 }
 
 pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
-    let theme = RenderTheme::named(&config.theme);
+    let theme = RenderTheme::new(config.theme);
     match card {
         CardData::Dashboard {
             stats,
@@ -512,6 +516,7 @@ fn streak_section(
                 compact,
                 theme,
                 config,
+                stops: config.ramp.stops(theme.kind),
             },
             streak
         ),
@@ -588,6 +593,7 @@ struct Ring<'a> {
     compact: bool,
     theme: &'a RenderTheme,
     config: &'a HeatRing,
+    stops: Vec<String>,
 }
 
 fn current_streak_ring(ring: &Ring, streak: &StreakSummary) -> String {
@@ -791,7 +797,7 @@ fn heat_levels(counts: &[u32], scale: HeatScale) -> Vec<Option<usize>> {
 
 fn level_color<'a>(level: Option<usize>, ring: &'a Ring) -> &'a str {
     level.map_or(ring.theme.track, |index| {
-        ring.config.ramp[index.min(ring.config.ramp.len() - 1)].as_str()
+        ring.stops[index.min(ring.stops.len() - 1)].as_str()
     })
 }
 

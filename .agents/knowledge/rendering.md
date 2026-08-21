@@ -30,6 +30,8 @@ Every section receives a `Rect` region and derives its own metrics from it, so t
 - `font-family` and `font-variant-numeric: tabular-nums` are declared once on the SVG root and inherited, so text elements only carry size, weight, and fill.
 - Inline icons use a fixed `16x16` viewBox and stroke-only drawings at a uniform stroke width of 1.5 with round caps and joins.
 - Themes expose `background`, `ink`, `muted`, `line`, `track`, `accent`, and `on_accent`. Content drawn on top of `accent` must use `on_accent`: the transparent theme's `background` is literally `transparent`, so reusing it silently erases foreground text.
+- `config::Theme` is a checked enum, not a name string. An unknown theme is a configuration error at the CLI and library boundary; only the HTTP server falls back to the default, matching how it treats every other unparsable query value. `RenderTheme` carries the `Theme` it resolved from in `kind`, so anything holding a palette can resolve theme-dependent colours without a second parameter.
+- A theme is a repaint, never a content change. The same card on two themes must carry the same text and the same geometry.
 
 ## Rings Carry Data
 
@@ -46,7 +48,10 @@ Both rings encode a real measurement; neither is decoration.
 - A streak window anchors on the streak's last day; a fixed window anchors on the latest known day. `window_start` and `window_end` travel on `StreakSummary` so the date line under the ring describes the ring, not the streak behind it. A limit shortens the ring without touching `current`, so `{Z}` still reports the real streak.
 - Above `threshold` days, ticks overlap into a furred edge, so the ring switches to arcs and averages days into bands of at least `MINIMUM_BAND_WIDTH`. One arc per day at streak lengths past a hundred leaves each under two pixels, which reads as alternating stripes rather than a gradient. The averaged ring therefore draws fewer bands than the days it spans; the span is what stays honest, not the band count.
 - Adjacent arcs extend past their own share so antialiasing cannot leave a seam between them. Arcs paint in window order, so a later band overpaints its neighbour's tail.
-- `heat_levels` maps a whole window at once because a quantile scale needs the distribution rather than one day against the peak. Quantile ties fall to the lighter bucket so the quietest days keep the lightest stop.
+- `heat_levels` maps a whole window at once because a quantile scale needs the distribution rather than one day against the peak. Quantile ties fall to the quieter bucket.
+- Ramp stops are ordered quiet first, busy last. On a light card quiet is also lightest, but that is a consequence of the surface, not the contract. `HeatRamp` therefore stores intent — a palette name, a seed colour, or four explicit stops — and resolves to stops against the theme at render time, so `--theme` and `--heat-color` can be given in any order.
+- A ramp encodes intensity as distance from the background, so the built-in palettes and seed derivations turn around on a dark card: the quiet end sinks to just above the ring `track` and the busy end climbs. Reusing the light stops there makes a one-commit day the brightest thing in the ring and inverts the encoding. Four explicit stops are honoured verbatim on every theme, because a caller spelling out colours has already made that call.
+- The dark quiet stop stops just above the dark `track` in OkLab lightness, so a barely-active day stays distinguishable from a gap.
 - Real contribution counts are heavy-tailed, so `linear` leaves ordinary days pale and only bursts deep. That is faithful and is the default; `sqrt` is the alternative worth reaching for when the ring looks washed out.
 - The centre label is free text over `{X}`, `{Y}`, and `{Z}`. `centre_text_size` steps the size down for longer templates so a configured label can never spill across the ring itself.
 - A fixed window is not a streak, so its caption reads `Last N Days` instead of `Current Streak`.

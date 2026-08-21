@@ -1,8 +1,8 @@
 use github_personal_stats_core::{
     CodingActivityEntry, ContributionDay, GithubData, GithubProfile, GithubStatsConfig, HeatRing,
-    ImageSize, LanguageScope, OutputKind, RepositoryLanguage, UserStats, aggregate_card_data,
-    aggregate_coding_activity, parse_output_kind, render_card, render_readme_section,
-    workspace_info,
+    ImageSize, LanguageScope, OutputKind, RepositoryLanguage, Theme, UserStats,
+    aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
+    render_readme_section, workspace_info,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +63,9 @@ fn render_api(query: &str, fallback: OutputKind) -> HttpResponse {
             outputs: vec![card],
         },
         size,
-        theme: query_value(query, "theme").unwrap_or_else(|| "default".to_owned()),
+        theme: query_value(query, "theme")
+            .and_then(|value| Theme::parse(&value).ok())
+            .unwrap_or_default(),
         language_scope: LanguageScope::Owned,
         author_emails: Vec::new(),
         hidden_languages: Vec::new(),
