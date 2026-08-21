@@ -163,3 +163,11 @@ Follow-up tidy after the configurable heat ring. `api-contracts.md` still descri
 Removed `examples/liuchong-dashboard.svg` and `examples/liuchong-dashboard-authored.svg`. Nothing referenced them, they came from real profile data that cannot be regenerated offline, and they showed the pre-refresh ring, so they misrepresented current output.
 
 Documented both preview fixtures in the user guide: the showcase set covers 30 days with quiet days, and `streak-117.json` covers the length where the ring changes geometry. Confirmed the documented regeneration commands reproduce the committed examples and that the ring sample script reproduces all 23 illustrations with no diff. The stats and languages examples had been committed at 480x200 while the guide documented 520x260; regenerating brought the files and the docs back into agreement.
+
+## [2026-08-21] cli | usage output for every command and option
+
+The CLI had no help at all, so nineteen options were discoverable only through the guide. `help`, `--help`, and `-h` now print one usage page, and they work after a command too, so `generate --help` explains itself instead of rendering. An unsupported command prints the same page beside its error rather than a bare failure.
+
+Defaults had been inline literals at their use sites, which would have let the usage text drift away from behaviour on the first change. They are now named constants that both the parser and the usage text read, and a test asserts each documented default appears.
+
+Added a drift guard that extracts every option literal the CLI parses out of its own source and asserts the usage page mentions all of them. It immediately earned its place by catching that `--help` itself was undocumented.
