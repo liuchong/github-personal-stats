@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -128,13 +128,13 @@ options: --user your-github-login --theme dark
 GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
 
 ```yaml
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.2.1
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg
