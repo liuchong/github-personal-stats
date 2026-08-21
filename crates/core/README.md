@@ -23,5 +23,11 @@ let svg = render_card(&card, &config);
 Rendering is pure: it takes aggregated data and returns a `String`, touching neither the network nor
 the filesystem, so cards can be produced from sanitized fixtures in tests via `MockGithubClient`.
 
+This crate is an implementation detail of the CLI and the GitHub Action, published because
+`github-personal-stats` depends on it by version and would not otherwise install. Its version number
+tracks the behaviour of those two, not this API: a minor release may change or remove anything here.
+Construct configuration through `GithubStatsConfig::new` and the `with_*` builders, which are the
+only supported entry point. If you depend on this crate directly, pin an exact version.
+
 Every option is documented in the
 [user guide](https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md).

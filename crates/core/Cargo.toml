@@ -1,6 +1,6 @@
 [package]
 name = "github-personal-stats-core"
-description = "Fetch GitHub profile data and render it as SVG stat, language, and contribution heat ring cards."
+description = "Implementation crate for github-personal-stats: fetches GitHub profile data and renders it as SVG stat, language, and contribution heat ring cards. No API stability promise; pin an exact version."
 categories = ["visualization"]
 readme = "README.md"
 authors.workspace = true
