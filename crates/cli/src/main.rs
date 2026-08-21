@@ -5,6 +5,14 @@ use github_personal_stats_core::{
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
+const DEFAULT_CARD: &str = "dashboard";
+const DEFAULT_OUTPUT: &str = "profile/github-personal-stats.svg";
+const DEFAULT_USER: &str = "octo";
+const DEFAULT_WIDTH: u32 = 1000;
+const DEFAULT_HEIGHT: u32 = 420;
+const DEFAULT_TARGET: &str = "README.md";
+const DEFAULT_SECTION: &str = "waka";
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     let command = if args.is_empty() {
@@ -13,27 +21,87 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.remove(0)
     };
 
+    if is_help(&command) || args.iter().any(|arg| is_help(arg)) {
+        println!("{}", usage());
+        return Ok(());
+    }
+
     match command.as_str() {
         "info" => println!("{}", workspace_info().to_json()),
         "generate" => generate(args)?,
         "update-readme" => update_readme(args)?,
-        command => return Err(format!("unsupported command: {command}").into()),
+        command => {
+            return Err(format!("unsupported command: {command}\n\n{}", usage()).into());
+        }
     }
 
     Ok(())
 }
 
+fn is_help(argument: &str) -> bool {
+    matches!(argument, "help" | "--help" | "-h")
+}
+
+fn usage() -> String {
+    format!(
+        "github-personal-stats <command> [options]
+
+Commands:
+  generate                Render a card to an SVG file
+  update-readme           Rewrite a marked section of a README
+  info                    Print workspace information as JSON
+  help, --help, -h        Print this message
+
+Generate options:
+  --user <login>          Profile to read (default: {DEFAULT_USER})
+  --card <kind>           dashboard, stats, languages, streak, wakatime, status
+                          (default: {DEFAULT_CARD})
+  --output <path>         Where to write the card (default: {DEFAULT_OUTPUT})
+  --width <pixels>        Card width (default: {DEFAULT_WIDTH})
+  --height <pixels>       Card height (default: {DEFAULT_HEIGHT})
+  --fixture <path>        Read sanitized fixture JSON instead of the network
+  --authored-languages    Count only repositories the profile contributed to
+  --author-email <email>  Extra commit email for authorship matching, repeatable
+  --hide-language <name>  Language to leave out, repeatable
+  --min-repo-language-share <percent>
+                          Ignore a language below this share of one repository
+
+Heat ring options:
+  --heat-window <streak|days>
+                          Days the ring covers (default: streak)
+  --heat-limit <days|none>
+                          Cap the ring without shortening the streak (default: none)
+  --heat-shape <shape>    segmented, ticks, arcs, bands (default: segmented)
+  --heat-threshold <days> Where segmented turns ticks into arcs (default: 100)
+  --heat-scale <scale>    linear, sqrt, log, quantile (default: linear)
+  --heat-color <palette>  heat-orange, github-blue, forest, violet, crimson,
+                          graphite, one hex value, or four hex values
+                          (default: heat-orange)
+  --heat-label <template> Ring centre text over {{X}} active days, {{Y}} window
+                          days, and {{Z}} the streak in full
+
+Update-readme options:
+  --target <path>         README to rewrite (default: {DEFAULT_TARGET})
+  --section <name>        Marker name to replace (default: {DEFAULT_SECTION})
+
+Environment:
+  GITHUB_TOKEN            Token used for live GitHub data
+
+Card aliases top-langs, top-languages, and coding-activity are accepted.
+Ring options are illustrated in docs/user-guide.md."
+    )
+}
+
 fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
-    let card = option_value(&args, "--card").unwrap_or_else(|| "dashboard".to_owned());
-    let output = option_value(&args, "--output")
-        .unwrap_or_else(|| "profile/github-personal-stats.svg".to_owned());
-    let user = option_value(&args, "--user").unwrap_or_else(|| "octo".to_owned());
+    let card = option_value(&args, "--card").unwrap_or_else(|| DEFAULT_CARD.to_owned());
+    let output = option_value(&args, "--output").unwrap_or_else(|| DEFAULT_OUTPUT.to_owned());
+    let user = option_value(&args, "--user").unwrap_or_else(|| DEFAULT_USER.to_owned());
     let width = option_value(&args, "--width")
         .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(1000);
+        .unwrap_or(DEFAULT_WIDTH);
     let height = option_value(&args, "--height")
         .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(420);
+        .unwrap_or(DEFAULT_HEIGHT);
     let mut config = GithubStatsConfig::new(user)?.with_size(width, height)?;
     if option_flag(&args, "--authored-languages") {
         config = config.with_authored_languages();
@@ -75,8 +143,8 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 
 fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let target =
-        PathBuf::from(option_value(&args, "--target").unwrap_or_else(|| "README.md".to_owned()));
-    let section = option_value(&args, "--section").unwrap_or_else(|| "waka".to_owned());
+        PathBuf::from(option_value(&args, "--target").unwrap_or_else(|| DEFAULT_TARGET.to_owned()));
+    let section = option_value(&args, "--section").unwrap_or_else(|| DEFAULT_SECTION.to_owned());
     let start = format!("<!--START_SECTION:{section}-->");
     let end = format!("<!--END_SECTION:{section}-->");
     let source = fs::read_to_string(&target)?;

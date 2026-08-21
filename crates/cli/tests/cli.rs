@@ -129,3 +129,99 @@ fn cli_reports_missing_token_for_live_generation() {
     assert!(stderr.contains("missing token environment variable GITHUB_TOKEN"));
     assert!(!target.exists());
 }
+
+#[test]
+fn cli_prints_usage_for_every_help_spelling() {
+    for arguments in [
+        vec!["help"],
+        vec!["--help"],
+        vec!["-h"],
+        vec!["generate", "--help"],
+        vec!["update-readme", "-h"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args(&arguments)
+            .output()
+            .unwrap();
+
+        assert!(output.status.success(), "{arguments:?} should succeed");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            stdout.starts_with("github-personal-stats <command> [options]"),
+            "{arguments:?} printed {stdout}"
+        );
+    }
+}
+
+#[test]
+fn cli_help_asking_does_not_render_or_rewrite_anything() {
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-help.svg",
+        std::process::id()
+    ));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .env_remove("GITHUB_TOKEN")
+        .args(["generate", "--output", target.to_str().unwrap(), "--help"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(!target.exists(), "help must not write a card");
+}
+
+#[test]
+fn cli_help_documents_every_option_it_parses() {
+    let source = include_str!("../src/main.rs");
+    let help = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .arg("help")
+        .output()
+        .unwrap();
+    let help = String::from_utf8(help.stdout).unwrap();
+
+    let mut parsed = source
+        .split('"')
+        .filter(|token| token.starts_with("--") && token.len() > 2)
+        .collect::<Vec<_>>();
+    parsed.sort_unstable();
+    parsed.dedup();
+
+    assert!(parsed.len() > 15, "found only {parsed:?}");
+    for option in parsed {
+        assert!(help.contains(option), "help is missing {option}");
+    }
+}
+
+#[test]
+fn cli_help_shows_the_defaults_the_code_uses() {
+    let help = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .arg("help")
+        .output()
+        .unwrap();
+    let help = String::from_utf8(help.stdout).unwrap();
+
+    for expected in [
+        "default: octo",
+        "default: dashboard",
+        "default: profile/github-personal-stats.svg",
+        "default: 1000",
+        "default: 420",
+        "default: README.md",
+        "default: waka",
+    ] {
+        assert!(help.contains(expected), "help is missing {expected}");
+    }
+}
+
+#[test]
+fn cli_points_an_unsupported_command_at_the_usage() {
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .arg("render-everything")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("unsupported command: render-everything"));
+    assert!(stderr.contains("Commands:"));
+}

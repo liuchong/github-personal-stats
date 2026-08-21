@@ -246,6 +246,10 @@ For a richer profile section:
 
 The aliases `top-langs`, `top-languages`, and `coding-activity` are accepted by the CLI parser.
 
+## Command Line
+
+`github-personal-stats help` lists every command and option with its default. `--help` and `-h` work in the same place, including after a command, so `generate --help` prints the same page without rendering anything. The Action takes these same options through its `options` input.
+
 ## Sizing
 
 The default dashboard size is `1000x420`.
