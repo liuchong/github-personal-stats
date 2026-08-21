@@ -14,7 +14,7 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 
 ## Current Core Contract
 
-- `GithubStatsConfig` owns username, token environment variable name, card selection, image size, and theme.
+- `GithubStatsConfig` owns username, token environment variable name, card selection, image size, theme, language scope, and the heat ring configuration.
 - `GithubGraphqlClient` performs live GraphQL fetches using the configured token environment variable.
 - `GithubClient` is a trait so aggregation tests can use deterministic fixture-backed clients.
 - `RemoteErrorKind` classifies authentication, permission, not found, rate limit, upstream unavailable, invalid response, and unsupported configuration failures.
@@ -24,9 +24,11 @@ Tests must use sanitized fixtures by default. Live network tests, if added, must
 - `--authored-languages` keeps language aggregation API-only and restricts language share to owned non-fork repositories that match contribution data, username commit author data, or configured `--author-email` supplements from the REST commits API. `--author-email` accepts comma-separated values and can be repeated. It is repository-level filtering, not per-line authorship analysis.
 - `--hide-language` removes named languages before aggregation. It accepts comma-separated values and can be repeated.
 - `--min-repo-language-share` filters languages below the configured per-repository percentage before language aggregation, using GraphQL `languages.totalSize`.
+- `--heat-window`, `--heat-limit`, `--heat-shape`, `--heat-threshold`, `--heat-scale`, `--heat-color`, and `--heat-label` populate `HeatRing`. They reach the Action through its existing `options` passthrough rather than through dedicated inputs, so the Action surface stays fixed as ring options grow.
 
 ## Aggregated Field Conventions
 
 - `AggregatedStats::rank` and `AggregatedStats::percentile_basis_points` come from the same weighted percentile model. The basis-point value is the position in the ranking distribution where lower is better, so `100` means the top 1% of accounts and the letter label is only a coarse band of that number. Renderers that show progress must therefore invert it.
-- `StreakSummary::recent_daily_counts` is a trailing window of `RECENT_WINDOW_DAYS` daily contribution volumes, oldest first, ending on the most recent day present in the calendar rather than on today. Days missing from the calendar are zero-filled so the window always has a fixed length, days older than the window are dropped, and the vector is empty only when there is no contribution data at all.
+- `StreakSummary::recent_daily_counts` is the window the heat ring draws, oldest first, sized by `HeatRing::span`. A streak window ends on the streak's last day and is therefore free of quiet days; a fixed window ends on the most recent day present in the calendar rather than on today, and zero-fills days the calendar omits. A limit shortens the window without touching `current`. The vector is empty when there is no contribution data or when the streak is zero.
+- `StreakSummary::window_start` and `window_end` bound that same window, so captions can describe the ring rather than the streak behind it. They match `current_start` and `current_end` only when the window covers the whole streak.
 - Percentage-style fields use basis points rather than floats so aggregation stays exactly comparable and snapshot output stays deterministic.
