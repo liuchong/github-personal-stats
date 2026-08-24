@@ -1,5 +1,6 @@
 pub mod http;
 pub mod panel;
+pub mod service;
 pub mod token;
 
 use std::{
@@ -10,7 +11,7 @@ use std::{
 use github_personal_stats_collect::{
     CollectError, Settings, collect,
     pulse::{self, PulseBatch},
-    save,
+    sink::Sink,
 };
 use github_personal_stats_core::summarise_activity;
 
@@ -22,17 +23,24 @@ pub const DEFAULT_INTERVAL_MINUTES: u64 = 30;
 pub struct Daemon {
     settings: Settings,
     token: String,
+    /// Where a rebuilt snapshot goes. A machine that renders its own cards writes
+    /// a file; one that feeds a data repository commits and pushes.
+    sink: Box<dyn Sink + Send + Sync>,
     /// Held while a snapshot is being rebuilt, so the timer and a request asking
     /// for the same work cannot write the file at once.
     writing: Mutex<()>,
 }
 
 impl Daemon {
-    pub fn new(settings: Settings) -> Result<Self, CollectError> {
+    pub fn new(
+        settings: Settings,
+        sink: Box<dyn Sink + Send + Sync>,
+    ) -> Result<Self, CollectError> {
         let token = token::read_or_mint(&settings.state_dir)?;
         Ok(Self {
             settings,
             token,
+            sink,
             writing: Mutex::new(()),
         })
     }
@@ -139,15 +147,16 @@ impl Daemon {
             Ok(snapshot) => snapshot,
             Err(error) => return Response::problem(500, &error.to_string()),
         };
-        if let Err(error) = save(&snapshot, &self.settings.snapshot) {
-            return Response::problem(500, &error.to_string());
-        }
+        let written = match self.sink.publish(&snapshot) {
+            Ok(path) => path,
+            Err(error) => return Response::problem(500, &error.to_string()),
+        };
         Response::json(
             200,
             format!(
                 "{{\"days\":{},\"snapshot\":{}}}\n",
                 snapshot.days.len(),
-                quote(&self.settings.snapshot.display().to_string())
+                quote(&written.display().to_string())
             ),
         )
     }

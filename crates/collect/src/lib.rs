@@ -6,6 +6,7 @@ pub mod machine;
 pub mod pulse;
 pub mod random;
 pub mod sessions;
+pub mod sink;
 
 use std::{collections::BTreeMap, fs, path::PathBuf};
 

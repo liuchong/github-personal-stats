@@ -207,6 +207,14 @@ impl ActivitySnapshot {
         }
     }
 
+    /// Whether this holds the same record as another, disregarding when it was
+    /// collected. Collecting again moves `collected_at` whether or not anything
+    /// happened, so a sink that keeps history needs a way to tell a real change
+    /// from a clock reading.
+    pub fn records_the_same_as(&self, other: &Self) -> bool {
+        self.schema == other.schema && self.machine == other.machine && self.days == other.days
+    }
+
     pub fn validate(&self) -> Result<(), GithubStatsError> {
         if self.schema > ACTIVITY_SCHEMA {
             return Err(GithubStatsError::InvalidResponse {

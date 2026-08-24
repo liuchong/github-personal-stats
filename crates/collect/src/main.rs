@@ -1,7 +1,7 @@
 use std::{env, error::Error, path::PathBuf, process};
 
 use github_personal_stats_collect::{
-    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, save,
+    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, sink,
 };
 use github_personal_stats_core::summarise_activity;
 
@@ -44,14 +44,21 @@ fn run() -> Result<(), Box<dyn Error>> {
     };
 
     let snapshot = collect(&settings)?;
-    save(&snapshot, &settings.snapshot)?;
+    let sink = sink::choose(
+        option(&args, "--sink").as_deref(),
+        &settings.snapshot,
+        option(&args, "--repo").as_deref(),
+        option(&args, "--branch").as_deref(),
+        !args.iter().any(|arg| arg == "--no-push"),
+    )?;
+    let written = sink.publish(&snapshot)?;
 
     let totals = summarise_activity(&snapshot.days);
     println!(
         "{} days recorded as {} through {}",
         snapshot.days.len(),
         snapshot.machine,
-        settings.snapshot.display()
+        written.display()
     );
     println!(
         "{} hrs {} mins of code changing by agents, across {} sessions",
@@ -112,16 +119,30 @@ Usage:
 
 Options:
   --output <path>          Snapshot to write and grow (default: {DEFAULT_SNAPSHOT})
+  --sink <file|git>        Where the snapshot goes (default: file)
+  --repo <dir>             Checkout of your data repository, for --sink git
+  --branch <name>          Branch to push to, for --sink git (default: main)
+  --no-push                Commit into the data repository without pushing
   --idle-timeout <minutes> Gap that ends a working stretch (default: {DEFAULT_IDLE_TIMEOUT_MINUTES})
-  --state <dir>            Where the machine identity lives (default: XDG state directory)
+  --state <dir>            Where the machine identity, token and pulse journal live
+                           (default: XDG state directory)
   --home <dir>             Where to look for local records (default: HOME)
   help, --help, -h         Print this text
 
 What is read:
   Cursor keeps a record of the code it wrote at
   ~/.cursor/ai-tracking/ai-code-tracking.db. Committed lines come from its own
-  per-commit scoring; generated lines, models, languages, and worked time come
-  from the timestamps on the code it produced.
+  per-commit scoring; generated lines, models, languages, and agent time come
+  from the timestamps on the code it produced. Editor time comes from the pulse
+  journal that editor plugins write through the daemon.
+
+Publishing:
+  --sink git writes snapshots/<machine>.json inside a checkout of a data
+  repository, commits it, and pushes. Each machine writes only its own file, so
+  several machines share one repository with nothing to merge: whoever renders
+  the cards adds the files up. It shells out to git, so a private repository
+  works with the credentials you already have and needs no token minted for
+  this. A run that changes nothing commits nothing.
 
 What is written:
   Counts and seconds only. No prompt text, no file paths, no project names, no

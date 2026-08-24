@@ -1,7 +1,12 @@
-use std::{env, error::Error, path::PathBuf, process, sync::Arc, thread};
+use std::{env, error::Error, fs, path::PathBuf, process, sync::Arc, thread};
 
-use github_personal_stats_collect::{DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, machine};
-use github_personal_stats_daemon::{DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, token};
+use github_personal_stats_collect::{
+    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, machine,
+    sink::{self, Sink},
+};
+use github_personal_stats_daemon::{
+    DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, token,
+};
 
 const DEFAULT_SNAPSHOT: &str = "activity.json";
 
@@ -54,10 +59,25 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{token}");
             Ok(())
         }
+        Some("install") => install(&args, &settings),
+        Some("uninstall") => uninstall(),
         Some("serve") | None => serve(&args, settings),
         Some(other) if other.starts_with('-') => serve(&args, settings),
         Some(other) => Err(format!("no command called {other:?}; try help").into()),
     }
+}
+
+fn sink_for(
+    args: &[String],
+    settings: &Settings,
+) -> Result<Box<dyn Sink + Send + Sync>, Box<dyn Error>> {
+    Ok(sink::choose(
+        option(args, "--sink").as_deref(),
+        &settings.snapshot,
+        option(args, "--repo").as_deref(),
+        option(args, "--branch").as_deref(),
+        !args.iter().any(|arg| arg == "--no-push"),
+    )?)
 }
 
 fn serve(args: &[String], settings: Settings) -> Result<(), Box<dyn Error>> {
@@ -70,7 +90,8 @@ fn serve(args: &[String], settings: Settings) -> Result<(), Box<dyn Error>> {
         24 * 60,
     )? as u64;
 
-    let daemon = Arc::new(Daemon::new(settings)?);
+    let sink = sink_for(args, &settings)?;
+    let daemon = Arc::new(Daemon::new(settings, sink)?);
     let listener = daemon.listen(&address)?;
 
     println!(
@@ -84,6 +105,100 @@ fn serve(args: &[String], settings: Settings) -> Result<(), Box<dyn Error>> {
 
     daemon.serve(&listener);
     Ok(())
+}
+
+/// Writes a service description that starts `serve` with the same options this
+/// install was given, then asks the system to run it. Paths are made absolute
+/// first: a launch agent starts in no particular directory, so a relative
+/// snapshot path would land somewhere nobody chose.
+fn install(args: &[String], settings: &Settings) -> Result<(), Box<dyn Error>> {
+    // Fail before writing anything if the options do not describe a working
+    // daemon, so an install never leaves a service that cannot start.
+    let _ = sink_for(args, settings)?;
+
+    let service = service::describe()?;
+    let program = env::current_exe()?;
+    let logs = settings.state_dir.join("daemon.log");
+    let forwarded = forwarded(args, settings)?;
+
+    fs::create_dir_all(&settings.state_dir)?;
+    service::write(&service, &service::contents(&program, &forwarded, &logs))?;
+
+    let loader = service::loader();
+    let mut command = process::Command::new(loader);
+    command.args(&service.load);
+    if !cfg!(target_os = "macos") {
+        command.arg(format!("{}.service", service::LABEL));
+    }
+    let outcome = command.output()?;
+    if !outcome.status.success() {
+        return Err(format!(
+            "wrote {} but {loader} refused it: {}",
+            service.path.display(),
+            String::from_utf8_lossy(&outcome.stderr).trim()
+        )
+        .into());
+    }
+
+    println!("installed {}", service.path.display());
+    println!("logs {}", logs.display());
+    println!("running as {} and starting at login", service::LABEL);
+    Ok(())
+}
+
+fn uninstall() -> Result<(), Box<dyn Error>> {
+    let service = service::describe()?;
+    let loader = service::loader();
+    let mut command = process::Command::new(loader);
+    command.args(&service.unload);
+    if !cfg!(target_os = "macos") {
+        command.arg(format!("{}.service", service::LABEL));
+    }
+    // A service that was never loaded is not an error worth stopping for; the
+    // file going away is what was asked for.
+    let _ = command.output();
+    service::remove(&service)?;
+
+    println!("removed {}", service.path.display());
+    Ok(())
+}
+
+/// The options to repeat in the service description, with paths resolved so they
+/// mean the same thing from a different working directory.
+fn forwarded(args: &[String], settings: &Settings) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut forwarded = vec![
+        "--state".to_owned(),
+        settings.state_dir.display().to_string(),
+        "--output".to_owned(),
+        absolute(&settings.snapshot)?.display().to_string(),
+        "--home".to_owned(),
+        settings.home.display().to_string(),
+        "--idle-timeout".to_owned(),
+        (settings.idle_timeout_seconds / 60).to_string(),
+    ];
+
+    for name in ["--addr", "--interval", "--sink", "--branch"] {
+        if let Some(value) = option(args, name) {
+            forwarded.push(name.to_owned());
+            forwarded.push(value);
+        }
+    }
+    if let Some(repo) = option(args, "--repo") {
+        forwarded.push("--repo".to_owned());
+        forwarded.push(absolute(&PathBuf::from(repo))?.display().to_string());
+    }
+    if args.iter().any(|arg| arg == "--no-push") {
+        forwarded.push("--no-push".to_owned());
+    }
+
+    Ok(forwarded)
+}
+
+fn absolute(path: &PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    if path.is_absolute() {
+        return Ok(path.clone());
+    }
+    Ok(env::current_dir()?.join(path))
 }
 
 fn option(args: &[String], name: &str) -> Option<String> {
@@ -128,13 +243,19 @@ USAGE
     github-personal-stats-daemon help
 
 COMMANDS
-    serve    Listen for pulses and rebuild the snapshot on a timer. The default.
-    token    Print where the shared secret lives, and what it is, for a plugin
-             that cannot read the file itself.
+    serve      Listen for pulses and rebuild the snapshot on a timer. The default.
+    install    Keep serve running at login, with the options given here.
+    uninstall  Stop that and remove the service description.
+    token      Print where the shared secret lives, and what it is, for a plugin
+               that cannot read the file itself.
 
 OPTIONS
     --addr <host:port>    Where to listen. Loopback only. Default {DEFAULT_ADDRESS}.
     --interval <minutes>  How often to rebuild the snapshot. Default {DEFAULT_INTERVAL_MINUTES}.
+    --sink <file|git>     Where a rebuilt snapshot goes. Default file.
+    --repo <path>         Checkout of your data repository, for the git sink.
+    --branch <name>       Branch to push to. Default main.
+    --no-push             Commit into the data repository without pushing.
     --idle-timeout <min>  A gap longer than this ends a session rather than
                           counting as time worked. Default {DEFAULT_IDLE_TIMEOUT_MINUTES}.
     --output <path>       Where to write the snapshot. Default {DEFAULT_SNAPSHOT}.

@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use github_personal_stats_collect::{Settings, pulse};
+use github_personal_stats_collect::{
+    Settings, pulse,
+    sink::{FileSink, Sink},
+};
 use github_personal_stats_daemon::{
     Daemon,
     http::{Request, Response},
@@ -18,12 +21,19 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn daemon(root: &Path) -> Daemon {
-    Daemon::new(Settings {
-        home: root.to_path_buf(),
-        state_dir: root.join("state"),
-        snapshot: root.join("activity.json"),
-        idle_timeout_seconds: 300,
-    })
+    let snapshot = root.join("activity.json");
+    let sink: Box<dyn Sink + Send + Sync> = Box::new(FileSink {
+        path: snapshot.clone(),
+    });
+    Daemon::new(
+        Settings {
+            home: root.to_path_buf(),
+            state_dir: root.join("state"),
+            snapshot,
+            idle_timeout_seconds: 300,
+        },
+        sink,
+    )
     .expect("a daemon should start against a scratch directory")
 }
 
