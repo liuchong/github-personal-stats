@@ -7,6 +7,7 @@ pub mod data;
 pub mod error;
 pub mod json;
 pub mod renderer;
+pub mod store;
 pub mod workspace;
 
 pub use activity::{

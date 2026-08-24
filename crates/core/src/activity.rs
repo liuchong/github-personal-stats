@@ -74,7 +74,7 @@ impl LineCounts {
         u32::try_from(self.attributed().saturating_mul(10_000) / changed).unwrap_or(10_000)
     }
 
-    fn absorb(&mut self, other: &Self) {
+    pub(crate) fn absorb(&mut self, other: &Self) {
         self.agent_added += other.agent_added;
         self.agent_deleted += other.agent_deleted;
         self.tab_added += other.tab_added;
@@ -112,7 +112,7 @@ impl GeneratedLines {
         u32::try_from(self.by_agent().saturating_mul(10_000) / total).unwrap_or(10_000)
     }
 
-    fn absorb(&mut self, other: &Self) {
+    pub(crate) fn absorb(&mut self, other: &Self) {
         self.human += other.human;
         for (model, lines) in &other.by_model {
             *self.by_model.entry(model.clone()).or_default() += lines;
@@ -132,7 +132,7 @@ pub struct TimeBucket {
 }
 
 impl TimeBucket {
-    fn absorb(&mut self, other: &Self) {
+    pub(crate) fn absorb(&mut self, other: &Self) {
         self.seconds += other.seconds;
         self.sessions += other.sessions;
         for (language, seconds) in &other.languages {
@@ -175,7 +175,7 @@ impl DayBucket {
             && self.generated.total() == 0
     }
 
-    fn absorb(&mut self, other: &Self) {
+    pub(crate) fn absorb(&mut self, other: &Self) {
         self.editor.absorb(&other.editor);
         self.agent.absorb(&other.agent);
         self.requests += other.requests;
@@ -383,7 +383,7 @@ fn rank(counts: BTreeMap<&str, u64>) -> Vec<(&str, u64)> {
     ranked
 }
 
-fn validate_machine(machine: &str) -> Result<(), GithubStatsError> {
+pub(crate) fn validate_machine(machine: &str) -> Result<(), GithubStatsError> {
     let usable = !machine.is_empty()
         && machine.chars().all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
@@ -398,7 +398,7 @@ fn validate_machine(machine: &str) -> Result<(), GithubStatsError> {
     })
 }
 
-fn validate_timestamp(value: &str) -> Result<(), GithubStatsError> {
+pub(crate) fn validate_timestamp(value: &str) -> Result<(), GithubStatsError> {
     if value.len() == TIMESTAMP_LENGTH && value.ends_with('Z') {
         return Ok(());
     }
@@ -407,7 +407,7 @@ fn validate_timestamp(value: &str) -> Result<(), GithubStatsError> {
     })
 }
 
-fn validate_date(value: &str) -> Result<(), GithubStatsError> {
+pub(crate) fn validate_date(value: &str) -> Result<(), GithubStatsError> {
     let shaped = value.len() == DATE_LENGTH
         && value
             .chars()
