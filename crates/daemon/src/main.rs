@@ -1,14 +1,23 @@
-use std::{env, error::Error, fs, path::PathBuf, process, sync::Arc, thread};
+use std::{
+    env, error::Error, fs, net::TcpStream, path::PathBuf, process, sync::Arc, thread,
+    time::Duration,
+};
 
 use github_personal_stats_collect::{
-    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, machine,
+    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, clock, machine,
     preferences::Preferences,
+    pulse,
     sink::{self, Sink},
 };
+use github_personal_stats_core::{parse_activity_snapshot, summarise_activity};
 use github_personal_stats_daemon::{
     DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, token,
 };
 
+/// Named relative to the state directory, not to whoever is calling. The
+/// snapshot is data the app manages, like the token and the pulse journal, and a
+/// default that moved with the working directory made every command disagree
+/// about where it lived.
 const DEFAULT_SNAPSHOT: &str = "activity.json";
 
 fn main() {
@@ -46,7 +55,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let settings = Settings {
         snapshot: chosen(&args, &prefs, "--output")
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_SNAPSHOT)),
+            .unwrap_or_else(|| state_dir.join(DEFAULT_SNAPSHOT)),
         idle_timeout_seconds: whole(
             &args,
             &prefs,
@@ -66,6 +75,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{token}");
             Ok(())
         }
+        Some("status") => status(&args, &settings, &prefs),
         Some("install") => install(&args, &settings, &prefs),
         Some("uninstall") => uninstall(),
         Some("serve") | None => serve(&args, settings, &prefs),
@@ -123,6 +133,100 @@ fn serve(args: &[String], settings: Settings, prefs: &Preferences) -> Result<(),
     Ok(())
 }
 
+/// Answers "is this working" without asking anyone to read source or list
+/// directories. Each line is a thing that can be separately broken: the daemon
+/// running, an editor reporting, and a snapshot reaching its destination. A plugin
+/// that is installed but never loaded looks exactly like one that is working,
+/// until something says which editors have actually been heard from.
+fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(), Box<dyn Error>> {
+    let address = chosen(args, prefs, "--addr").unwrap_or_else(|| DEFAULT_ADDRESS.to_owned());
+    let reachable = TcpStream::connect_timeout(
+        &address
+            .parse()
+            .map_err(|_| format!("{address} is not a host and port"))?,
+        Duration::from_millis(500),
+    )
+    .is_ok();
+
+    println!(
+        "daemon      {}",
+        if reachable {
+            format!("listening on {address}")
+        } else {
+            format!("not listening on {address}")
+        }
+    );
+
+    let token = token::path(&settings.state_dir);
+    println!(
+        "token       {}",
+        if token.exists() {
+            token.display().to_string()
+        } else {
+            format!("missing at {} — no plugin can report", token.display())
+        }
+    );
+
+    println!(
+        "publishing  {}",
+        sink_for(args, settings, prefs)?.describe()
+    );
+
+    // The journal is keyed by the local day the editor observed, which is what
+    // the timestamp's date is here too.
+    let today = clock::utc_timestamp(clock::now())[..10].to_owned();
+    let reporters = pulse::reporters(&settings.state_dir, &today);
+    if reporters.is_empty() {
+        println!("editors     none have reported today");
+        println!(
+            "            the plugin is loaded only after the editor window is reloaded,\n            \
+             and reports on its own timer once it is"
+        );
+    } else {
+        for reporter in reporters {
+            println!(
+                "editors     {} — {} pulses today, last {} ago",
+                reporter.editor,
+                reporter.pulses,
+                ago(clock::now() - reporter.last_seen)
+            );
+        }
+    }
+
+    match fs::read_to_string(&settings.snapshot)
+        .ok()
+        .and_then(|body| parse_activity_snapshot(&body).ok())
+    {
+        Some(snapshot) => {
+            let totals = summarise_activity(&snapshot.days);
+            println!(
+                "collected   {} days, agent {}, editor {}",
+                snapshot.days.len(),
+                clock_face(totals.agent.seconds),
+                clock_face(totals.editor.seconds)
+            );
+        }
+        None => println!(
+            "collected   nothing readable at {}",
+            settings.snapshot.display()
+        ),
+    }
+
+    Ok(())
+}
+
+fn ago(seconds: i64) -> String {
+    match seconds {
+        ..=90 => format!("{seconds}s"),
+        ..=5400 => format!("{}m", seconds / 60),
+        _ => format!("{}h", seconds / 3_600),
+    }
+}
+
+fn clock_face(seconds: u64) -> String {
+    format!("{}h {}m", seconds / 3_600, (seconds % 3_600) / 60)
+}
+
 /// Writes a service description that starts `serve` with the same options this
 /// install was given, then asks the system to run it. Paths are made absolute
 /// first: a launch agent starts in no particular directory, so a relative
@@ -139,7 +243,7 @@ fn install(
     let service = service::describe()?;
     let program = env::current_exe()?;
     let logs = settings.state_dir.join("daemon.log");
-    let forwarded = forwarded(args, settings, prefs)?;
+    let forwarded = forwarded(args, settings)?;
 
     fs::create_dir_all(&settings.state_dir)?;
     service::write(&service, &service::contents(&program, &forwarded, &logs))?;
@@ -185,18 +289,12 @@ fn uninstall() -> Result<(), Box<dyn Error>> {
 
 /// The options to repeat in the service description, with paths resolved so they
 /// mean the same thing from a different working directory.
-fn forwarded(
-    args: &[String],
-    settings: &Settings,
-    prefs: &Preferences,
-) -> Result<Vec<String>, Box<dyn Error>> {
+fn forwarded(args: &[String], settings: &Settings) -> Result<Vec<String>, Box<dyn Error>> {
     let mut forwarded = vec![
         "--state".to_owned(),
         settings.state_dir.display().to_string(),
         "--output".to_owned(),
-        snapshot_for_service(args, settings, prefs)?
-            .display()
-            .to_string(),
+        absolute(&settings.snapshot)?.display().to_string(),
         "--home".to_owned(),
         settings.home.display().to_string(),
         "--idle-timeout".to_owned(),
@@ -218,26 +316,6 @@ fn forwarded(
     }
 
     Ok(forwarded)
-}
-
-/// Where the service should write its snapshot. A relative path is resolved
-/// against the state directory rather than the directory the install happened to
-/// be run from: a background service has no meaningful working directory, and
-/// resolving against the caller's would bury the snapshot wherever the terminal
-/// was standing.
-fn snapshot_for_service(
-    args: &[String],
-    settings: &Settings,
-    prefs: &Preferences,
-) -> Result<PathBuf, Box<dyn Error>> {
-    if settings.snapshot.is_absolute() {
-        return Ok(settings.snapshot.clone());
-    }
-    if chosen(args, prefs, "--output").is_some() {
-        // Asked for explicitly, so honour it as written.
-        return absolute(&settings.snapshot);
-    }
-    Ok(settings.state_dir.join(&settings.snapshot))
 }
 
 fn absolute(path: &PathBuf) -> Result<PathBuf, Box<dyn Error>> {
@@ -291,6 +369,9 @@ USAGE
 
 COMMANDS
     serve      Listen for pulses and rebuild the snapshot on a timer. The default.
+    status     Say whether the daemon is up, which editors have reported today,
+               and what has been collected. Use this to tell a plugin that is
+               working from one that is merely installed.
     install    Keep serve running at login, with the options given here.
     uninstall  Stop that and remove the service description.
     token      Print where the shared secret lives, and what it is, for a plugin
@@ -309,7 +390,7 @@ OPTIONS
     without the dashes, instead of repeated. A flag overrides the file.
     --idle-timeout <min>  A gap longer than this ends a session rather than
                           counting as time worked. Default {DEFAULT_IDLE_TIMEOUT_MINUTES}.
-    --output <path>       Where to write the snapshot. Default {DEFAULT_SNAPSHOT}.
+    --output <path>       Where to write the snapshot. Default <state>/{DEFAULT_SNAPSHOT}.
     --state <path>        Where the machine id, the token and the pulse journal
                           live. Defaults to the XDG state directory.
     --home <path>         Where to look for local editor records. Defaults to HOME.

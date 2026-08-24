@@ -5,6 +5,10 @@ use github_personal_stats_collect::{
 };
 use github_personal_stats_core::summarise_activity;
 
+/// Named relative to the state directory, not to whoever is calling. The
+/// snapshot is data the app manages, like the token and the pulse journal, and a
+/// default that moved with the working directory made every command disagree
+/// about where it lived.
 const DEFAULT_SNAPSHOT: &str = "activity.json";
 
 fn main() {
@@ -42,7 +46,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let settings = Settings {
         snapshot: chosen(&args, &prefs, "--output")
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_SNAPSHOT)),
+            .unwrap_or_else(|| state_dir.join(DEFAULT_SNAPSHOT)),
         idle_timeout_seconds: idle_timeout(&args, &prefs)?,
         state_dir,
         home,
@@ -130,7 +134,7 @@ Usage:
   github-personal-stats-collect [options]
 
 Options:
-  --output <path>          Snapshot to write and grow (default: {DEFAULT_SNAPSHOT})
+  --output <path>          Snapshot to write and grow (default: <state>/{DEFAULT_SNAPSHOT})
   --sink <file|git>        Where the snapshot goes (default: file)
   --repo <dir>             Where to keep the storage checkout, for --sink git
   --origin <url>           Git remote to clone the checkout from, and push to

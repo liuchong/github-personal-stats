@@ -99,6 +99,44 @@ pub fn journal_directory(state_dir: &Path) -> PathBuf {
     state_dir.join(JOURNAL_DIR)
 }
 
+/// What the journal knows about one editor's reporting: when it was last heard
+/// from and how many pulses it has sent on a given day.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reporter {
+    pub editor: String,
+    pub pulses: usize,
+    pub last_seen: i64,
+}
+
+/// Who has reported on a day, most recently heard from first. Answering "is
+/// anything being collected" from the journal rather than from a running process
+/// means the answer survives a restart, and means a plugin that cannot reach the
+/// daemon is visibly absent rather than silently assumed present.
+pub fn reporters(state_dir: &Path, day: &str) -> Vec<Reporter> {
+    let path = journal_directory(state_dir).join(format!("{day}.jsonl"));
+    let Ok(body) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+
+    let mut seen = BTreeMap::<String, Reporter>::new();
+    for line in body.lines() {
+        let Ok(entry) = serde_json::from_str::<Entry>(line) else {
+            continue;
+        };
+        let reporter = seen.entry(entry.editor.clone()).or_insert(Reporter {
+            editor: entry.editor,
+            pulses: 0,
+            last_seen: 0,
+        });
+        reporter.pulses += 1;
+        reporter.last_seen = reporter.last_seen.max(entry.at);
+    }
+
+    let mut reporters = seen.into_values().collect::<Vec<_>>();
+    reporters.sort_by(|left, right| right.last_seen.cmp(&left.last_seen));
+    reporters
+}
+
 /// Appends a batch to the journal, one file per day and one line per pulse.
 /// Append-only because it is the record of what was observed: aggregation reads
 /// it and never rewrites it, so a crash costs at most the pulses in flight.

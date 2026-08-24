@@ -690,6 +690,32 @@ Rendered SVGs are then committed back into your profile repository with the buil
 
 Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and **not** the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And `actions/checkout` fails against a repository with no commits in it, in a way that reads like a permission problem, so publish one snapshot before judging your credentials.
 
+### Telling whether it is working
+
+An installed plugin and a working one look identical from the extensions list, so ask instead:
+
+```sh
+github-personal-stats-daemon status
+```
+
+```
+daemon      listening on 127.0.0.1:7391
+token       /Users/you/.local/state/github-personal-stats/token
+publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
+editors     vscode - 412 pulses today, last 30s ago
+collected   100 days, agent 146h 29m, editor 3h 12m
+```
+
+Each line is something that can be separately broken. `editors none have reported today` with the daemon listening means the plugin is installed but has not loaded: reload the editor window. `token missing` means no plugin can report at all, because the shared secret it needs is not there yet.
+
+Your editor's status bar says the same thing from the other side:
+
+- `$(pulse) stats` — loaded and reporting.
+- `$(pulse) stats 14` — loaded, but 14 pulses are queued because the daemon is not answering.
+- `$(circle-slash) stats` — no token found, so nothing is being sent.
+
+Editor time appears in the snapshot only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
+
 ### Publishing a snapshot
 
 With the configuration in place, no arguments are needed:

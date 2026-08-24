@@ -12,6 +12,15 @@ fn scratch(name: &str) -> PathBuf {
     directory
 }
 
+fn pulse(day: &str, at: i64, ext: &str) -> Pulse {
+    Pulse {
+        at,
+        day: day.to_owned(),
+        ext: ext.to_owned(),
+        write: true,
+    }
+}
+
 fn batch(pulses: Vec<(i64, &str)>) -> PulseBatch {
     PulseBatch {
         editor: "vscode".to_owned(),
@@ -155,4 +164,93 @@ fn the_journal_keeps_no_paths_and_no_project_names() {
         !written.contains('/'),
         "a path could have got in: {written}"
     );
+}
+
+#[test]
+fn nobody_has_reported_when_the_journal_is_empty() {
+    let root = scratch("no-reporters");
+
+    assert!(pulse::reporters(&root, "2026-08-24").is_empty());
+}
+
+#[test]
+fn an_editor_that_reported_is_named_with_what_it_sent() {
+    let root = scratch("one-reporter");
+    pulse::append(
+        &root,
+        &PulseBatch {
+            editor: "vscode".to_owned(),
+            pulses: vec![
+                pulse("2026-08-24", 1_000, "rs"),
+                pulse("2026-08-24", 1_060, "rs"),
+            ],
+        },
+    )
+    .unwrap();
+
+    let reporters = pulse::reporters(&root, "2026-08-24");
+
+    assert_eq!(reporters.len(), 1);
+    assert_eq!(reporters[0].editor, "vscode");
+    assert_eq!(reporters[0].pulses, 2);
+    assert_eq!(reporters[0].last_seen, 1_060);
+}
+
+#[test]
+fn several_editors_are_listed_by_who_was_heard_from_last() {
+    let root = scratch("many-reporters");
+    for (editor, at) in [("neovim", 1_000), ("vscode", 3_000), ("jetbrains", 2_000)] {
+        pulse::append(
+            &root,
+            &PulseBatch {
+                editor: editor.to_owned(),
+                pulses: vec![pulse("2026-08-24", at, "rs")],
+            },
+        )
+        .unwrap();
+    }
+
+    let named = pulse::reporters(&root, "2026-08-24")
+        .into_iter()
+        .map(|reporter| reporter.editor)
+        .collect::<Vec<_>>();
+
+    assert_eq!(named, ["vscode", "jetbrains", "neovim"]);
+}
+
+#[test]
+fn reporting_on_one_day_says_nothing_about_another() {
+    let root = scratch("reporters-by-day");
+    pulse::append(
+        &root,
+        &PulseBatch {
+            editor: "vscode".to_owned(),
+            pulses: vec![pulse("2026-08-23", 1_000, "rs")],
+        },
+    )
+    .unwrap();
+
+    assert_eq!(pulse::reporters(&root, "2026-08-23").len(), 1);
+    assert!(pulse::reporters(&root, "2026-08-24").is_empty());
+}
+
+#[test]
+fn a_damaged_journal_line_does_not_hide_the_rest() {
+    let root = scratch("damaged-journal");
+    pulse::append(
+        &root,
+        &PulseBatch {
+            editor: "vscode".to_owned(),
+            pulses: vec![pulse("2026-08-24", 1_000, "rs")],
+        },
+    )
+    .unwrap();
+    // A crash mid-write leaves a partial line. The record either side of it is
+    // still worth reporting.
+    let path = pulse::journal_directory(&root).join("2026-08-24.jsonl");
+    let mut body = std::fs::read_to_string(&path).unwrap();
+    body.push_str("{\"at\":not json\n");
+    std::fs::write(&path, body).unwrap();
+
+    assert_eq!(pulse::reporters(&root, "2026-08-24").len(), 1);
 }
