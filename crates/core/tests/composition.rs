@@ -118,6 +118,44 @@ fn auto_height_fits_the_content_without_clipping_it_or_padding_it_out() {
     }
 }
 
+/// The rank caption is wider than the ring it sits under, so placing the ring by
+/// its own radius alone pushed the caption into the right margin on a tile.
+#[test]
+fn the_rank_caption_stays_inside_the_margin_at_every_width() {
+    for width in [275, 300, 380, 440, 500, 700, 1000] {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_size(width, 200)
+            .unwrap();
+        let svg = card(OutputKind::Stats, &config);
+
+        let (centre, caption) = svg
+            .split("<text")
+            .skip(1)
+            .filter(|chunk| chunk.contains(r#"text-anchor="middle""#))
+            .filter_map(|chunk| {
+                let x = chunk
+                    .split_once(r#"x=""#)
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .and_then(|(value, _)| value.parse::<u32>().ok())?;
+                let body = chunk.split_once('>').map(|(_, body)| body)?;
+                Some((x, body.to_owned()))
+            })
+            .find(|(_, body)| body.starts_with("RANK"))
+            .expect("the stats card should caption its rank");
+
+        let text = caption.split('<').next().unwrap_or_default();
+        let half = (text.chars().count() as u32 * 6) / 2;
+        let margin = width - (width / 20).clamp(16, 28);
+
+        assert!(
+            centre + half <= margin,
+            "at {width}px the rank caption reaches {} past a margin at {margin}",
+            centre + half
+        );
+    }
+}
+
 #[test]
 fn auto_height_ignores_the_height_it_was_handed() {
     let (tall, _) = auto_height_card(OutputKind::Metric, 275);

@@ -442,7 +442,7 @@ fn stats_section(
     metrics: &[StatMetric],
 ) -> String {
     let radius = (area.width / 12).clamp(20, 38);
-    let ring_cx = area.right().saturating_sub(radius + 10);
+    let ring_cx = area.right().saturating_sub(rank_block_inset(stats, radius));
     let ring_cy = area.y + 34 + area.height.saturating_sub(34) / 2 - 10;
     let value_x = ring_cx.saturating_sub(radius + 30);
     let step = (area.height.saturating_sub(STAT_ROWS_TOP) / metrics.len().max(1) as u32)
@@ -530,6 +530,21 @@ fn stat_row(
     )
 }
 
+/// How far the ring's centre sits from the right edge. The caption under the ring
+/// is wider than the ring itself, so on a narrow card the ring has to come in far
+/// enough for the caption to clear the margin, not just the ring.
+fn rank_block_inset(stats: &AggregatedStats, radius: u32) -> u32 {
+    let caption_half = advance(&rank_caption(stats), RANK_CAPTION_SIZE) / 2;
+
+    (radius + 10).max(caption_half + 4)
+}
+
+fn rank_caption(stats: &AggregatedStats) -> String {
+    format!("RANK · {}", format_number(stats.score))
+}
+
+const RANK_CAPTION_SIZE: f32 = 10.0;
+
 fn rank_ring(
     cx: u32,
     cy: u32,
@@ -565,10 +580,10 @@ fn rank_ring(
         caption = text_middle(
             cx,
             cy + radius + 18,
-            10.0,
+            RANK_CAPTION_SIZE,
             400,
             theme.muted,
-            &format!("RANK · {}", format_number(stats.score)),
+            &rank_caption(stats),
         ),
     )
 }
