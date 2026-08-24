@@ -1,7 +1,7 @@
 use github_personal_stats_core::{
     CodingActivityEntry, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData,
-    GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MockGithubClient,
-    aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
+    GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING, MockGithubClient,
+    OutputKind, aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
     render_readme_section, workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
@@ -16,6 +16,16 @@ const DEFAULT_TARGET: &str = "README.md";
 const DEFAULT_SECTION: &str = "activity";
 const DEFAULT_STAT_ROWS: &str = "stars,commits,prs,issues";
 const DEFAULT_METRIC: &str = "current";
+
+/// Cards whose content decides their height. The dashboard and the status cards
+/// divide a height they are given, so fitting them to content is meaningless.
+const AUTO_HEIGHT_CARDS: [OutputKind; 5] = [
+    OutputKind::Stats,
+    OutputKind::Languages,
+    OutputKind::Streak,
+    OutputKind::Heat,
+    OutputKind::Metric,
+];
 const DEFAULT_STREAK_SIDES: &str = "total,longest";
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -63,8 +73,12 @@ Generate options:
                           activity, status (default: {DEFAULT_CARD})
   --output <path>         Where to write the card (default: {DEFAULT_OUTPUT})
   --width <pixels>        Card width (default: {DEFAULT_WIDTH})
-  --height <pixels>       Card height (default: {DEFAULT_HEIGHT})
+  --height <pixels|auto>  Card height, or auto to fit the content of a stats,
+                          languages, streak, heat, or metric card
+                          (default: {DEFAULT_HEIGHT})
   --theme <name>          light, dark, transparent (default: {DEFAULT_THEME})
+  --padding <pixels|auto> Inner margin; pin it to align tiles of differing
+                          widths (default: auto, {MAX_PADDING} at most)
   --fixture <path>        Read sanitized fixture JSON instead of the network
   --authored-languages    Count only repositories the profile contributed to
   --author-email <email>  Extra commit email for authorship matching, repeatable
@@ -115,12 +129,35 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let width = option_value(&args, "--width")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(DEFAULT_WIDTH);
-    let height = option_value(&args, "--height")
-        .and_then(|value| value.parse::<u32>().ok())
+    let requested_height = option_value(&args, "--height");
+    let auto_height = requested_height
+        .as_deref()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("auto"));
+    let height = requested_height
+        .as_deref()
+        .and_then(|value| value.trim().parse::<u32>().ok())
         .unwrap_or(DEFAULT_HEIGHT);
     let mut config = GithubStatsConfig::new(user)?.with_size(width, height)?;
+    if auto_height {
+        if !AUTO_HEIGHT_CARDS.contains(&parse_output_kind(&card)?) {
+            return Err(format!(
+                "auto height fits a card to its content, which only makes sense for {}; \
+                 give {card} an explicit height",
+                AUTO_HEIGHT_CARDS
+                    .iter()
+                    .map(|kind| kind.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .into());
+        }
+        config = config.with_auto_height();
+    }
     if let Some(value) = option_value(&args, "--theme") {
         config = config.with_theme(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--padding") {
+        config = config.with_padding(&value)?;
     }
     if option_flag(&args, "--authored-languages") {
         config = config.with_authored_languages();

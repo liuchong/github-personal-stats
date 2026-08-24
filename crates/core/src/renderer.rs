@@ -11,6 +11,10 @@ const MINIMUM_BAND_WIDTH: f64 = 4.0;
 
 const NARROW_WIDTH: u32 = 440;
 
+fn is_narrow(width: u32) -> bool {
+    width < NARROW_WIDTH
+}
+
 /// `role="img"` needs an accessible name or assistive technology announces the
 /// card as an unlabelled image, so every card names itself.
 const TITLE_ID: &str = "gps-title";
@@ -40,9 +44,35 @@ const STACKED_STREAK_HEIGHT: u32 = STACKED_RING_TOP
 /// Slack left under the lowest baseline so descenders are not clipped.
 const DESCENDER: u32 = 8;
 
-/// Baseline spacing inside a single-figure tile.
+/// Baseline spacing inside a single-figure tile. A tile centres its block, so the
+/// natural height is what leaves the note exactly one descender clear of the
+/// bottom edge: (h - block) / 2 + 12 + block + descender = h.
 const METRIC_LABEL_TO_VALUE: u32 = 38;
 const METRIC_LABEL_TO_NOTE: u32 = 60;
+const METRIC_BLOCK_HEIGHT: u32 = METRIC_LABEL_TO_NOTE + 40;
+
+/// Rows of the stats panel: where the first baseline sits and the spacing the
+/// rows reach when the card is not cramped.
+const STAT_ROWS_TOP: u32 = 58;
+const STAT_ROW_STEP: u32 = 30;
+
+/// Rows of the languages panel, as tracks on a narrow card and as two columns on
+/// a wide one.
+const LANGUAGE_TRACK_TOP: u32 = 56;
+const LANGUAGE_TRACK_STEP: u32 = 20;
+const LANGUAGE_COLUMN_TOP: u32 = 72;
+const LANGUAGE_COLUMN_STEP: u32 = 24;
+
+/// The three-column streak layout, measured to its lowest baseline. That is the
+/// ring's date line rather than the side notes, because the ring hangs lower than
+/// the figures beside it.
+const COLUMN_RING_CENTRE: u32 = 70;
+const COLUMN_RING_RADIUS: u32 = 32;
+const COLUMN_STREAK_HEIGHT: u32 =
+    COLUMN_RING_CENTRE + COLUMN_RING_RADIUS + RING_DATE_OFFSET + DESCENDER;
+
+/// A centred ring needs its two caption lines plus balanced margins.
+const RING_BLOCK_SLACK: u32 = RING_DATE_OFFSET + DESCENDER * 2 + 12;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
@@ -107,11 +137,18 @@ impl Rect {
     }
 
     fn is_narrow(self) -> bool {
-        self.width < NARROW_WIDTH
+        is_narrow(self.width)
     }
 }
 
 pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
+    if config.auto_height {
+        let mut resolved = config.clone();
+        resolved.size.height = natural_height(card, config);
+        resolved.auto_height = false;
+        return render_card(card, &resolved);
+    }
+
     let theme = RenderTheme::new(config.theme);
     let title = card_title(card, config);
     match card {
@@ -127,8 +164,12 @@ pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
         CardData::Metric { stats, streak } => {
             render_metric_card(stats, streak, config, &theme, &title)
         }
-        CardData::Activity(summary) => render_activity_card(summary, &config.size, &theme, &title),
-        CardData::Status { state } => render_status_card(state, &config.size, &theme, &title),
+        CardData::Activity(summary) => {
+            render_activity_card(summary, &config.size, padding(config), &theme, &title)
+        }
+        CardData::Status { state } => {
+            render_status_card(state, &config.size, padding(config), &theme, &title)
+        }
     }
 }
 
@@ -175,7 +216,7 @@ fn render_dashboard(
     title: &str,
 ) -> String {
     let size = &config.size;
-    let pad = padding(size.width);
+    let pad = padding(config);
     let split = size.height * 53 / 100;
     let column = size.width.saturating_sub(pad * 2 + GUTTER) / 2;
     let top_height = split.saturating_sub(pad + 16);
@@ -230,7 +271,12 @@ fn render_stats_card(
         size,
         theme,
         title,
-        stats_section(card_area(size), stats, theme, &config.stat_rows),
+        stats_section(
+            card_area(size, padding(config)),
+            stats,
+            theme,
+            &config.stat_rows,
+        ),
     )
 }
 
@@ -245,7 +291,12 @@ fn render_languages_card(
         size,
         theme,
         title,
-        languages_section(card_area(size), languages, theme, config.language_rows),
+        languages_section(
+            card_area(size, padding(config)),
+            languages,
+            theme,
+            config.language_rows,
+        ),
     )
 }
 
@@ -261,7 +312,7 @@ fn render_streak_card(
         theme,
         title,
         streak_section(
-            card_area(size),
+            card_area(size, padding(config)),
             streak,
             theme,
             &config.heat_ring,
@@ -273,6 +324,7 @@ fn render_streak_card(
 fn render_activity_card(
     summary: &CodingActivitySummary,
     size: &ImageSize,
+    pad: u32,
     theme: &RenderTheme,
     title: &str,
 ) -> String {
@@ -280,12 +332,18 @@ fn render_activity_card(
         size,
         theme,
         title,
-        activity_section(card_area(size), summary, theme),
+        activity_section(card_area(size, pad), summary, theme),
     )
 }
 
-fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme, title: &str) -> String {
-    let area = card_area(size);
+fn render_status_card(
+    state: &str,
+    size: &ImageSize,
+    pad: u32,
+    theme: &RenderTheme,
+    title: &str,
+) -> String {
+    let area = card_area(size, pad);
     svg_root(
         size,
         theme,
@@ -299,8 +357,55 @@ fn render_status_card(state: &str, size: &ImageSize, theme: &RenderTheme, title:
     )
 }
 
-fn card_area(size: &ImageSize) -> Rect {
-    let pad = padding(size.width);
+/// The height at which a card's content sits at its natural spacing: tall enough
+/// that nothing is cramped or clipped, and no taller. Every figure here is
+/// derived from the constant the matching layout measures with, so the two
+/// cannot drift apart.
+///
+/// Cards that divide a given height between sections have no natural height of
+/// their own and keep the height they were asked for; the command line refuses
+/// `auto` for those rather than quietly ignoring it.
+fn natural_height(card: &CardData, config: &GithubStatsConfig) -> u32 {
+    let pad = padding(config);
+    let width = config.size.width.saturating_sub(pad * 2);
+    let content = match card {
+        CardData::Stats(_) => STAT_ROWS_TOP + STAT_ROW_STEP * config.stat_rows.len().max(1) as u32,
+        CardData::Languages(languages) => language_natural_height(width, languages, config),
+        CardData::Streak(_) => {
+            if is_narrow(width) {
+                STACKED_STREAK_HEIGHT
+            } else {
+                COLUMN_STREAK_HEIGHT
+            }
+        }
+        CardData::Heat(_) => ring_radius_for(width) * 2 + RING_BLOCK_SLACK,
+        CardData::Metric { .. } => METRIC_BLOCK_HEIGHT,
+        _ => return config.size.height,
+    };
+
+    content + pad * 2
+}
+
+fn language_natural_height(
+    width: u32,
+    languages: &[LanguageShare],
+    config: &GithubStatsConfig,
+) -> u32 {
+    let drawn = languages.len().min(config.language_rows).max(1) as u32;
+    if is_narrow(width) {
+        LANGUAGE_TRACK_TOP + LANGUAGE_TRACK_STEP * drawn
+    } else {
+        let per_column = config.language_rows.div_ceil(2).max(1) as u32;
+        let rows = drawn.min(per_column);
+        LANGUAGE_COLUMN_TOP + LANGUAGE_COLUMN_STEP * (rows.saturating_sub(1)) + DESCENDER + 4
+    }
+}
+
+fn ring_radius_for(width: u32) -> u32 {
+    if width >= 180 { 32 } else { 26 }
+}
+
+fn card_area(size: &ImageSize, pad: u32) -> Rect {
     Rect {
         x: pad,
         y: pad,
@@ -309,8 +414,13 @@ fn card_area(size: &ImageSize) -> Rect {
     }
 }
 
-fn padding(width: u32) -> u32 {
-    (width / 20).clamp(16, 28)
+/// Padding scales with width by default, which suits a card seen on its own but
+/// misaligns tiles of different widths composed into one block, so it can also
+/// be pinned outright.
+fn padding(config: &GithubStatsConfig) -> u32 {
+    config
+        .padding
+        .unwrap_or_else(|| (config.size.width / 20).clamp(16, 28))
 }
 
 fn svg_root(size: &ImageSize, theme: &RenderTheme, title: &str, body: String) -> String {
@@ -335,7 +445,8 @@ fn stats_section(
     let ring_cx = area.right().saturating_sub(radius + 10);
     let ring_cy = area.y + 34 + area.height.saturating_sub(34) / 2 - 10;
     let value_x = ring_cx.saturating_sub(radius + 30);
-    let step = (area.height.saturating_sub(58) / metrics.len().max(1) as u32).clamp(20, 30);
+    let step = (area.height.saturating_sub(STAT_ROWS_TOP) / metrics.len().max(1) as u32)
+        .clamp(20, STAT_ROW_STEP);
 
     let rows = metrics
         .iter()
@@ -344,7 +455,7 @@ fn stats_section(
             let (label, value, icon_kind) = stat_metric(*metric, stats);
             stat_row(
                 area.x,
-                area.y + 54 + index as u32 * step,
+                area.y + STAT_ROWS_TOP - 4 + index as u32 * step,
                 value_x,
                 label,
                 value,
@@ -504,7 +615,8 @@ fn language_columns(
         .enumerate()
         .map(|(index, language)| {
             let x = area.x + (index / per_column) as u32 * (column + GUTTER);
-            let y = area.y + 72 + (index % per_column) as u32 * 24;
+            let y =
+                area.y + LANGUAGE_COLUMN_TOP + (index % per_column) as u32 * LANGUAGE_COLUMN_STEP;
             format!(
                 "{}{}{}",
                 language_dot(x + 4, y - 4, 4.0, language, index),
@@ -527,14 +639,15 @@ fn language_track_rows(
         .width
         .saturating_sub(name_column + 52)
         .max(TRACK_MINIMUM);
-    let step = (area.height.saturating_sub(56) / rows_wanted.max(1) as u32).clamp(15, 20);
+    let step = (area.height.saturating_sub(LANGUAGE_TRACK_TOP) / rows_wanted.max(1) as u32)
+        .clamp(15, LANGUAGE_TRACK_STEP);
 
     languages
         .iter()
         .take(rows_wanted)
         .enumerate()
         .map(|(index, language)| {
-            let y = area.y + 56 + index as u32 * step;
+            let y = area.y + LANGUAGE_TRACK_TOP + index as u32 * step;
             let filled = track_width * language.percentage_basis_points / 10_000;
             format!(
                 "{}{}{}{}{}",
@@ -618,8 +731,8 @@ fn render_heat_card(
     title: &str,
 ) -> String {
     let size = &config.size;
-    let area = card_area(size);
-    let radius = if area.width >= 180 { 32 } else { 26 };
+    let area = card_area(size, padding(config));
+    let radius = ring_radius_for(area.width);
     let block = radius * 2 + RING_DATE_OFFSET + 4;
     let cy = area.y + area.height.saturating_sub(block) / 2 + radius;
 
@@ -652,7 +765,7 @@ fn render_metric_card(
     title: &str,
 ) -> String {
     let size = &config.size;
-    let area = card_area(size);
+    let area = card_area(size, padding(config));
     let value_size = if area.width >= 200 { 34.0 } else { 26.0 };
     // The date note is supplementary, so a tile too short for all three lines
     // drops it rather than drawing it past the bottom edge.
@@ -776,8 +889,8 @@ fn streak_columns(
         (area.y + 52, area.y + 92, area.y + 118)
     };
     let value_size = if compact { 26.0 } else { 34.0 };
-    let ring_radius = if compact { 26 } else { 32 };
-    let ring_cy = area.y + if compact { 62 } else { 70 };
+    let ring_radius = if compact { 26 } else { COLUMN_RING_RADIUS };
+    let ring_cy = area.y + if compact { 62 } else { COLUMN_RING_CENTRE };
     let ring_cx = area.x + column + column / 2;
 
     let total = side_metric(streak_side(

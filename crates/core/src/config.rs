@@ -292,6 +292,9 @@ fn parse_metrics<T: Copy + PartialEq>(
     Ok(metrics)
 }
 
+/// Beyond this a card has more margin than content on any tile worth drawing.
+pub const MAX_PADDING: u32 = 64;
+
 pub const DEFAULT_LANGUAGE_ROWS: usize = 6;
 
 /// Aggregation keeps the top eight languages, so the panel cannot promise more
@@ -316,6 +319,13 @@ pub struct GithubStatsConfig {
     pub streak_sides: [StreakMetric; 2],
     /// Which figure a single-metric tile reports. Ignored by every other card.
     pub metric: TileMetric,
+    /// Inner margin in pixels. `None` scales it with the card width, which is
+    /// right for a card seen alone; pinning it keeps the content edges of tiles
+    /// of different widths in line when they are composed into one block.
+    pub padding: Option<u32>,
+    /// Fit the card to its content instead of to a height chosen up front.
+    /// Cards that divide a height between sections do not support this.
+    pub auto_height: bool,
 }
 
 impl GithubStatsConfig {
@@ -356,7 +366,39 @@ impl GithubStatsConfig {
                 StreakMetric::LongestStreak,
             ],
             metric: TileMetric::default(),
+            padding: None,
+            auto_height: false,
         })
+    }
+
+    pub fn with_auto_height(mut self) -> Self {
+        self.auto_height = true;
+        self
+    }
+
+    pub fn with_padding(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let value = value.trim();
+        if value.eq_ignore_ascii_case("auto") {
+            self.padding = None;
+            return Ok(self);
+        }
+
+        let pixels = value
+            .parse::<u32>()
+            .map_err(|_| GithubStatsError::InvalidConfig {
+                field: "padding",
+                message: format!("expected a pixel count or auto, got {value}"),
+            })?;
+
+        if pixels > MAX_PADDING {
+            return Err(GithubStatsError::InvalidConfig {
+                field: "padding",
+                message: format!("{pixels}px leaves too little room; the most is {MAX_PADDING}"),
+            });
+        }
+
+        self.padding = Some(pixels);
+        Ok(self)
     }
 
     pub fn with_metric(mut self, value: &str) -> Result<Self, GithubStatsError> {
