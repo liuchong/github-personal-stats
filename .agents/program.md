@@ -48,6 +48,28 @@ Each experiment must record:
 
 Do not leave experimental behavior wired into production paths unless it passes keep criteria and is converted into normal implementation with tests.
 
+## Background Processes
+
+Whatever this program starts, it also stops, inside the same turn that started it.
+
+Reviewing the documentation site is the usual temptation here: it needs a real HTTP
+root, so it is tempting to leave `python3 -m http.server` running for the next look.
+Do not. Past sessions left a stack of them on 8731–8737 plus 8899, and one heredoc
+`python3 -` survived its parent shell for ten days, orphaned onto `launchd`, until
+the machine was in swap and had to be cleaned up by hand.
+
+- Record the pid when backgrounding (`... & echo $!`) and stop that pid. Do not
+  `pkill` on a pattern and hope it matched only this program's children.
+- Reuse one port. Kill the old listener before binding it again; never step to the
+  next free port to avoid stopping the previous server.
+- Prefer no server at all. `rsvg-convert`, or a `file://` path, answers most
+  rendering questions. Start HTTP only when the question genuinely needs HTTP
+  semantics, such as the published root or relative asset paths.
+- Wrap anything that can block forever in `timeout`. A script reading from stdin
+  that ends up waiting on a socket never returns, and orphans when its shell dies.
+- Before answering, confirm nothing survived: `ps -eo pid,ppid,etime,command` and
+  `lsof -nP -iTCP -sTCP:LISTEN`, and check for children reparented to pid 1.
+
 ## Stop Conditions
 
 Stop and ask the user when:
