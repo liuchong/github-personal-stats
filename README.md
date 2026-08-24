@@ -146,7 +146,7 @@ Add `--min-repo-language-share 2` to ignore languages that make up less than 2% 
 
 ## Documentation
 
-- [Documentation site](https://liuchong.github.io/github-personal-stats/): the guide as a set of pages, with every card, ring, and palette shown.
+- [Documentation site](https://liuchong.org/github-personal-stats/): the guide as a set of pages, with every card, ring, and palette shown.
 - [User Guide](docs/user-guide.md): the same content in one file, readable on GitHub. The site is generated from it, so the two cannot disagree.
 - [Deployment Guide](deploy/README.md): HTTP server, container, and Kubernetes deployment notes.
 - [Vercel Notes](deploy/vercel/README.md): lightweight serverless deployment considerations.
