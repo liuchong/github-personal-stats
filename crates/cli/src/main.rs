@@ -15,6 +15,7 @@ const DEFAULT_THEME: &str = "light";
 const DEFAULT_TARGET: &str = "README.md";
 const DEFAULT_SECTION: &str = "activity";
 const DEFAULT_STAT_ROWS: &str = "stars,commits,prs,issues";
+const DEFAULT_METRIC: &str = "current";
 const DEFAULT_STREAK_SIDES: &str = "total,longest";
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -58,8 +59,8 @@ Commands:
 
 Generate options:
   --user <login>          Profile to read (default: {DEFAULT_USER})
-  --card <kind>           dashboard, stats, languages, streak, activity, status
-                          (default: {DEFAULT_CARD})
+  --card <kind>           dashboard, stats, languages, streak, heat, metric,
+                          activity, status (default: {DEFAULT_CARD})
   --output <path>         Where to write the card (default: {DEFAULT_OUTPUT})
   --width <pixels>        Card width (default: {DEFAULT_WIDTH})
   --height <pixels>       Card height (default: {DEFAULT_HEIGHT})
@@ -78,6 +79,8 @@ Panel content options:
   --streak-sides <left,right>
                           Figures beside the ring from total, longest, current,
                           active (default: {DEFAULT_STREAK_SIDES})
+  --metric <name>         Figure drawn by --card metric, from any of the stats
+                          or streak names above (default: {DEFAULT_METRIC})
 
 Heat ring options:
   --heat-window <streak|days>
@@ -135,6 +138,9 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
     if let Some(value) = option_value(&args, "--streak-sides") {
         config = config.with_streak_sides(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--metric") {
+        config = config.with_metric(&value)?;
     }
     if let Some(value) = option_value(&args, "--heat-window") {
         config = config.with_heat_window(&value)?;

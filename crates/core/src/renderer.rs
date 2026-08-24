@@ -1,7 +1,7 @@
 use crate::{
     AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing,
     HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StatMetric, StreakMetric,
-    StreakSummary, Theme,
+    StreakSummary, Theme, TileMetric,
 };
 
 const FONT_STACK: &str =
@@ -91,7 +91,7 @@ impl Rect {
 
 pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
     let theme = RenderTheme::new(config.theme);
-    let title = card_title(card, &config.username);
+    let title = card_title(card, config);
     match card {
         CardData::Dashboard {
             stats,
@@ -101,17 +101,24 @@ pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
         CardData::Stats(stats) => render_stats_card(stats, config, &theme, &title),
         CardData::Languages(languages) => render_languages_card(languages, config, &theme, &title),
         CardData::Streak(streak) => render_streak_card(streak, config, &theme, &title),
+        CardData::Heat(streak) => render_heat_card(streak, config, &theme, &title),
+        CardData::Metric { stats, streak } => {
+            render_metric_card(stats, streak, config, &theme, &title)
+        }
         CardData::Activity(summary) => render_activity_card(summary, &config.size, &theme, &title),
         CardData::Status { state } => render_status_card(state, &config.size, &theme, &title),
     }
 }
 
-fn card_title(card: &CardData, username: &str) -> String {
+fn card_title(card: &CardData, config: &GithubStatsConfig) -> String {
+    let username = &config.username;
     match card {
         CardData::Dashboard { .. } => format!("GitHub profile summary for {username}"),
         CardData::Stats(_) => format!("GitHub stats for {username}"),
         CardData::Languages(_) => format!("Top languages for {username}"),
         CardData::Streak(_) => format!("Contribution streak for {username}"),
+        CardData::Heat(_) => format!("Contribution heat ring for {username}"),
+        CardData::Metric { .. } => format!("{} for {username}", metric_label(config.metric)),
         CardData::Activity(_) => format!("Coding activity for {username}"),
         CardData::Status { state } => format!("Service status: {state}"),
     }
@@ -334,17 +341,42 @@ fn stats_section(
 }
 
 fn stat_metric(metric: StatMetric, stats: &AggregatedStats) -> (&'static str, u64, IconKind) {
+    let (value, icon) = match metric {
+        StatMetric::Stars => (stats.total_stars, IconKind::Star),
+        StatMetric::Commits => (stats.total_commits, IconKind::Commit),
+        StatMetric::PullRequests => (stats.total_pull_requests, IconKind::PullRequest),
+        StatMetric::Issues => (stats.total_issues, IconKind::Issue),
+        StatMetric::Reviews => (stats.total_reviews, IconKind::Review),
+        StatMetric::ContributedTo => (stats.contributed_to, IconKind::Repository),
+    };
+
+    (stat_label(metric), value, icon)
+}
+
+fn stat_label(metric: StatMetric) -> &'static str {
     match metric {
-        StatMetric::Stars => ("Total Stars", stats.total_stars, IconKind::Star),
-        StatMetric::Commits => ("Commits", stats.total_commits, IconKind::Commit),
-        StatMetric::PullRequests => (
-            "Pull Requests",
-            stats.total_pull_requests,
-            IconKind::PullRequest,
-        ),
-        StatMetric::Issues => ("Issues", stats.total_issues, IconKind::Issue),
-        StatMetric::Reviews => ("Reviews", stats.total_reviews, IconKind::Review),
-        StatMetric::ContributedTo => ("Contributed To", stats.contributed_to, IconKind::Repository),
+        StatMetric::Stars => "Total Stars",
+        StatMetric::Commits => "Commits",
+        StatMetric::PullRequests => "Pull Requests",
+        StatMetric::Issues => "Issues",
+        StatMetric::Reviews => "Reviews",
+        StatMetric::ContributedTo => "Contributed To",
+    }
+}
+
+fn streak_label(metric: StreakMetric) -> &'static str {
+    match metric {
+        StreakMetric::TotalContributions => "Total Contributions",
+        StreakMetric::LongestStreak => "Longest Streak",
+        StreakMetric::CurrentStreak => "Current Streak",
+        StreakMetric::ActiveDays => "Active Days",
+    }
+}
+
+fn metric_label(metric: TileMetric) -> &'static str {
+    match metric {
+        TileMetric::Stat(metric) => stat_label(metric),
+        TileMetric::Streak(metric) => streak_label(metric),
     }
 }
 
@@ -555,6 +587,86 @@ fn streak_section(
     streak_columns(area, streak, theme, config, sides)
 }
 
+/// The ring on its own, centred in whatever tile it is given. It carries its own
+/// caption, so it needs no section eyebrow above it.
+fn render_heat_card(
+    streak: &StreakSummary,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+    title: &str,
+) -> String {
+    let size = &config.size;
+    let area = card_area(size);
+    let radius = if area.width >= 180 { 32 } else { 26 };
+    let block = radius * 2 + RING_DATE_OFFSET + 4;
+    let cy = area.y + area.height.saturating_sub(block) / 2 + radius;
+
+    svg_root(
+        size,
+        theme,
+        title,
+        current_streak_ring(
+            &Ring {
+                cx: area.x + area.width / 2,
+                cy,
+                radius,
+                compact: area.is_narrow(),
+                theme,
+                config: &config.heat_ring,
+                stops: config.heat_ring.ramp.stops(theme.kind),
+            },
+            streak,
+        ),
+    )
+}
+
+/// A single figure, centred. Lets a README place one number wherever it likes
+/// instead of taking the whole panel it normally lives in.
+fn render_metric_card(
+    stats: &AggregatedStats,
+    streak: &StreakSummary,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+    title: &str,
+) -> String {
+    let size = &config.size;
+    let area = card_area(size);
+    let value_size = if area.width >= 200 { 34.0 } else { 26.0 };
+    let block = 60;
+    let label_y = area.y + area.height.saturating_sub(block) / 2 + 12;
+    let placement = SidePlacement {
+        label_y,
+        value_y: label_y + 38,
+        note_y: label_y + 60,
+        value_size,
+        compact: area.is_narrow(),
+        align: Align::Centre,
+    };
+    let centre = area.x + area.width / 2;
+
+    let figure = match config.metric {
+        TileMetric::Streak(metric) => streak_side(metric, centre, placement, streak, theme),
+        TileMetric::Stat(metric) => {
+            let (label, value, _) = stat_metric(metric, stats);
+            SideMetric {
+                x: centre,
+                label_y: placement.label_y,
+                value_y: placement.value_y,
+                note_y: placement.note_y,
+                value_size: placement.value_size,
+                label,
+                value: format_number(value),
+                unit: "",
+                note: String::new(),
+                theme,
+                align: placement.align,
+            }
+        }
+    };
+
+    svg_root(size, theme, title, side_metric(figure))
+}
+
 /// Three columns need room the ring's own date line already struggles for, so a
 /// narrow card gives the ring a full-width row of its own and sits the two
 /// figures side by side underneath it.
@@ -577,6 +689,7 @@ fn streak_stacked(
         note_y: figures_y + 50,
         value_size: 22.0,
         compact: true,
+        align: Align::Centre,
     };
 
     let figures = sides
@@ -585,7 +698,7 @@ fn streak_stacked(
         .map(|(index, metric)| {
             side_metric(streak_side(
                 *metric,
-                area.x + index as u32 * column,
+                area.x + index as u32 * column + column / 2,
                 SidePlacement { ..placement },
                 streak,
                 theme,
@@ -636,6 +749,7 @@ fn streak_columns(
             note_y,
             value_size,
             compact: false,
+            align: Align::Left,
         },
         streak,
         theme,
@@ -649,6 +763,7 @@ fn streak_columns(
             note_y,
             value_size,
             compact: false,
+            align: Align::Left,
         },
         streak,
         theme,
@@ -692,10 +807,71 @@ struct SidePlacement {
     note_y: u32,
     value_size: f32,
     compact: bool,
+    align: Align,
 }
 
 /// Each panel reports one figure with the date range that figure actually covers,
 /// so the note never describes a span other than the number above it.
+/// The value and its unit are one visual word, so they are centred as a group:
+/// centring the number alone would push the unit off balance.
+fn centred_metric(metric: SideMetric<'_>) -> String {
+    let label_size = if metric.value_size > 30.0 { 11.0 } else { 10.0 };
+    let value_advance = advance(&metric.value, metric.value_size);
+    let unit_advance = if metric.unit.is_empty() {
+        0
+    } else {
+        advance(metric.unit, 11.5) + 6
+    };
+    let start = metric.x.saturating_sub((value_advance + unit_advance) / 2);
+
+    let unit = if metric.unit.is_empty() {
+        String::new()
+    } else {
+        text(
+            start + value_advance + 6,
+            metric.value_y,
+            11.5,
+            metric.theme.muted,
+            metric.unit,
+        )
+    };
+
+    format!(
+        "{}{}{}{}",
+        text_middle(
+            metric.x,
+            metric.label_y,
+            label_size,
+            400,
+            metric.theme.muted,
+            metric.label
+        ),
+        text_weighted(
+            start,
+            metric.value_y,
+            metric.value_size,
+            600,
+            metric.theme.ink,
+            &metric.value
+        ),
+        unit,
+        text_middle(
+            metric.x,
+            metric.note_y,
+            label_size,
+            400,
+            metric.theme.muted,
+            &metric.note
+        ),
+    )
+}
+
+/// Rough width of a run of text at a given size. The card fonts are proportional
+/// so this only needs to be close enough to centre a short figure.
+fn advance(value: &str, size: f32) -> u32 {
+    (value.chars().count() as f32 * size * 0.6) as u32
+}
+
 fn streak_side<'a>(
     metric: StreakMetric,
     x: u32,
@@ -705,7 +881,7 @@ fn streak_side<'a>(
 ) -> SideMetric<'a> {
     let (label, value, unit, note) = match metric {
         StreakMetric::TotalContributions => (
-            "Total Contributions",
+            streak_label(metric),
             format_number(streak.total_contributions),
             "",
             streak
@@ -715,7 +891,7 @@ fn streak_side<'a>(
                 .unwrap_or_default(),
         ),
         StreakMetric::LongestStreak => (
-            "Longest Streak",
+            streak_label(metric),
             streak.longest.to_string(),
             "days",
             date_range(
@@ -725,7 +901,7 @@ fn streak_side<'a>(
             ),
         ),
         StreakMetric::CurrentStreak => (
-            "Current Streak",
+            streak_label(metric),
             streak.current.to_string(),
             "days",
             date_range(
@@ -735,7 +911,7 @@ fn streak_side<'a>(
             ),
         ),
         StreakMetric::ActiveDays => (
-            "Active Days",
+            streak_label(metric),
             format_number(u64::from(streak.total_active_days)),
             "",
             streak
@@ -757,6 +933,7 @@ fn streak_side<'a>(
         unit,
         note,
         theme,
+        align: placement.align,
     }
 }
 
@@ -771,16 +948,29 @@ struct SideMetric<'a> {
     unit: &'a str,
     note: String,
     theme: &'a RenderTheme,
+    align: Align,
+}
+
+/// Whether a figure reads from a left edge or about a centre line. Columns of
+/// figures align left; a figure that owns its width sits centred, so it agrees
+/// with the ring above it instead of drifting to one side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Align {
+    Left,
+    Centre,
 }
 
 fn side_metric(metric: SideMetric<'_>) -> String {
+    if metric.align == Align::Centre {
+        return centred_metric(metric);
+    }
+
     let label_size = if metric.value_size > 30.0 { 11.0 } else { 10.0 };
     let unit = if metric.unit.is_empty() {
         String::new()
     } else {
-        let advance = metric.value.chars().count() as f32 * metric.value_size * 0.6;
         text(
-            metric.x + advance as u32 + 6,
+            metric.x + advance(&metric.value, metric.value_size) + 6,
             metric.value_y,
             11.5,
             metric.theme.muted,

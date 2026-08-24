@@ -67,6 +67,15 @@ pub enum CardData {
     Stats(AggregatedStats),
     Languages(Vec<LanguageShare>),
     Streak(StreakSummary),
+    /// The ring on its own, for a README that composes its own row of tiles.
+    Heat(StreakSummary),
+    /// A single figure. Carries both sources because which one it reads is a
+    /// render-time choice, and the label that goes with it belongs to the
+    /// renderer rather than to aggregation.
+    Metric {
+        stats: AggregatedStats,
+        streak: StreakSummary,
+    },
     Activity(CodingActivitySummary),
     Status {
         state: &'static str,
@@ -88,6 +97,16 @@ pub fn aggregate_card_data(data: &GithubData, output: OutputKind, ring: &HeatRin
             &[],
             ring,
         )),
+        OutputKind::Heat => CardData::Heat(calculate_streak(
+            &data.contributions,
+            StreakMode::Daily,
+            &[],
+            ring,
+        )),
+        OutputKind::Metric => CardData::Metric {
+            stats: aggregate_stats(data),
+            streak: calculate_streak(&data.contributions, StreakMode::Daily, &[], ring),
+        },
         OutputKind::Activity | OutputKind::ActivityReadme => {
             CardData::Activity(aggregate_coding_activity(Vec::new(), 8, &[], false))
         }

@@ -215,6 +215,47 @@ impl StreakMetric {
     }
 }
 
+/// Any single figure the card set can report, drawn on its own so a README can
+/// place it wherever it likes. Reuses the panel vocabularies rather than a third
+/// list of names, so `stars` means the same thing on a tile as in a stats row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileMetric {
+    Stat(StatMetric),
+    Streak(StreakMetric),
+}
+
+impl TileMetric {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        if let Ok(stat) = StatMetric::parse(value) {
+            return Ok(Self::Stat(stat));
+        }
+
+        StreakMetric::parse(value)
+            .map(Self::Streak)
+            .map_err(|_| GithubStatsError::InvalidConfig {
+                field: "metric",
+                message: format!(
+                    "unknown metric {}; expected stars, commits, prs, issues, reviews, repos, \
+                     total, longest, current, or active",
+                    value.trim()
+                ),
+            })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Stat(metric) => metric.name(),
+            Self::Streak(metric) => metric.name(),
+        }
+    }
+}
+
+impl Default for TileMetric {
+    fn default() -> Self {
+        Self::Streak(StreakMetric::CurrentStreak)
+    }
+}
+
 /// Both metric lists are ordered and must not repeat a metric: a panel showing
 /// the same figure twice is a typo, not a layout choice, so it is refused rather
 /// than silently collapsed.
@@ -273,6 +314,8 @@ pub struct GithubStatsConfig {
     pub stat_rows: Vec<StatMetric>,
     pub language_rows: usize,
     pub streak_sides: [StreakMetric; 2],
+    /// Which figure a single-metric tile reports. Ignored by every other card.
+    pub metric: TileMetric,
 }
 
 impl GithubStatsConfig {
@@ -312,7 +355,13 @@ impl GithubStatsConfig {
                 StreakMetric::TotalContributions,
                 StreakMetric::LongestStreak,
             ],
+            metric: TileMetric::default(),
         })
+    }
+
+    pub fn with_metric(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.metric = TileMetric::parse(value)?;
+        Ok(self)
     }
 
     pub fn with_stat_rows(mut self, value: &str) -> Result<Self, GithubStatsError> {

@@ -18,7 +18,7 @@ pub use color::{HEAT_RAMP_STEPS, HeatRamp, named_ramps};
 pub use config::{
     CardSelection, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubStatsConfig, HeatRing,
     HeatScale, HeatShape, HeatWindow, ImageSize, LanguageScope, MAX_LANGUAGE_ROWS, StatMetric,
-    StreakMetric, Theme,
+    StreakMetric, Theme, TileMetric,
 };
 pub use data::{ContributionDay, GithubData, GithubProfile, RepositoryLanguage, UserStats};
 pub use error::{GithubStatsError, RemoteErrorKind};
