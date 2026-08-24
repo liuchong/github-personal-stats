@@ -43,17 +43,23 @@ impl Sink for FileSink {
     }
 }
 
-/// Commits the snapshot into a checkout of a data repository and pushes it.
+/// Commits the snapshot into a git repository and pushes it.
 ///
-/// Shelling out to `git` rather than linking a library is deliberate: it uses the
-/// credentials, ssh agent and configuration the user already has working, so a
-/// private repository needs no token minted for this and no secret kept anywhere
-/// but where git already keeps it.
+/// The repository is storage, not a hosting arrangement: anything the collector
+/// can reach over git will do, on the public internet or not, and nothing here
+/// knows the name of any particular host. Shelling out to `git` rather than
+/// linking a library or calling one host's API is what buys that: it uses the
+/// credentials, ssh agent and configuration the user already has working, and it
+/// keeps the same code working against a self-hosted remote.
 #[derive(Debug, Clone)]
 pub struct GitSink {
-    /// A checkout of the data repository. Not the profile repository: activity
-    /// history has its own lifetime and its own visibility.
+    /// The working checkout. This belongs in the app's own runtime directory
+    /// rather than among the user's projects: it is a storage detail that the app
+    /// clones, updates and rebases on its own, not somewhere to work.
     pub repo: PathBuf,
+    /// Where to clone from when the checkout is absent, and where to push. Absent
+    /// means the checkout must already exist and already know its remote.
+    pub origin: Option<String>,
     pub branch: String,
     /// Whether to push after committing. Off is useful for a machine that is
     /// offline, or for seeing what would be committed first.
@@ -62,12 +68,11 @@ pub struct GitSink {
 
 impl Sink for GitSink {
     fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError> {
-        if !self.repo.join(".git").exists() {
-            return Err(CollectError::NotFound {
-                what: "git checkout to publish into",
-                path: self.repo.clone(),
-            });
-        }
+        self.prepare()?;
+        // Catch up with the remote before reading what is published, so the
+        // comparison below is against what is actually there, and so this
+        // machine's commit lands on top of whatever other machines have pushed.
+        self.catch_up()?;
 
         let relative = PathBuf::from(SNAPSHOT_DIR).join(format!("{}.json", snapshot.machine));
         let path = self.repo.join(&relative);
@@ -98,12 +103,7 @@ impl Sink for GitSink {
         self.git(&["commit", "--quiet", "--message", &message, "--", &inside])?;
 
         if self.push {
-            self.git(&[
-                "push",
-                "--quiet",
-                "origin",
-                &format!("HEAD:{}", self.branch),
-            ])?;
+            self.push_it()?;
         }
 
         Ok(path)
@@ -111,38 +111,127 @@ impl Sink for GitSink {
 }
 
 impl GitSink {
-    fn git(&self, arguments: &[&str]) -> Result<String, CollectError> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&self.repo)
-            .args(arguments)
-            .output()
-            .map_err(|error| CollectError::Unreadable {
-                path: self.repo.clone(),
-                message: format!("could not run git: {error}"),
-            })?;
-
-        if !output.status.success() {
-            return Err(CollectError::Rejected {
-                message: format!(
-                    "git {} failed: {}",
-                    arguments.join(" "),
-                    String::from_utf8_lossy(&output.stderr).trim()
-                ),
-            });
+    /// Makes sure there is a checkout to work in, cloning one if the app has not
+    /// made it yet. Cloning here rather than asking the user to do it is what lets
+    /// the checkout live somewhere private and be treated as replaceable.
+    fn prepare(&self) -> Result<(), CollectError> {
+        if self.repo.join(".git").is_dir() {
+            return Ok(());
         }
 
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        let Some(origin) = &self.origin else {
+            return Err(CollectError::NotFound {
+                what: "git checkout to publish into, and no remote to clone one from",
+                path: self.repo.clone(),
+            });
+        };
+
+        if let Some(parent) = self.repo.parent() {
+            fs::create_dir_all(parent).map_err(|error| CollectError::Unreadable {
+                path: parent.to_path_buf(),
+                message: error.to_string(),
+            })?;
+        }
+
+        // Cloning a repository with no commits yet succeeds and leaves no branch,
+        // which is fine: the first commit here creates one, and pushing names the
+        // branch explicitly rather than relying on whatever local one exists.
+        let target = self.repo.display().to_string();
+        run(None, &["clone", "--quiet", origin, &target]).map_err(|error| {
+            CollectError::Rejected {
+                message: format!("could not clone {origin}: {error}"),
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Brings the checkout up to date with the remote branch, so a commit made
+    /// here is a fast-forward for everyone else. Machines write separate files, so
+    /// a rebase here has nothing to conflict over.
+    fn catch_up(&self) -> Result<(), CollectError> {
+        if self.git(&["remote", "get-url", "origin"]).is_err() {
+            return Ok(());
+        }
+        // A remote that cannot be reached is not a reason to lose a collection:
+        // the commit stays local and the next run pushes it.
+        if self
+            .git(&["fetch", "--quiet", "origin", &self.branch])
+            .is_err()
+        {
+            return Ok(());
+        }
+
+        let remote = format!("origin/{}", self.branch);
+        if self
+            .git(&["rev-parse", "--verify", "--quiet", &remote])
+            .is_err()
+        {
+            return Ok(());
+        }
+
+        if self
+            .git(&["rev-parse", "--verify", "--quiet", "HEAD"])
+            .is_err()
+        {
+            // Nothing committed here yet, so there is no history to preserve and
+            // the remote's is simply adopted.
+            self.git(&["reset", "--quiet", "--hard", &remote])?;
+            return Ok(());
+        }
+
+        self.git(&["rebase", "--quiet", &remote]).map_err(|error| {
+            // Leave no rebase in progress for the next run to trip over.
+            let _ = self.git(&["rebase", "--abort"]);
+            error
+        })?;
+        Ok(())
+    }
+
+    /// Pushes, and if the remote moved in the meantime, catches up and tries once
+    /// more. A second refusal is worth reporting rather than looping over.
+    fn push_it(&self) -> Result<(), CollectError> {
+        let refspec = format!("HEAD:{}", self.branch);
+        if self.git(&["push", "--quiet", "origin", &refspec]).is_ok() {
+            return Ok(());
+        }
+        self.catch_up()?;
+        self.git(&["push", "--quiet", "origin", &refspec])?;
+        Ok(())
+    }
+
+    fn git(&self, arguments: &[&str]) -> Result<String, CollectError> {
+        run(Some(&self.repo), arguments).map_err(|message| CollectError::Rejected {
+            message: format!("git {} failed: {message}", arguments.join(" ")),
+        })
     }
 }
 
-/// Builds the sink a command line asked for. Both the collector and the daemon
-/// publish, and they agree about what the options mean because they come through
-/// here rather than each deciding for itself.
+/// Runs git, inside a repository or outside one. Cloning has no repository to be
+/// inside yet, which is why the directory is optional.
+fn run(repo: Option<&Path>, arguments: &[&str]) -> Result<String, String> {
+    let mut command = Command::new("git");
+    if let Some(repo) = repo {
+        command.arg("-C").arg(repo);
+    }
+    let output = command
+        .args(arguments)
+        .output()
+        .map_err(|error| format!("could not run git: {error}"))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Builds the sink a command line or configuration asked for. Both the collector
+/// and the daemon publish, and they agree about what the options mean because they
+/// come through here rather than each deciding for itself.
 pub fn choose(
     kind: Option<&str>,
     snapshot: &Path,
     repo: Option<&str>,
+    origin: Option<&str>,
     branch: Option<&str>,
     push: bool,
 ) -> Result<Box<dyn Sink + Send + Sync>, CollectError> {
@@ -152,11 +241,11 @@ pub fn choose(
         })),
         Some("git") => {
             let repo = repo.ok_or_else(|| CollectError::Rejected {
-                message: "the git sink wants --repo pointing at a checkout of your data repository"
-                    .to_owned(),
+                message: "the git sink wants --repo saying where to keep its checkout".to_owned(),
             })?;
             Ok(Box::new(GitSink {
                 repo: PathBuf::from(repo),
+                origin: origin.map(str::to_owned),
                 branch: branch.unwrap_or("main").to_owned(),
                 push,
             }))

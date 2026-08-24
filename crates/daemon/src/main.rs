@@ -2,6 +2,7 @@ use std::{env, error::Error, fs, path::PathBuf, process, sync::Arc, thread};
 
 use github_personal_stats_collect::{
     DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, machine,
+    preferences::Preferences,
     sink::{self, Sink},
 };
 use github_personal_stats_daemon::{
@@ -35,20 +36,26 @@ fn run() -> Result<(), Box<dyn Error>> {
             .ok_or("HOME is not set, so there is no place to keep local records")?,
     };
 
+    let state_dir = option(&args, "--state")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| machine::state_directory(&home));
+    // The configuration lives beside the machine identity, so finding it needs
+    // only the state directory, which is settled before anything else is read.
+    let prefs = Preferences::load(&state_dir);
+
     let settings = Settings {
-        state_dir: option(&args, "--state")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| machine::state_directory(&home)),
-        snapshot: option(&args, "--output")
+        snapshot: chosen(&args, &prefs, "--output")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_SNAPSHOT)),
         idle_timeout_seconds: whole(
             &args,
+            &prefs,
             "--idle-timeout",
             DEFAULT_IDLE_TIMEOUT_MINUTES,
             1,
             180,
         )? * 60,
+        state_dir,
         home,
     };
 
@@ -59,10 +66,10 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{token}");
             Ok(())
         }
-        Some("install") => install(&args, &settings),
+        Some("install") => install(&args, &settings, &prefs),
         Some("uninstall") => uninstall(),
-        Some("serve") | None => serve(&args, settings),
-        Some(other) if other.starts_with('-') => serve(&args, settings),
+        Some("serve") | None => serve(&args, settings, &prefs),
+        Some(other) if other.starts_with('-') => serve(&args, settings, &prefs),
         Some(other) => Err(format!("no command called {other:?}; try help").into()),
     }
 }
@@ -70,27 +77,36 @@ fn run() -> Result<(), Box<dyn Error>> {
 fn sink_for(
     args: &[String],
     settings: &Settings,
+    prefs: &Preferences,
 ) -> Result<Box<dyn Sink + Send + Sync>, Box<dyn Error>> {
     Ok(sink::choose(
-        option(args, "--sink").as_deref(),
+        chosen(args, prefs, "--sink").as_deref(),
         &settings.snapshot,
-        option(args, "--repo").as_deref(),
-        option(args, "--branch").as_deref(),
-        !args.iter().any(|arg| arg == "--no-push"),
+        chosen(args, prefs, "--repo").as_deref(),
+        chosen(args, prefs, "--origin").as_deref(),
+        chosen(args, prefs, "--branch").as_deref(),
+        !(args.iter().any(|arg| arg == "--no-push") || prefs.switch("no-push")),
     )?)
 }
 
-fn serve(args: &[String], settings: Settings) -> Result<(), Box<dyn Error>> {
-    let address = option(args, "--addr").unwrap_or_else(|| DEFAULT_ADDRESS.to_owned());
+/// What a flag was set to, on the command line if given there, in the
+/// configuration otherwise.
+fn chosen(args: &[String], prefs: &Preferences, name: &str) -> Option<String> {
+    option(args, name).or_else(|| prefs.flag(name).map(str::to_owned))
+}
+
+fn serve(args: &[String], settings: Settings, prefs: &Preferences) -> Result<(), Box<dyn Error>> {
+    let address = chosen(args, prefs, "--addr").unwrap_or_else(|| DEFAULT_ADDRESS.to_owned());
     let interval = whole(
         args,
+        prefs,
         "--interval",
         DEFAULT_INTERVAL_MINUTES as i64,
         1,
         24 * 60,
     )? as u64;
 
-    let sink = sink_for(args, &settings)?;
+    let sink = sink_for(args, &settings, prefs)?;
     let daemon = Arc::new(Daemon::new(settings, sink)?);
     let listener = daemon.listen(&address)?;
 
@@ -111,10 +127,14 @@ fn serve(args: &[String], settings: Settings) -> Result<(), Box<dyn Error>> {
 /// install was given, then asks the system to run it. Paths are made absolute
 /// first: a launch agent starts in no particular directory, so a relative
 /// snapshot path would land somewhere nobody chose.
-fn install(args: &[String], settings: &Settings) -> Result<(), Box<dyn Error>> {
+fn install(
+    args: &[String],
+    settings: &Settings,
+    prefs: &Preferences,
+) -> Result<(), Box<dyn Error>> {
     // Fail before writing anything if the options do not describe a working
     // daemon, so an install never leaves a service that cannot start.
-    let _ = sink_for(args, settings)?;
+    let _ = sink_for(args, settings, prefs)?;
 
     let service = service::describe()?;
     let program = env::current_exe()?;
@@ -177,7 +197,7 @@ fn forwarded(args: &[String], settings: &Settings) -> Result<Vec<String>, Box<dy
         (settings.idle_timeout_seconds / 60).to_string(),
     ];
 
-    for name in ["--addr", "--interval", "--sink", "--branch"] {
+    for name in ["--addr", "--interval", "--sink", "--branch", "--origin"] {
         if let Some(value) = option(args, name) {
             forwarded.push(name.to_owned());
             forwarded.push(value);
@@ -216,12 +236,13 @@ fn option(args: &[String], name: &str) -> Option<String> {
 
 fn whole(
     args: &[String],
+    prefs: &Preferences,
     name: &str,
     fallback: i64,
     least: i64,
     most: i64,
 ) -> Result<i64, Box<dyn Error>> {
-    let value = match option(args, name) {
+    let value = match chosen(args, prefs, name) {
         Some(text) => text
             .parse::<i64>()
             .map_err(|_| format!("{name} wants a whole number of minutes, not {text:?}"))?,
@@ -253,9 +274,13 @@ OPTIONS
     --addr <host:port>    Where to listen. Loopback only. Default {DEFAULT_ADDRESS}.
     --interval <minutes>  How often to rebuild the snapshot. Default {DEFAULT_INTERVAL_MINUTES}.
     --sink <file|git>     Where a rebuilt snapshot goes. Default file.
-    --repo <path>         Checkout of your data repository, for the git sink.
+    --repo <path>         Where to keep the storage checkout, for the git sink.
+    --origin <url>        Git remote to clone the checkout from, and push to.
     --branch <name>       Branch to push to. Default main.
-    --no-push             Commit into the data repository without pushing.
+    --no-push             Commit locally without pushing.
+
+    Any of these can be written once in <state>/config as `name = value`,
+    without the dashes, instead of repeated. A flag overrides the file.
     --idle-timeout <min>  A gap longer than this ends a session rather than
                           counting as time worked. Default {DEFAULT_IDLE_TIMEOUT_MINUTES}.
     --output <path>       Where to write the snapshot. Default {DEFAULT_SNAPSHOT}.

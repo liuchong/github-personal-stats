@@ -57,6 +57,7 @@ fn commits(repo: &Path) -> usize {
 fn sink(repo: &Path) -> GitSink {
     GitSink {
         repo: repo.to_path_buf(),
+        origin: None,
         branch: "main".to_owned(),
         push: false,
     }
@@ -165,4 +166,108 @@ fn a_snapshot_already_published_by_a_newer_build_is_replaced_rather_than_trusted
         .expect("an unreadable file should not stop the run");
 
     assert!(fs::read_to_string(&path).unwrap().contains("2026-08-24"));
+}
+
+fn bare(root: &Path) -> String {
+    let remote = root.join("remote.git");
+    let output = std::process::Command::new("git")
+        .args(["init", "--quiet", "--bare", "--initial-branch=main"])
+        .arg(&remote)
+        .output()
+        .expect("git should be runnable");
+    assert!(output.status.success());
+    remote.display().to_string()
+}
+
+fn cloning(repo: &Path, origin: &str) -> GitSink {
+    GitSink {
+        repo: repo.to_path_buf(),
+        origin: Some(origin.to_owned()),
+        branch: "main".to_owned(),
+        push: true,
+    }
+}
+
+#[test]
+fn a_checkout_that_is_not_there_yet_is_cloned() {
+    let root = scratch("clone");
+    let origin = bare(&root);
+    let repo = root.join("runtime").join("storage");
+
+    let written = cloning(&repo, &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .expect("an absent checkout should be created rather than refused");
+
+    assert!(written.starts_with(&repo));
+    assert!(repo.join(".git").is_dir());
+}
+
+#[test]
+fn the_first_snapshot_reaches_an_empty_remote() {
+    let root = scratch("empty-remote");
+    let origin = bare(&root);
+    let repo = root.join("storage");
+
+    cloning(&repo, &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .unwrap();
+
+    let landed = git(&PathBuf::from(&origin), &["log", "--oneline", "main"]);
+    assert_eq!(landed.lines().count(), 1);
+}
+
+#[test]
+fn a_second_machine_lands_on_top_of_the_first_without_conflict() {
+    let root = scratch("two-machines");
+    let origin = bare(&root);
+
+    let mut laptop = snapshot("2026-08-24T19:00:00Z", 60);
+    laptop.machine = "m-laptop".to_owned();
+    let mut desktop = snapshot("2026-08-24T19:05:00Z", 120);
+    desktop.machine = "m-desktop".to_owned();
+
+    // Two checkouts that know nothing of each other, as two machines would be.
+    cloning(&root.join("one"), &origin)
+        .publish(&laptop)
+        .unwrap();
+    cloning(&root.join("two"), &origin)
+        .publish(&desktop)
+        .expect("a remote that moved should be caught up with, not fought over");
+
+    let history = git(&PathBuf::from(&origin), &["log", "--oneline", "main"]);
+    assert_eq!(history.lines().count(), 2);
+
+    // Both files survive: neither machine overwrote the other's.
+    let listing = git(
+        &PathBuf::from(&origin),
+        &["ls-tree", "--name-only", "main", "snapshots/"],
+    );
+    assert!(listing.contains("m-laptop.json"), "{listing}");
+    assert!(listing.contains("m-desktop.json"), "{listing}");
+}
+
+#[test]
+fn a_machine_that_cannot_reach_the_remote_still_records_locally() {
+    let root = scratch("offline");
+    let origin = bare(&root);
+    let repo = root.join("storage");
+    cloning(&repo, &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .unwrap();
+
+    // The remote goes away, as it does on a train.
+    fs::remove_dir_all(&origin).unwrap();
+
+    let sink = GitSink {
+        repo: repo.clone(),
+        origin: Some(origin),
+        branch: "main".to_owned(),
+        push: false,
+    };
+    sink.publish(&snapshot("2026-08-24T19:30:00Z", 120))
+        .expect("an unreachable remote should not lose the collection");
+
+    // Both collections are committed and waiting; the next run with a reachable
+    // remote pushes them together.
+    assert_eq!(commits(&repo), 2);
 }

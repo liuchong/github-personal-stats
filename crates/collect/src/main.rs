@@ -1,7 +1,7 @@
 use std::{env, error::Error, path::PathBuf, process};
 
 use github_personal_stats_collect::{
-    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, sink,
+    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, preferences::Preferences, sink,
 };
 use github_personal_stats_core::summarise_activity;
 
@@ -32,24 +32,30 @@ fn run() -> Result<(), Box<dyn Error>> {
             .ok_or("HOME is not set, so there is no place to look for local records")?,
     };
 
+    let state_dir = option(&args, "--state")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| machine::state_directory(&home));
+    // The configuration lives beside the machine identity, so finding it needs
+    // only the state directory, which is settled before anything else is read.
+    let prefs = Preferences::load(&state_dir);
+
     let settings = Settings {
-        state_dir: option(&args, "--state")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| machine::state_directory(&home)),
-        snapshot: option(&args, "--output")
+        snapshot: chosen(&args, &prefs, "--output")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(DEFAULT_SNAPSHOT)),
-        idle_timeout_seconds: idle_timeout(&args)?,
+        idle_timeout_seconds: idle_timeout(&args, &prefs)?,
+        state_dir,
         home,
     };
 
     let snapshot = collect(&settings)?;
     let sink = sink::choose(
-        option(&args, "--sink").as_deref(),
+        chosen(&args, &prefs, "--sink").as_deref(),
         &settings.snapshot,
-        option(&args, "--repo").as_deref(),
-        option(&args, "--branch").as_deref(),
-        !args.iter().any(|arg| arg == "--no-push"),
+        chosen(&args, &prefs, "--repo").as_deref(),
+        chosen(&args, &prefs, "--origin").as_deref(),
+        chosen(&args, &prefs, "--branch").as_deref(),
+        !(args.iter().any(|arg| arg == "--no-push") || prefs.switch("no-push")),
     )?;
     let written = sink.publish(&snapshot)?;
 
@@ -89,8 +95,8 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn idle_timeout(args: &[String]) -> Result<i64, Box<dyn Error>> {
-    let minutes = match option(args, "--idle-timeout") {
+fn idle_timeout(args: &[String], prefs: &Preferences) -> Result<i64, Box<dyn Error>> {
+    let minutes = match chosen(args, prefs, "--idle-timeout") {
         Some(value) => value
             .parse::<i64>()
             .map_err(|_| format!("--idle-timeout wants whole minutes, not {value:?}"))?,
@@ -100,6 +106,12 @@ fn idle_timeout(args: &[String]) -> Result<i64, Box<dyn Error>> {
         return Err(format!("--idle-timeout wants 1 to 180 minutes, not {minutes}").into());
     }
     Ok(minutes * 60)
+}
+
+/// What a flag was set to, on the command line if given there, in the
+/// configuration otherwise.
+fn chosen(args: &[String], prefs: &Preferences, name: &str) -> Option<String> {
+    option(args, name).or_else(|| prefs.flag(name).map(str::to_owned))
 }
 
 fn option(args: &[String], name: &str) -> Option<String> {
@@ -120,9 +132,10 @@ Usage:
 Options:
   --output <path>          Snapshot to write and grow (default: {DEFAULT_SNAPSHOT})
   --sink <file|git>        Where the snapshot goes (default: file)
-  --repo <dir>             Checkout of your data repository, for --sink git
-  --branch <name>          Branch to push to, for --sink git (default: main)
-  --no-push                Commit into the data repository without pushing
+  --repo <dir>             Where to keep the storage checkout, for --sink git
+  --origin <url>           Git remote to clone the checkout from, and push to
+  --branch <name>          Branch to push to (default: main)
+  --no-push                Commit locally without pushing
   --idle-timeout <minutes> Gap that ends a working stretch (default: {DEFAULT_IDLE_TIMEOUT_MINUTES})
   --state <dir>            Where the machine identity, token and pulse journal live
                            (default: XDG state directory)
@@ -137,12 +150,23 @@ What is read:
   journal that editor plugins write through the daemon.
 
 Publishing:
-  --sink git writes snapshots/<machine>.json inside a checkout of a data
-  repository, commits it, and pushes. Each machine writes only its own file, so
-  several machines share one repository with nothing to merge: whoever renders
-  the cards adds the files up. It shells out to git, so a private repository
-  works with the credentials you already have and needs no token minted for
-  this. A run that changes nothing commits nothing.
+  --sink git writes snapshots/<machine>.json into a git repository, commits it,
+  and pushes. Each machine writes only its own file, so several machines share
+  one repository with nothing to merge: whoever renders the cards adds the files
+  up. The checkout is cloned from --origin if it is not there yet, and is
+  brought up to date before each commit. Any git remote will do, on the public
+  internet or not; it shells out to git, so a private repository works with the
+  credentials you already have. A run that changes nothing commits nothing.
+
+Configuration:
+  Options can be written once in <state>/config instead of repeated, as
+  `name = value` lines using the option's own name without the dashes:
+
+    sink = git
+    repo = /path/to/storage/checkout
+    origin = git@example.com:you/personal-stats-data.git
+
+  A flag on the command line overrides the file.
 
 What is written:
   Counts and seconds only. No prompt text, no file paths, no project names, no

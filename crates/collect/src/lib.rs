@@ -3,6 +3,7 @@ pub mod cursor;
 pub mod error;
 pub mod language;
 pub mod machine;
+pub mod preferences;
 pub mod pulse;
 pub mod random;
 pub mod sessions;
