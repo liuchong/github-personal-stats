@@ -1,6 +1,7 @@
 pub mod http;
 pub mod panel;
 pub mod service;
+pub mod status;
 pub mod token;
 
 use std::{
@@ -220,7 +221,15 @@ impl Daemon {
             let response = match read_request(&stream) {
                 Ok(Some(request)) => self.answer(&request),
                 Ok(None) => continue,
-                Err(error) => Response::problem(400, &error.to_string()),
+                // A body we declined to read is a size complaint, not a
+                // complaint about what it contained.
+                Err(error) => Response::problem(
+                    match error.kind() {
+                        std::io::ErrorKind::InvalidData => 413,
+                        _ => 400,
+                    },
+                    &error.to_string(),
+                ),
             };
             let _ = write_response(&stream, &response);
         }

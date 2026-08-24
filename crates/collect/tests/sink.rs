@@ -271,3 +271,32 @@ fn a_machine_that_cannot_reach_the_remote_still_records_locally() {
     // remote pushes them together.
     assert_eq!(commits(&repo), 2);
 }
+
+#[test]
+fn a_machine_with_no_git_identity_can_still_record() {
+    // A background collector must not require the user to have run
+    // `git config --global user.email` first, and CI runners have not.
+    let root = scratch("no-identity");
+    let origin = bare(&root);
+    let repo = root.join("storage");
+
+    cloning(&repo, &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .expect("a checkout with no configured identity should still commit");
+
+    let author = git(&repo, &["log", "-1", "--format=%an <%ae>"]);
+    assert!(author.contains("github-personal-stats"), "{author}");
+}
+
+#[test]
+fn a_configured_identity_is_left_alone() {
+    let root = scratch("own-identity");
+    let repo = repository(&root);
+
+    sink(&repo)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .unwrap();
+
+    let author = git(&repo, &["log", "-1", "--format=%ae"]);
+    assert!(author.contains("test@example.invalid"), "{author}");
+}

@@ -109,7 +109,10 @@ impl Sink for GitSink {
         }
 
         let message = format!("Record activity through {}", snapshot.collected_at);
-        self.git(&["commit", "--quiet", "--message", &message, "--", &inside])?;
+        let identity = self.identity();
+        let mut commit = identity.iter().map(String::as_str).collect::<Vec<_>>();
+        commit.extend(["commit", "--quiet", "--message", &message, "--", &inside]);
+        self.git(&commit)?;
 
         if self.push {
             self.push_it()?;
@@ -132,6 +135,26 @@ impl Sink for GitSink {
 }
 
 impl GitSink {
+    /// Who to record as the author, when git would otherwise refuse to commit.
+    ///
+    /// git will not commit without an identity, and a collector running in the
+    /// background has no business requiring one to have been configured globally
+    /// first. A machine that has one keeps it; a machine that has none gets the
+    /// tool's name, which is honest about what made the commit. Passed per command
+    /// rather than written into the checkout's configuration, so nothing outside
+    /// this commit is affected.
+    fn identity(&self) -> Vec<String> {
+        if self.git(&["config", "user.email"]).is_ok() {
+            return Vec::new();
+        }
+        vec![
+            "-c".to_owned(),
+            "user.name=github-personal-stats".to_owned(),
+            "-c".to_owned(),
+            "user.email=github-personal-stats@localhost".to_owned(),
+        ]
+    }
+
     /// Makes sure there is a checkout to work in, cloning one if the app has not
     /// made it yet. Cloning here rather than asking the user to do it is what lets
     /// the checkout live somewhere private and be treated as replaceable.

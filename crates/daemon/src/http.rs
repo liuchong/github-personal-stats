@@ -5,10 +5,7 @@
 //! is kept separate rather than grown out of that one: it binds the loopback
 //! address only and refuses a request whose size it did not agree to.
 
-use std::{
-    io::{BufRead, BufReader, Read, Write},
-    net::TcpStream,
-};
+use std::io::{BufRead, BufReader, Read, Write};
 
 /// A body larger than this is refused unread. A pulse batch is a few hundred
 /// bytes; anything near the limit is a mistake or a probe.
@@ -59,7 +56,10 @@ impl Response {
     }
 }
 
-pub fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
+/// Reads one request from anything readable. Taking the trait rather than a
+/// socket is what lets the parser be exercised directly, which matters because
+/// this code faces whatever a stranger sends it.
+pub fn read_request(stream: impl Read) -> std::io::Result<Option<Request>> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     if reader.read_line(&mut line)? == 0 {
@@ -99,13 +99,14 @@ pub fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
         }
     }
 
+    // Refused before a single byte of it is read. Reported as an error rather
+    // than as an empty body, so the answer says the size was the problem instead
+    // of blaming the contents that were never looked at.
     if length > MAX_BODY {
-        return Ok(Some(Request {
-            method,
-            path,
-            bearer,
-            body: String::new(),
-        }));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("body of {length} bytes is larger than the {MAX_BODY} permitted"),
+        ));
     }
 
     let mut body = vec![0_u8; length];
@@ -121,7 +122,7 @@ pub fn read_request(stream: &TcpStream) -> std::io::Result<Option<Request>> {
     }))
 }
 
-pub fn write_response(mut stream: &TcpStream, response: &Response) -> std::io::Result<()> {
+pub fn write_response(mut stream: impl Write, response: &Response) -> std::io::Result<()> {
     let head = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
         response.status,

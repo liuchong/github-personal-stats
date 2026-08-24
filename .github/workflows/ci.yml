@@ -27,4 +27,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
-      - run: cargo llvm-cov --workspace --ignore-filename-regex 'server/src/main\.rs' --fail-under-lines 85
+      # The `main.rs` of each binary is argument parsing and wiring, exercised by
+      # running the binaries rather than by unit tests. Logic worth testing is
+      # expected to live in the crate's library instead, so anything substantial
+      # appearing in one of these is a sign it is in the wrong place.
+      - run: cargo llvm-cov --workspace --ignore-filename-regex '(server|daemon|collect)/src/main\.rs' --fail-under-lines 85

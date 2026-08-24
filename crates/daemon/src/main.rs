@@ -11,7 +11,7 @@ use github_personal_stats_collect::{
 };
 use github_personal_stats_core::{parse_activity_snapshot, summarise_activity};
 use github_personal_stats_daemon::{
-    DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, token,
+    DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, status, token,
 };
 
 /// Named relative to the state directory, not to whoever is calling. The
@@ -133,126 +133,51 @@ fn serve(args: &[String], settings: Settings, prefs: &Preferences) -> Result<(),
     Ok(())
 }
 
-/// Answers "is this working" without asking anyone to read source or list
-/// directories. Each line is a thing that can be separately broken: the daemon
-/// running, an editor reporting, and a snapshot reaching its destination. A plugin
-/// that is installed but never loaded looks exactly like one that is working,
-/// until something says which editors have actually been heard from.
+/// Gathers what the report is drawn from, and prints it. The reading itself lives
+/// in `status` so it can be tested against states that are awkward to arrange.
 fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(), Box<dyn Error>> {
     let address = chosen(args, prefs, "--addr").unwrap_or_else(|| DEFAULT_ADDRESS.to_owned());
-    let reachable = TcpStream::connect_timeout(
-        &address
-            .parse()
-            .map_err(|_| format!("{address} is not a host and port"))?,
-        Duration::from_millis(500),
-    )
-    .is_ok();
+    let listening = address
+        .parse()
+        .map(|host| TcpStream::connect_timeout(&host, Duration::from_millis(500)).is_ok())
+        .unwrap_or(false);
 
-    println!(
-        "daemon      {}",
-        if reachable {
-            format!("listening on {address}")
-        } else {
-            format!("not listening on {address}")
-        }
-    );
-
-    let token = token::path(&settings.state_dir);
-    println!(
-        "token       {}",
-        if token.exists() {
-            token.display().to_string()
-        } else {
-            format!("missing at {} — no plugin can report", token.display())
-        }
-    );
-
-    println!(
-        "publishing  {}",
-        sink_for(args, settings, prefs)?.describe()
-    );
+    let token_path = token::path(&settings.state_dir);
+    let token_shown = token_path.display().to_string();
+    let publishing = sink_for(args, settings, prefs)?.describe();
 
     // The journal is keyed by the local day the editor observed, which is what
-    // the timestamp's date is here too.
-    let today = clock::utc_timestamp(clock::now())[..10].to_owned();
-    let reporters = pulse::reporters(&settings.state_dir, &today);
-    let announced = presence::read(&settings.state_dir);
+    // this timestamp's date is too.
+    let now = clock::now();
+    let today = clock::utc_timestamp(now)[..10].to_owned();
 
-    if reporters.is_empty() && announced.is_empty() {
-        println!("editors     no plugin has loaded");
-        println!("            reload the editor window; a plugin announces itself when it starts");
-    }
-    for announcement in &announced {
-        let reported = reporters
-            .iter()
-            .find(|reporter| reporter.editor == announcement.editor);
-        match reported {
-            Some(reporter) => println!(
-                "editors     {} {} — {} pulses today, last {} ago",
-                announcement.editor,
-                announcement.version,
-                reporter.pulses,
-                ago(clock::now() - reporter.last_seen)
-            ),
-            // Loaded but with nothing to report. Typing in the editor produces
-            // pulses; an agent writing files behind its back does not.
-            None => println!(
-                "editors     {} {} — loaded {} ago, nothing typed today",
-                announcement.editor,
-                announcement.version,
-                ago(clock::now() - announcement.at)
-            ),
-        }
-    }
-    for reporter in &reporters {
-        if !announced
-            .iter()
-            .any(|announcement| announcement.editor == reporter.editor)
-        {
-            println!(
-                "editors     {} — {} pulses today, last {} ago",
-                reporter.editor,
-                reporter.pulses,
-                ago(clock::now() - reporter.last_seen)
-            );
-        }
-    }
-
-    match fs::read_to_string(&settings.snapshot)
+    let collected = fs::read_to_string(&settings.snapshot)
         .ok()
         .and_then(|body| parse_activity_snapshot(&body).ok())
-    {
-        Some(snapshot) => {
+        .map(|snapshot| {
             let totals = summarise_activity(&snapshot.days);
-            println!(
-                "collected   {} days, agent {}, editor {}",
-                snapshot.days.len(),
-                clock_face(totals.agent.seconds),
-                clock_face(totals.editor.seconds)
-            );
-        }
-        None => println!(
-            "collected   nothing readable at {}",
-            settings.snapshot.display()
-        ),
-    }
+            status::Collected {
+                days: snapshot.days.len(),
+                agent_seconds: totals.agent.seconds,
+                editor_seconds: totals.editor.seconds,
+            }
+        });
+
+    println!(
+        "{}",
+        status::report(&status::Reading {
+            address: &address,
+            listening,
+            token: token_path.exists().then_some(token_shown.as_str()),
+            publishing: &publishing,
+            announced: &presence::read(&settings.state_dir),
+            reporters: &pulse::reporters(&settings.state_dir, &today),
+            at: now,
+            collected,
+        })
+    );
 
     Ok(())
-}
-
-/// How long ago, in the largest unit that still says something. A negative gap
-/// means the reporting machine's clock is ahead of this one, which is worth
-/// reading as "just now" rather than as a negative duration.
-fn ago(seconds: i64) -> String {
-    match seconds.max(0) {
-        0..=90 => format!("{}s", seconds.max(0)),
-        91..=5_400 => format!("{}m", seconds / 60),
-        _ => format!("{}h", seconds / 3_600),
-    }
-}
-
-fn clock_face(seconds: u64) -> String {
-    format!("{}h {}m", seconds / 3_600, (seconds % 3_600) / 60)
 }
 
 /// Writes a service description that starts `serve` with the same options this
