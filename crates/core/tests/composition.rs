@@ -165,6 +165,44 @@ fn auto_height_ignores_the_height_it_was_handed() {
     );
 }
 
+/// Scale must change only how large the card arrives, never the drawing: the
+/// viewBox stays in layout units so nothing is re-laid-out or resampled.
+#[test]
+fn scale_changes_the_display_size_and_leaves_the_drawing_alone() {
+    let plain = stats_at(275, None);
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(275, 200)
+        .unwrap()
+        .with_scale("2")
+        .unwrap();
+    let scaled = card(OutputKind::Stats, &config);
+
+    assert!(plain.contains(r#"width="275" height="200" viewBox="0 0 275 200""#));
+    assert!(scaled.contains(r#"width="550" height="400" viewBox="0 0 275 200""#));
+
+    let body = |svg: &str| {
+        svg.split_once("</title>")
+            .map(|(_, rest)| rest.to_owned())
+            .unwrap()
+    };
+    assert_eq!(
+        body(&plain),
+        body(&scaled),
+        "a scaled card should be the same drawing"
+    );
+}
+
+#[test]
+fn a_scale_nobody_could_read_is_refused() {
+    let config = GithubStatsConfig::new("octo").unwrap();
+
+    assert!(config.clone().with_scale("0.1").is_err());
+    assert!(config.clone().with_scale("9").is_err());
+    assert!(config.clone().with_scale("huge").is_err());
+    assert!(config.with_scale("1.5").is_ok());
+}
+
 #[test]
 fn a_padding_that_would_leave_no_room_for_content_is_refused() {
     let config = GithubStatsConfig::new("octo").unwrap();

@@ -164,12 +164,8 @@ pub fn render_card(card: &CardData, config: &GithubStatsConfig) -> String {
         CardData::Metric { stats, streak } => {
             render_metric_card(stats, streak, config, &theme, &title)
         }
-        CardData::Activity(summary) => {
-            render_activity_card(summary, &config.size, padding(config), &theme, &title)
-        }
-        CardData::Status { state } => {
-            render_status_card(state, &config.size, padding(config), &theme, &title)
-        }
+        CardData::Activity(summary) => render_activity_card(summary, config, &theme, &title),
+        CardData::Status { state } => render_status_card(state, config, &theme, &title),
     }
 }
 
@@ -241,6 +237,7 @@ fn render_dashboard(
 
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         format!(
@@ -269,6 +266,7 @@ fn render_stats_card(
     let size = &config.size;
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         stats_section(
@@ -289,6 +287,7 @@ fn render_languages_card(
     let size = &config.size;
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         languages_section(
@@ -309,6 +308,7 @@ fn render_streak_card(
     let size = &config.size;
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         streak_section(
@@ -323,13 +323,15 @@ fn render_streak_card(
 
 fn render_activity_card(
     summary: &CodingActivitySummary,
-    size: &ImageSize,
-    pad: u32,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
 ) -> String {
+    let size = &config.size;
+    let pad = padding(config);
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         activity_section(card_area(size, pad), summary, theme),
@@ -338,14 +340,15 @@ fn render_activity_card(
 
 fn render_status_card(
     state: &str,
-    size: &ImageSize,
-    pad: u32,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
 ) -> String {
-    let area = card_area(size, pad);
+    let size = &config.size;
+    let area = card_area(size, padding(config));
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         format!(
@@ -423,9 +426,26 @@ fn padding(config: &GithubStatsConfig) -> u32 {
         .unwrap_or_else(|| (config.size.width / 20).clamp(16, 28))
 }
 
-fn svg_root(size: &ImageSize, theme: &RenderTheme, title: &str, body: String) -> String {
+/// The card is laid out in viewBox units and displayed at whatever the scale
+/// multiplies those to. Because the drawing is vector, a scaled card is not
+/// resampled: the same geometry simply arrives larger or smaller.
+fn svg_root(
+    size: &ImageSize,
+    scale_basis_points: u32,
+    theme: &RenderTheme,
+    title: &str,
+    body: String,
+) -> String {
+    let scaled = |value: u32| {
+        (u64::from(value) * u64::from(scale_basis_points) / 10_000)
+            .try_into()
+            .unwrap_or(u32::MAX)
+    };
+
     format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{TITLE_ID}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" font-family="{font}" style="font-variant-numeric:tabular-nums"><title id="{TITLE_ID}">{title}</title><rect width="100%" height="100%" fill="{background}"/>{body}</svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{display_width}" height="{display_height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{TITLE_ID}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" font-family="{font}" style="font-variant-numeric:tabular-nums"><title id="{TITLE_ID}">{title}</title><rect width="100%" height="100%" fill="{background}"/>{body}</svg>"#,
+        display_width = scaled(size.width),
+        display_height = scaled(size.height),
         width = size.width,
         height = size.height,
         font = FONT_STACK,
@@ -753,6 +773,7 @@ fn render_heat_card(
 
     svg_root(
         size,
+        config.scale_basis_points,
         theme,
         title,
         current_streak_ring(
@@ -825,7 +846,13 @@ fn render_metric_card(
         figure.note = String::new();
     }
 
-    svg_root(size, theme, title, side_metric(figure))
+    svg_root(
+        size,
+        config.scale_basis_points,
+        theme,
+        title,
+        side_metric(figure),
+    )
 }
 
 /// Three columns need room the ring's own date line already struggles for, so a

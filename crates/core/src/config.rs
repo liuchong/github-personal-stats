@@ -292,6 +292,11 @@ fn parse_metrics<T: Copy + PartialEq>(
     Ok(metrics)
 }
 
+/// Scaling further than this either shrinks the text past reading size or blows
+/// the layout up past anything a README column can hold.
+pub const MIN_SCALE_BASIS_POINTS: u32 = 5_000;
+pub const MAX_SCALE_BASIS_POINTS: u32 = 40_000;
+
 /// Beyond this a card has more margin than content on any tile worth drawing.
 pub const MAX_PADDING: u32 = 64;
 
@@ -326,6 +331,10 @@ pub struct GithubStatsConfig {
     /// Fit the card to its content instead of to a height chosen up front.
     /// Cards that divide a height between sections do not support this.
     pub auto_height: bool,
+    /// Multiplier, in basis points, between the size the card is laid out at and
+    /// the size it is displayed at. The drawing is vector, so this only changes
+    /// how large everything appears at a given display width.
+    pub scale_basis_points: u32,
 }
 
 impl GithubStatsConfig {
@@ -368,7 +377,37 @@ impl GithubStatsConfig {
             metric: TileMetric::default(),
             padding: None,
             auto_height: false,
+            scale_basis_points: 10_000,
         })
+    }
+
+    pub fn with_scale(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let text = value.trim();
+        let scale = text
+            .parse::<f64>()
+            .ok()
+            .filter(|scale| scale.is_finite())
+            .map(|scale| (scale * 10_000.0).round())
+            .filter(|points| *points >= 0.0 && *points <= f64::from(u32::MAX))
+            .map(|points| points as u32)
+            .ok_or_else(|| GithubStatsError::InvalidConfig {
+                field: "scale",
+                message: format!("expected a multiplier such as 1.5, got {text}"),
+            })?;
+
+        if !(MIN_SCALE_BASIS_POINTS..=MAX_SCALE_BASIS_POINTS).contains(&scale) {
+            return Err(GithubStatsError::InvalidConfig {
+                field: "scale",
+                message: format!(
+                    "{text} is outside {} to {}",
+                    f64::from(MIN_SCALE_BASIS_POINTS) / 10_000.0,
+                    f64::from(MAX_SCALE_BASIS_POINTS) / 10_000.0
+                ),
+            });
+        }
+
+        self.scale_basis_points = scale;
+        Ok(self)
     }
 
     pub fn with_auto_height(mut self) -> Self {

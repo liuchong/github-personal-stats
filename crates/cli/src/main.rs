@@ -79,6 +79,8 @@ Generate options:
   --theme <name>          light, dark, transparent (default: {DEFAULT_THEME})
   --padding <pixels|auto> Inner margin; pin it to align tiles of differing
                           widths (default: auto, {MAX_PADDING} at most)
+  --scale <multiplier>    Display the card larger or smaller than it is laid
+                          out, without redrawing it (default: 1)
   --fixture <path>        Read sanitized fixture JSON instead of the network
   --authored-languages    Count only repositories the profile contributed to
   --author-email <email>  Extra commit email for authorship matching, repeatable
@@ -158,6 +160,9 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
     if let Some(value) = option_value(&args, "--padding") {
         config = config.with_padding(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--scale") {
+        config = config.with_scale(&value)?;
     }
     if option_flag(&args, "--authored-languages") {
         config = config.with_authored_languages();
