@@ -26,6 +26,11 @@ const SNAPSHOT_DIR: &str = "snapshots";
 pub trait Sink {
     /// Puts the snapshot where whoever renders the cards will find it.
     fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError>;
+
+    /// Where that is, in words, for a daemon that has to say what it is doing
+    /// before it has done it. Reporting the configured file path regardless of
+    /// sink would name a file nothing is written to.
+    fn describe(&self) -> String;
 }
 
 /// Writes the snapshot to one path and stops there. This is the sink for a
@@ -40,6 +45,10 @@ impl Sink for FileSink {
     fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError> {
         write_to(&self.path, snapshot)?;
         Ok(self.path.clone())
+    }
+
+    fn describe(&self) -> String {
+        format!("file {}", self.path.display())
     }
 }
 
@@ -107,6 +116,18 @@ impl Sink for GitSink {
         }
 
         Ok(path)
+    }
+
+    fn describe(&self) -> String {
+        let where_to = match &self.origin {
+            Some(origin) => format!("{} via {}", origin, self.repo.display()),
+            None => self.repo.display().to_string(),
+        };
+        if self.push {
+            format!("git {} on {}", where_to, self.branch)
+        } else {
+            format!("git {} on {}, without pushing", where_to, self.branch)
+        }
     }
 }
 

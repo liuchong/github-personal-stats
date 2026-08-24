@@ -107,13 +107,13 @@ fn serve(args: &[String], settings: Settings, prefs: &Preferences) -> Result<(),
     )? as u64;
 
     let sink = sink_for(args, &settings, prefs)?;
+    let publishing = sink.describe();
     let daemon = Arc::new(Daemon::new(settings, sink)?);
     let listener = daemon.listen(&address)?;
 
     println!(
-        "listening on http://{address}\npanel http://{address}/?token={}\nsnapshot {}\nrebuilding every {interval} minutes",
+        "listening on http://{address}\npanel http://{address}/?token={}\npublishing to {publishing}\nrebuilding every {interval} minutes",
         daemon.token(),
-        daemon.settings().snapshot.display()
     );
 
     let timer = Arc::clone(&daemon);
@@ -139,7 +139,7 @@ fn install(
     let service = service::describe()?;
     let program = env::current_exe()?;
     let logs = settings.state_dir.join("daemon.log");
-    let forwarded = forwarded(args, settings)?;
+    let forwarded = forwarded(args, settings, prefs)?;
 
     fs::create_dir_all(&settings.state_dir)?;
     service::write(&service, &service::contents(&program, &forwarded, &logs))?;
@@ -185,12 +185,18 @@ fn uninstall() -> Result<(), Box<dyn Error>> {
 
 /// The options to repeat in the service description, with paths resolved so they
 /// mean the same thing from a different working directory.
-fn forwarded(args: &[String], settings: &Settings) -> Result<Vec<String>, Box<dyn Error>> {
+fn forwarded(
+    args: &[String],
+    settings: &Settings,
+    prefs: &Preferences,
+) -> Result<Vec<String>, Box<dyn Error>> {
     let mut forwarded = vec![
         "--state".to_owned(),
         settings.state_dir.display().to_string(),
         "--output".to_owned(),
-        absolute(&settings.snapshot)?.display().to_string(),
+        snapshot_for_service(args, settings, prefs)?
+            .display()
+            .to_string(),
         "--home".to_owned(),
         settings.home.display().to_string(),
         "--idle-timeout".to_owned(),
@@ -212,6 +218,26 @@ fn forwarded(args: &[String], settings: &Settings) -> Result<Vec<String>, Box<dy
     }
 
     Ok(forwarded)
+}
+
+/// Where the service should write its snapshot. A relative path is resolved
+/// against the state directory rather than the directory the install happened to
+/// be run from: a background service has no meaningful working directory, and
+/// resolving against the caller's would bury the snapshot wherever the terminal
+/// was standing.
+fn snapshot_for_service(
+    args: &[String],
+    settings: &Settings,
+    prefs: &Preferences,
+) -> Result<PathBuf, Box<dyn Error>> {
+    if settings.snapshot.is_absolute() {
+        return Ok(settings.snapshot.clone());
+    }
+    if chosen(args, prefs, "--output").is_some() {
+        // Asked for explicitly, so honour it as written.
+        return absolute(&settings.snapshot);
+    }
+    Ok(settings.state_dir.join(&settings.snapshot))
 }
 
 fn absolute(path: &PathBuf) -> Result<PathBuf, Box<dyn Error>> {

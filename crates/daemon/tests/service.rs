@@ -90,3 +90,21 @@ fn installing_and_removing_name_the_same_service() {
     assert!(service.load.iter().any(|word| !word.is_empty()));
     assert!(service.unload.iter().any(|word| !word.is_empty()));
 }
+
+#[test]
+fn a_relative_snapshot_path_is_not_resolved_against_wherever_install_was_run() {
+    // A background service has no meaningful working directory, so a default
+    // relative path must not be pinned to the terminal's.
+    let body = service::contents(
+        &PathBuf::from("/bin/daemon"),
+        &[
+            "--state".to_owned(),
+            "/var/state".to_owned(),
+            "--output".to_owned(),
+            "/var/state/activity.json".to_owned(),
+        ],
+        &PathBuf::from("/tmp/daemon.log"),
+    );
+
+    assert!(body.contains("/var/state/activity.json"));
+}
