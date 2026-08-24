@@ -22,6 +22,28 @@ const GUTTER: u32 = 24;
 const RING_CAPTION_OFFSET: u32 = 26;
 const RING_DATE_OFFSET: u32 = 43;
 
+/// Geometry of the stacked streak layout, and the height it therefore needs.
+/// Stacking only pays off when the card is tall enough to hold the ring, its two
+/// caption lines, and a row of figures; on a short card the three columns still
+/// read better than a stack that would run off the bottom edge.
+const STACKED_RING_TOP: u32 = 30;
+const STACKED_RING_RADIUS: u32 = 26;
+const STACKED_FIGURE_GAP: u32 = 28;
+const FIGURE_LABEL_TO_NOTE: u32 = 50;
+const STACKED_STREAK_HEIGHT: u32 = STACKED_RING_TOP
+    + STACKED_RING_RADIUS * 2
+    + RING_DATE_OFFSET
+    + STACKED_FIGURE_GAP
+    + FIGURE_LABEL_TO_NOTE
+    + DESCENDER;
+
+/// Slack left under the lowest baseline so descenders are not clipped.
+const DESCENDER: u32 = 8;
+
+/// Baseline spacing inside a single-figure tile.
+const METRIC_LABEL_TO_VALUE: u32 = 38;
+const METRIC_LABEL_TO_NOTE: u32 = 60;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
     pub kind: Theme,
@@ -580,7 +602,7 @@ fn streak_section(
     config: &HeatRing,
     sides: [StreakMetric; 2],
 ) -> String {
-    if area.is_narrow() {
+    if area.is_narrow() && area.height >= STACKED_STREAK_HEIGHT {
         return streak_stacked(area, streak, theme, config, sides);
     }
 
@@ -632,19 +654,26 @@ fn render_metric_card(
     let size = &config.size;
     let area = card_area(size);
     let value_size = if area.width >= 200 { 34.0 } else { 26.0 };
-    let block = 60;
+    // The date note is supplementary, so a tile too short for all three lines
+    // drops it rather than drawing it past the bottom edge.
+    let room_for_note = area.height >= METRIC_LABEL_TO_NOTE + DESCENDER * 2;
+    let block = if room_for_note {
+        METRIC_LABEL_TO_NOTE
+    } else {
+        METRIC_LABEL_TO_VALUE
+    };
     let label_y = area.y + area.height.saturating_sub(block) / 2 + 12;
     let placement = SidePlacement {
         label_y,
-        value_y: label_y + 38,
-        note_y: label_y + 60,
+        value_y: label_y + METRIC_LABEL_TO_VALUE,
+        note_y: label_y + METRIC_LABEL_TO_NOTE,
         value_size,
         compact: area.is_narrow(),
         align: Align::Centre,
     };
     let centre = area.x + area.width / 2;
 
-    let figure = match config.metric {
+    let mut figure = match config.metric {
         TileMetric::Streak(metric) => streak_side(metric, centre, placement, streak, theme),
         TileMetric::Stat(metric) => {
             let (label, value, _) = stat_metric(metric, stats);
@@ -664,6 +693,10 @@ fn render_metric_card(
         }
     };
 
+    if !room_for_note {
+        figure.note = String::new();
+    }
+
     svg_root(size, theme, title, side_metric(figure))
 }
 
@@ -677,16 +710,16 @@ fn streak_stacked(
     config: &HeatRing,
     sides: [StreakMetric; 2],
 ) -> String {
-    let ring_radius = 26;
+    let ring_radius = STACKED_RING_RADIUS;
     let ring_cx = area.x + area.width / 2;
-    let ring_cy = area.y + 30 + ring_radius;
+    let ring_cy = area.y + STACKED_RING_TOP + ring_radius;
     let ring_bottom = ring_cy + ring_radius + RING_DATE_OFFSET;
-    let figures_y = ring_bottom + 28;
+    let figures_y = ring_bottom + STACKED_FIGURE_GAP;
     let column = area.width / 2;
     let placement = SidePlacement {
         label_y: figures_y,
         value_y: figures_y + 30,
-        note_y: figures_y + 50,
+        note_y: figures_y + FIGURE_LABEL_TO_NOTE,
         value_size: 22.0,
         compact: true,
         align: Align::Centre,
@@ -734,10 +767,17 @@ fn streak_columns(
     sides: [StreakMetric; 2],
 ) -> String {
     let column = area.width / 3;
-    let (label_y, value_y, note_y) = (area.y + 52, area.y + 92, area.y + 118);
-    let value_size = 34.0;
-    let ring_radius = 32;
-    let ring_cy = area.y + 70;
+    // A card too short to stack still has to fit three columns, so the figures
+    // and the ring tighten rather than run past the bottom edge.
+    let compact = area.is_narrow();
+    let (label_y, value_y, note_y) = if compact {
+        (area.y + 44, area.y + 80, area.y + 104)
+    } else {
+        (area.y + 52, area.y + 92, area.y + 118)
+    };
+    let value_size = if compact { 26.0 } else { 34.0 };
+    let ring_radius = if compact { 26 } else { 32 };
+    let ring_cy = area.y + if compact { 62 } else { 70 };
     let ring_cx = area.x + column + column / 2;
 
     let total = side_metric(streak_side(
@@ -748,7 +788,7 @@ fn streak_columns(
             value_y,
             note_y,
             value_size,
-            compact: false,
+            compact,
             align: Align::Left,
         },
         streak,
@@ -762,7 +802,7 @@ fn streak_columns(
             value_y,
             note_y,
             value_size,
-            compact: false,
+            compact,
             align: Align::Left,
         },
         streak,
@@ -784,7 +824,7 @@ fn streak_columns(
                 cx: ring_cx,
                 cy: ring_cy,
                 radius: ring_radius,
-                compact: false,
+                compact,
                 theme,
                 config,
                 stops: config.ramp.stops(theme.kind),
@@ -855,14 +895,18 @@ fn centred_metric(metric: SideMetric<'_>) -> String {
             &metric.value
         ),
         unit,
-        text_middle(
-            metric.x,
-            metric.note_y,
-            label_size,
-            400,
-            metric.theme.muted,
-            &metric.note
-        ),
+        if metric.note.is_empty() {
+            String::new()
+        } else {
+            text_middle(
+                metric.x,
+                metric.note_y,
+                label_size,
+                400,
+                metric.theme.muted,
+                &metric.note,
+            )
+        },
     )
 }
 

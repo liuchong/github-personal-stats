@@ -90,6 +90,59 @@ fn a_wide_streak_card_keeps_the_three_columns_it_has_always_drawn() {
     );
 }
 
+/// Routing on width alone once sent short cards to the stacked layout, which
+/// needs more vertical room than three columns and pushed the figures off the
+/// bottom edge. Every plausible tile size has to stay inside its canvas.
+#[test]
+fn no_streak_card_size_pushes_its_text_off_the_bottom_edge() {
+    for (width, height) in [
+        (275, 250),
+        (275, 320),
+        (300, 240),
+        (380, 220),
+        (420, 200),
+        (420, 260),
+        (520, 200),
+        (700, 260),
+        (1000, 220),
+        (1000, 420),
+    ] {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_size(width, height)
+            .unwrap();
+        let svg = render_card(&streak_card(), &config);
+        let lowest = svg
+            .split("<text")
+            .skip(1)
+            .map(|chunk| attr(chunk, "y"))
+            .max()
+            .expect("the card should draw text");
+
+        assert!(
+            lowest < height,
+            "a {width}x{height} card drew a baseline at y={lowest}"
+        );
+    }
+}
+
+#[test]
+fn a_short_narrow_card_keeps_three_columns_because_a_stack_would_not_fit() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(420, 200)
+        .unwrap();
+    let svg = render_card(&streak_card(), &config);
+
+    let ring_dates = ring_caption_bottom(&svg);
+    let (_, total_y) = text_at(&svg, "Total Contributions");
+
+    assert!(
+        total_y < ring_dates,
+        "a card too short to stack should keep its figures level with the ring"
+    );
+}
+
 #[test]
 fn a_phone_width_streak_card_keeps_every_line_inside_the_canvas() {
     let config = GithubStatsConfig::new("octo")

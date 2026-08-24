@@ -120,6 +120,46 @@ fn a_tile_keeps_its_figure_inside_the_canvas() {
     );
 }
 
+/// The date note is supplementary, so a tile too short for three lines drops it
+/// instead of drawing it off the bottom edge.
+#[test]
+fn a_short_tile_drops_its_date_note_rather_than_clipping_it() {
+    for height in [70, 80, 100, 120, 200, 300] {
+        let config = GithubStatsConfig::new("octo")
+            .unwrap()
+            .with_size(275, height)
+            .unwrap()
+            .with_metric("total")
+            .unwrap();
+        let data = MockGithubClient::success(FIXTURE)
+            .fetch_user_data(&config)
+            .unwrap();
+        let card = aggregate_card_data(&data, OutputKind::Metric, &HeatRing::default());
+        let svg = render_card(&card, &config);
+
+        let lowest = svg
+            .split("<text")
+            .skip(1)
+            .filter_map(|chunk| {
+                chunk
+                    .split_once(r#"y=""#)
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .and_then(|(value, _)| value.parse::<u32>().ok())
+            })
+            .max()
+            .expect("the tile should draw its figure");
+
+        assert!(
+            lowest < height,
+            "a 275x{height} tile drew a baseline at y={lowest}"
+        );
+        assert!(
+            svg.contains("Total Contributions"),
+            "the label and value must survive at every height"
+        );
+    }
+}
+
 #[test]
 fn a_metric_card_is_the_only_card_that_reads_the_metric_setting() {
     let streak = tile(OutputKind::Streak, Some("stars"));
