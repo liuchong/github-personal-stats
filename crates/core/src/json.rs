@@ -23,6 +23,90 @@ pub fn parse_github_fixture(input: &str) -> Result<GithubData, GithubStatsError>
     })
 }
 
+/// Writes the shape [`parse_github_fixture`] reads, so a fetch can be saved once
+/// and rendered from many times.
+///
+/// Scalars come before the arrays on purpose: a field is looked up by the first
+/// key that matches it, and `name` occurs again inside every language.
+pub fn write_github_fixture(data: &GithubData) -> String {
+    let mut out = String::new();
+    out.push_str("{\n");
+    out.push_str(&format!("  \"login\": {},\n", string(&data.profile.login)));
+    match &data.profile.name {
+        Some(name) => out.push_str(&format!("  \"name\": {},\n", string(name))),
+        None => out.push_str("  \"name\": null,\n"),
+    }
+    out.push_str(&format!("  \"followers\": {},\n", data.profile.followers));
+    out.push_str(&format!(
+        "  \"publicRepositories\": {},\n",
+        data.profile.public_repositories
+    ));
+    out.push_str(&format!("  \"stars\": {},\n", data.stats.stars));
+    out.push_str(&format!("  \"commits\": {},\n", data.stats.commits));
+    out.push_str(&format!(
+        "  \"pullRequests\": {},\n",
+        data.stats.pull_requests
+    ));
+    out.push_str(&format!("  \"issues\": {},\n", data.stats.issues));
+    out.push_str(&format!("  \"reviews\": {},\n", data.stats.reviews));
+    out.push_str(&format!(
+        "  \"contributedTo\": {},\n",
+        data.stats.contributed_to
+    ));
+
+    out.push_str("  \"languages\": [\n");
+    for (index, language) in data.languages.iter().enumerate() {
+        out.push_str(&format!(
+            "    {{ \"name\": {}, \"size\": {} }}",
+            string(&language.name),
+            language.size
+        ));
+        out.push_str(if index + 1 == data.languages.len() {
+            "\n"
+        } else {
+            ",\n"
+        });
+    }
+    out.push_str("  ],\n");
+
+    out.push_str("  \"contributions\": [\n");
+    for (index, day) in data.contributions.iter().enumerate() {
+        out.push_str(&format!(
+            "    {{ \"date\": {}, \"count\": {} }}",
+            string(&day.date),
+            day.count
+        ));
+        out.push_str(if index + 1 == data.contributions.len() {
+            "\n"
+        } else {
+            ",\n"
+        });
+    }
+    out.push_str("  ]\n");
+    out.push_str("}\n");
+    out
+}
+
+fn string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            character if (character as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => out.push(character),
+        }
+    }
+    out.push('"');
+    out
+}
+
 fn parse_languages(input: &str) -> Result<Vec<RepositoryLanguage>, GithubStatsError> {
     array_items(input, "languages")
         .into_iter()
@@ -62,8 +146,34 @@ fn optional_string(input: &str, key: &str) -> Option<String> {
         return None;
     }
     let value = value.strip_prefix('"')?;
-    let end = value.find('"')?;
-    Some(value[..end].to_owned())
+    let mut characters = value.chars();
+    let mut text = String::new();
+    while let Some(character) = characters.next() {
+        match character {
+            '"' => return Some(text),
+            '\\' => text.push(unescape(&mut characters)?),
+            character => text.push(character),
+        }
+    }
+    None
+}
+
+fn unescape(characters: &mut std::str::Chars<'_>) -> Option<char> {
+    match characters.next()? {
+        '"' => Some('"'),
+        '\\' => Some('\\'),
+        '/' => Some('/'),
+        'n' => Some('\n'),
+        'r' => Some('\r'),
+        't' => Some('\t'),
+        'b' => Some('\u{8}'),
+        'f' => Some('\u{c}'),
+        'u' => {
+            let digits = characters.by_ref().take(4).collect::<String>();
+            char::from_u32(u32::from_str_radix(&digits, 16).ok()?)
+        }
+        _ => None,
+    }
 }
 
 fn required_number<T>(input: &str, key: &str) -> Result<T, GithubStatsError>

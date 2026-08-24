@@ -14,7 +14,7 @@ keywords = ["github", "svg", "statistics", "profile", "readme"]
 license-file = "LICENSE"
 repository = "https://github.com/liuchong/github-personal-stats"
 rust-version = "1.85"
-version = "1.3.0"
+version = "1.4.0"
 
 [workspace.dependencies]
-github-personal-stats-core = { path = "crates/core", version = "1.3.0" }
+github-personal-stats-core = { path = "crates/core", version = "1.4.0" }

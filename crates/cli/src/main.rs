@@ -1,13 +1,14 @@
 use github_personal_stats_core::{
     CodingActivityEntry, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData,
     GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING, MockGithubClient,
-    OutputKind, aggregate_card_data, aggregate_coding_activity, parse_output_kind, render_card,
-    render_readme_section, workspace_info,
+    OutputKind, aggregate_card_data, aggregate_coding_activity, json::write_github_fixture,
+    parse_output_kind, render_card, render_readme_section, workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
 const DEFAULT_CARD: &str = "dashboard";
 const DEFAULT_OUTPUT: &str = "profile/github-personal-stats.svg";
+const DEFAULT_DATA: &str = "github-personal-stats.json";
 const DEFAULT_USER: &str = "octo";
 const DEFAULT_WIDTH: u32 = 1000;
 const DEFAULT_HEIGHT: u32 = 420;
@@ -43,6 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match command.as_str() {
         "info" => println!("{}", workspace_info().to_json()),
+        "fetch" => fetch(args)?,
         "generate" => generate(args)?,
         "update-readme" => update_readme(args)?,
         command => {
@@ -62,10 +64,18 @@ fn usage() -> String {
         "github-personal-stats <command> [options]
 
 Commands:
+  fetch                   Read a profile once and save it for later renders
   generate                Render a card to an SVG file
   update-readme           Rewrite a marked section of a README
   info                    Print workspace information as JSON
   help, --help, -h        Print this message
+
+Fetch options:
+  --user <login>          Profile to read (default: {DEFAULT_USER})
+  --output <path>         Where to save the profile (default: {DEFAULT_DATA})
+  --authored-languages, --author-email, --min-repo-language-share
+                          Read as they are for generate; the answers they give
+                          are what gets saved
 
 Generate options:
   --user <login>          Profile to read (default: {DEFAULT_USER})
@@ -81,7 +91,8 @@ Generate options:
                           widths (default: auto, {MAX_PADDING} at most)
   --scale <multiplier>    Display the card larger or smaller than it is laid
                           out, without redrawing it (default: 1)
-  --fixture <path>        Read sanitized fixture JSON instead of the network
+  --fixture <path>        Read a saved profile instead of the network, whether
+                          written by fetch or by hand
   --authored-languages    Count only repositories the profile contributed to
   --author-email <email>  Extra commit email for authorship matching, repeatable
   --hide-language <name>  Language to leave out, repeatable
@@ -120,8 +131,48 @@ Environment:
   GITHUB_TOKEN            Token used for live GitHub data
 
 Card aliases top-langs, top-languages, and coding-activity are accepted.
-Ring options are illustrated in docs/user-guide.md."
+Ring options are illustrated in docs/user-guide.md.
+
+Rendering never asks GitHub anything, so a set of tiles costs one fetch:
+  github-personal-stats fetch --user octo --output octo.json
+  github-personal-stats generate --fixture octo.json --card stats  --output stats.svg
+  github-personal-stats generate --fixture octo.json --card heat   --output heat.svg"
     )
+}
+
+fn fetch(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let user = option_value(&args, "--user").unwrap_or_else(|| DEFAULT_USER.to_owned());
+    let output = option_value(&args, "--output").unwrap_or_else(|| DEFAULT_DATA.to_owned());
+    let config = with_fetch_options(GithubStatsConfig::new(user)?, &args)?;
+    let data = live_github_data(&config)?;
+
+    write_output(PathBuf::from(output), write_github_fixture(&data))?;
+    Ok(())
+}
+
+/// Options that change what GitHub is asked for rather than what is drawn. Their
+/// answers are what a saved profile holds, which is why passing them next to a
+/// saved profile is an error rather than a quiet no-op.
+const FETCH_OPTIONS: [&str; 3] = [
+    "--authored-languages",
+    "--author-email",
+    "--min-repo-language-share",
+];
+
+/// Saving a profile saves the answers to [`FETCH_OPTIONS`], so `fetch` and
+/// `generate` have to read them the same way.
+fn with_fetch_options(
+    mut config: GithubStatsConfig,
+    args: &[String],
+) -> Result<GithubStatsConfig, Box<dyn Error>> {
+    if option_flag(args, "--authored-languages") {
+        config = config.with_authored_languages();
+    }
+    config = config.with_author_emails(option_values(args, "--author-email"));
+    if let Some(value) = option_value(args, "--min-repo-language-share") {
+        config = config.with_min_repo_language_share(&value)?;
+    }
+    Ok(config)
 }
 
 fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
@@ -164,14 +215,8 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     if let Some(value) = option_value(&args, "--scale") {
         config = config.with_scale(&value)?;
     }
-    if option_flag(&args, "--authored-languages") {
-        config = config.with_authored_languages();
-    }
-    config = config.with_author_emails(option_values(&args, "--author-email"));
+    config = with_fetch_options(config, &args)?;
     config = config.with_hidden_languages(option_values(&args, "--hide-language"));
-    if let Some(value) = option_value(&args, "--min-repo-language-share") {
-        config = config.with_min_repo_language_share(&value)?;
-    }
     if let Some(value) = option_value(&args, "--stat-rows") {
         config = config.with_stat_rows(&value)?;
     }
@@ -205,7 +250,22 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     if let Some(value) = option_value(&args, "--heat-label") {
         config = config.with_heat_label(&value);
     }
-    let mut data = github_data(&config, option_value(&args, "--fixture"))?;
+    let saved = option_value(&args, "--fixture");
+    if saved.is_some() {
+        let already_answered = FETCH_OPTIONS
+            .into_iter()
+            .filter(|option| args.iter().any(|argument| argument == option))
+            .collect::<Vec<_>>();
+        if !already_answered.is_empty() {
+            return Err(format!(
+                "{} decide what to ask GitHub for, and a saved profile has been asked already; \
+                 pass them to fetch instead",
+                already_answered.join(" and ")
+            )
+            .into());
+        }
+    }
+    let mut data = github_data(&config, saved)?;
     hide_languages(&mut data, &config.hidden_languages);
     let card_data = aggregate_card_data(&data, parse_output_kind(&card)?, &config.heat_ring);
     let rendered = render_card(&card_data, &config);
@@ -233,17 +293,24 @@ fn github_data(
     config: &GithubStatsConfig,
     path: Option<String>,
 ) -> Result<GithubData, Box<dyn Error>> {
-    if let Some(path) = path {
-        let content = fs::read_to_string(path)?;
-        let config = GithubStatsConfig::new("fixture")?;
-        return Ok(
-            <MockGithubClient as github_personal_stats_core::GithubClient>::fetch_user_data(
-                &MockGithubClient::success(content),
-                &config,
-            )?,
-        );
+    match path {
+        Some(path) => saved_github_data(&path),
+        None => live_github_data(config),
     }
+}
 
+fn saved_github_data(path: &str) -> Result<GithubData, Box<dyn Error>> {
+    let content = fs::read_to_string(path)?;
+    let config = GithubStatsConfig::new("fixture")?;
+    Ok(
+        <MockGithubClient as github_personal_stats_core::GithubClient>::fetch_user_data(
+            &MockGithubClient::success(content),
+            &config,
+        )?,
+    )
+}
+
+fn live_github_data(config: &GithubStatsConfig) -> Result<GithubData, Box<dyn Error>> {
     Ok(
         <GithubGraphqlClient as github_personal_stats_core::GithubClient>::fetch_user_data(
             &GithubGraphqlClient::new("https://api.github.com/graphql"),

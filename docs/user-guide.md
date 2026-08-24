@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.4.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -128,13 +128,13 @@ options: --user your-github-login --theme dark
 GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
 
 ```yaml
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.4.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.4.0
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg
@@ -343,14 +343,64 @@ To follow the reader's colour scheme, generate a dark card too and reference bot
 
 One wide dashboard has to shrink to fit a phone. GitHub renders a README at about
 846px on a desktop and about 308px on a phone, so a 1000px card arrives on a phone
-at roughly a third of its size, taking 12.5px body text down to under 4px. GitHub's
-Markdown honours `<picture>` for colour scheme but not width media queries, so a
-card cannot be told to re-lay-out on a narrow screen.
+at roughly a third of its size, taking 12.5px body text down to under 4px. A card
+cannot re-lay-out on its own either: GitHub strips `style` and CSS, so nothing in
+the page can react to the column it lands in.
 
 Several smaller cards can, though. Images with fixed pixel widths sit side by side
 while they fit and wrap when they do not, at their own size either way. Three
 275px tiles occupy 825px of the desktop column and stack into three rows on a
 phone, both at 1:1, so the text is the same size in both places.
+
+### One fetch, many tiles
+
+Rendering never asks GitHub anything: a card is drawn from a profile that has
+already been read. Reading a profile, on the other hand, is the expensive part,
+and `--authored-languages` makes it far more so, because attributing a language
+by who wrote it costs a request per repository per address. A set of tiles that
+fetches once per tile pays that bill once per tile and can exhaust an hourly API
+allowance partway through.
+
+`fetch` reads a profile once and saves it; `--fixture` draws from what was saved:
+
+```sh
+cargo run -p github-personal-stats -- fetch \
+  --user your-github-login \
+  --authored-languages \
+  --output profile.json
+
+cargo run -p github-personal-stats -- generate --fixture profile.json --card stats --output stats.svg
+cargo run -p github-personal-stats -- generate --fixture profile.json --card heat  --output heat.svg
+```
+
+For one profile of 194 repositories, the fetch took seven minutes and the fourteen
+tiles drawn from it took a third of a second altogether.
+
+A saved profile holds the answers to the options that shape a fetch, so those
+belong to `fetch`: `--authored-languages`, `--author-email`, and
+`--min-repo-language-share`. Passing one of them to `generate --fixture` is
+refused rather than quietly ignored. Everything about how a card is drawn, and
+`--hide-language`, still applies at render time, so one saved profile serves any
+number of themes, widths, and cards.
+
+In a workflow, that is one `fetch` step ahead of the render steps:
+
+```yaml
+- uses: liuchong/github-personal-stats@v1.4.0
+  with:
+    mode: fetch
+    path: ${{ runner.temp }}/profile.json
+    options: --user ${{ github.repository_owner }} --authored-languages
+    token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+
+- uses: liuchong/github-personal-stats@v1.4.0
+  with:
+    card: stats
+    path: profile/stats.svg
+    options: --fixture ${{ runner.temp }}/profile.json --width 275 --height auto
+```
+
+The render steps need no token, because they reach nothing.
 
 ### Tile sizes worth knowing
 
@@ -447,6 +497,28 @@ Give each tile an explicit `width` so GitHub keeps it at its own size:
 
 Keep the widths in a row adding up to no more than about 825px, or a tile drops
 to the next row and leaves a gap beside the ones above it.
+
+### Handing a phone a different drawing
+
+A row of two cannot fill a desktop column and stay under 308px at the same time,
+so two rows of unequal width are the usual outcome. What CSS cannot do here,
+`<picture>` can: the `media` attribute on a `<source>` takes any media query, not
+only `prefers-color-scheme`, and the browser is the one evaluating it. Drawing a
+panel at both widths lets each column have the one it can show unscaled:
+
+```md
+<picture>
+  <source media="(max-width: 768px) and (prefers-color-scheme: dark)" srcset="./profile/stats-narrow-dark.svg" />
+  <source media="(max-width: 768px)" srcset="./profile/stats-narrow-light.svg" />
+  <source media="(prefers-color-scheme: dark)" srcset="./profile/stats-dark.svg" />
+  <img src="./profile/stats-light.svg" alt="GitHub stats" />
+</picture>
+```
+
+Leave the `width` attribute off here. It would apply to whichever drawing was
+chosen and stretch the narrow one; without it each drawing arrives at its own
+size. Because both come from one saved profile, the second width costs a render
+rather than a fetch.
 
 Combine this with `<picture>` from [Themes](#following-the-readers-colour-scheme)
 to follow the reader's colour scheme as well. Regenerate the images in this

@@ -15,13 +15,8 @@ fn cli_generates_dashboard_svg_file() {
             "dashboard",
             "--fixture",
             fixture.to_str().unwrap(),
-            "--authored-languages",
-            "--author-email",
-            "old@example.com",
             "--hide-language",
             "Ruby,HTML",
-            "--min-repo-language-share",
-            "1",
             "--output",
             output.to_str().unwrap(),
         ])
@@ -220,6 +215,130 @@ fn cli_reports_missing_readme_section_marker() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("missing section marker: <!--START_SECTION:activity-->"));
     let _ = fs::remove_file(target);
+}
+
+#[test]
+fn a_saved_profile_draws_every_tile_without_asking_github_anything() {
+    let directory = std::env::temp_dir().join(format!("gps-saved-{}", std::process::id()));
+    fs::create_dir_all(&directory).unwrap();
+    let saved = directory.join("profile.json");
+    fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../core/tests/fixtures/github_user_data.json"),
+        &saved,
+    )
+    .unwrap();
+
+    for (card, extra) in [
+        ("stats", Vec::new()),
+        ("languages", Vec::new()),
+        ("heat", Vec::new()),
+        ("metric", vec!["--metric", "total"]),
+        ("metric", vec!["--metric", "longest"]),
+    ] {
+        let tile = directory.join(format!("{card}-{}.svg", extra.last().unwrap_or(&"only")));
+        let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args([
+                "generate",
+                "--card",
+                card,
+                "--fixture",
+                saved.to_str().unwrap(),
+                "--output",
+                tile.to_str().unwrap(),
+            ])
+            .args(&extra)
+            .env_remove("GITHUB_TOKEN")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "{card} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(fs::read_to_string(&tile).unwrap().contains("<svg"));
+    }
+
+    let _ = fs::remove_dir_all(directory);
+}
+
+#[test]
+fn asking_a_saved_profile_to_be_fetched_differently_is_refused() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    let target = std::env::temp_dir().join(format!("gps-refused-{}.svg", std::process::id()));
+
+    for option in [
+        vec!["--authored-languages"],
+        vec!["--author-email", "old@example.com"],
+        vec!["--min-repo-language-share", "1"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args([
+                "generate",
+                "--card",
+                "languages",
+                "--fixture",
+                fixture.to_str().unwrap(),
+                "--output",
+                target.to_str().unwrap(),
+            ])
+            .args(&option)
+            .output()
+            .unwrap();
+
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(!output.status.success(), "{option:?} was accepted");
+        assert!(stderr.contains(option[0]), "unhelpful message: {stderr}");
+        assert!(stderr.contains("pass them to fetch instead"), "{stderr}");
+    }
+
+    // The one language option that acts after a fetch still works on saved data.
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--card",
+            "languages",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--hide-language",
+            "Rust",
+            "--output",
+            target.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(!fs::read_to_string(&target).unwrap().contains(">Rust<"));
+    let _ = fs::remove_file(target);
+}
+
+#[test]
+fn fetch_is_the_only_command_that_needs_the_network() {
+    let saved = std::env::temp_dir().join(format!("gps-fetch-{}.json", std::process::id()));
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "fetch",
+            "--user",
+            "octo",
+            "--output",
+            saved.to_str().unwrap(),
+        ])
+        .env_remove("GITHUB_TOKEN")
+        .output()
+        .unwrap();
+
+    // Reaching the token check is how we know the command was understood and
+    // went looking for live data rather than being turned away as unknown.
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(!output.status.success());
+    assert!(
+        stderr.contains("missing token environment variable GITHUB_TOKEN"),
+        "unexpected failure: {stderr}"
+    );
+    assert!(!saved.exists(), "a failed fetch must not leave a file");
 }
 
 #[test]

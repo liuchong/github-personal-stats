@@ -5,11 +5,11 @@ branding:
   color: blue
 inputs:
   mode:
-    description: generate or update-readme
+    description: fetch, generate, or update-readme
     required: false
     default: generate
   card:
-    description: dashboard, stats, languages, streak, repo, gist, activity, status, json, or png
+    description: dashboard, stats, languages, streak, heat, metric, activity, or status
     required: false
     default: dashboard
   options:
@@ -22,10 +22,6 @@ inputs:
     default: profile/github-personal-stats.svg
   token:
     description: GitHub token
-    required: false
-    default: ""
-  config:
-    description: Config file path
     required: false
     default: ""
   version:
@@ -44,18 +40,6 @@ inputs:
     description: README path for update mode
     required: false
     default: README.md
-  target-branch:
-    description: Branch to update
-    required: false
-    default: ""
-  committer:
-    description: Committer identity
-    required: false
-    default: ""
-  author:
-    description: Author identity
-    required: false
-    default: ""
 runs:
   using: composite
   steps:
@@ -73,6 +57,8 @@ runs:
       run: |
         if [ "${INPUT_MODE}" = "update-readme" ]; then
           github-personal-stats update-readme --section "${INPUT_SECTION_NAME}" --target "${INPUT_TARGET_PATH}" ${INPUT_OPTIONS}
+        elif [ "${INPUT_MODE}" = "fetch" ]; then
+          github-personal-stats fetch --output "${INPUT_PATH}" ${INPUT_OPTIONS}
         else
           github-personal-stats generate --card "${INPUT_CARD}" --output "${INPUT_PATH}" ${INPUT_OPTIONS}
         fi
@@ -81,7 +67,6 @@ runs:
         INPUT_CARD: ${{ inputs.card }}
         INPUT_OPTIONS: ${{ inputs.options }}
         INPUT_PATH: ${{ inputs.path }}
-        INPUT_CONFIG: ${{ inputs.config }}
         INPUT_SECTION_NAME: ${{ inputs.section-name }}
         INPUT_TARGET_PATH: ${{ inputs.target-path }}
         GITHUB_TOKEN: ${{ inputs.token || github.token }}

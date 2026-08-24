@@ -15,9 +15,9 @@ As parameters are added, record their canonical name, aliases, default, accepted
 | Parameter | Default | Accepted values | Output effect |
 | --- | --- | --- | --- |
 | `--user` | `octo` | a GitHub login | Whose profile is fetched |
-| `--card` | `dashboard` | `dashboard`, `stats`, `languages`, `streak`, `activity`, `status`, plus the `top-langs`, `top-languages`, and `coding-activity` aliases | Selects which card renders |
+| `--card` | `dashboard` | `dashboard`, `stats`, `languages`, `streak`, `heat`, `metric`, `activity`, `status`, plus the `top-langs`, `top-languages`, and `coding-activity` aliases | Selects which card renders |
 | `--output` | `profile/github-personal-stats.svg` | a path | Where the rendered card is written |
-| `--fixture` | none | a path to sanitized fixture JSON | Renders from fixture data instead of the network |
+| `--fixture` | none | a path to a saved profile, written by `fetch` or by hand | Renders from that profile instead of the network; passing a fetch-shaping option beside it is an error rather than a silent no-op |
 | `--section`, `--target` | `activity`, `README.md` | a marker name and a path | Which marked README section `update-readme` rewrites |
 | `--width`, `--height` | `1000`, `420` | positive integers | Fixed SVG dimensions; regions below 440 wide switch to compact layout |
 | `--theme` | `light` | `light`, `dark`, `transparent`; `default` is accepted as a synonym for `light` because the HTTP server shipped it | Card palette; an unknown name is an error, and `dark` also turns the heat ramp around |
@@ -35,3 +35,9 @@ As parameters are added, record their canonical name, aliases, default, accepted
 | `--stat-rows` | `stars,commits,prs,issues` | ordered list of `stars`, `commits`, `prs`, `issues`, `reviews`, `repos`; `pull-requests` and `contributed` are accepted aliases | Which rows the stats panel lists, in the order given; an empty list, an unknown name, or a repeat is an error |
 | `--language-rows` | `6` | `1` to `8`, the ceiling aggregation keeps | How many languages the panel lists; the stacked bar covers exactly those, leaving the rest as visible track |
 | `--streak-sides` | `total,longest` | exactly two of `total`, `longest`, `current`, `active` | Which figure each panel beside the ring reports, left then right; fewer, more, or a repeat is an error |
+
+## Removed Surface
+
+| Surface | Why it went |
+| --- | --- |
+| Action inputs `config`, `target-branch`, `committer`, `author` | Declared but never read. They described a config file and a commit step this action does not have; the workflow calling it commits. Passing them now warns and does nothing, which is what they always did. |

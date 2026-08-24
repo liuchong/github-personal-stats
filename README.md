@@ -16,6 +16,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 - Panels that report what you choose: which stats rows, how many languages, and which figures sit beside the ring.
 - Light, dark, and transparent themes, so a profile can follow the reader's colour scheme.
 - Tiles that reflow on a phone: any single figure or the ring on its own, each fitted to its content, so a README row stacks at full size instead of shrinking.
+- One fetch behind any number of tiles: read a profile once, then draw every card, theme, and width from what was saved.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.
 - Deterministic rendering backed by fixtures and snapshot tests.
@@ -76,7 +77,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.3.0
+      - uses: liuchong/github-personal-stats@v1.4.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -101,6 +102,15 @@ Then add the generated image to your profile README:
 ```
 
 ## Local Preview
+
+Reading a profile is the slow part, and drawing from one costs nothing, so read it
+once and draw as often as you like:
+
+```sh
+cargo run -p github-personal-stats -- fetch --user your-github-login --output profile.json
+cargo run -p github-personal-stats -- generate --fixture profile.json --card stats --output stats.svg
+cargo run -p github-personal-stats -- generate --fixture profile.json --card heat  --output heat.svg
+```
 
 Generate the showcase dashboard from the deterministic example data:
 

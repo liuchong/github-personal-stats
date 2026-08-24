@@ -83,3 +83,19 @@ Decision: Make reflow a composition property rather than a card property. Keep c
 Consequences: A profile composes its own layout and gets phone behaviour for free, with no media queries and no scaling. The cost is that the widths in a row have to add up: past about 825px a tile drops to the next row and leaves a gap, which is a documented constraint rather than something the tool can detect. Fitting a card to its content required every external measurement to be derived from the constant its layout draws with, which immediately exposed a wrong streak height that padding had been absorbing. Two card kinds and four options are now public surface; all four default to previous behaviour, so committed output is unchanged byte for byte.
 
 Review Date: 2026-11-24
+
+Correction, 2026-08-24: the claim above that GitHub honours `<picture>` for colour scheme "but not width media queries" is wrong, and it was wrong about CSS rather than about `<picture>`. GitHub strips `style` and CSS, so a card cannot react to its column; a `<source media>` query is evaluated by the browser and any media query works there, width included. Measured on the rendered page: a 1012px viewport takes the 412px drawing and a 390px one takes the 275px drawing, each at 1:1. The decision stands — fixed-size tiles are still what makes a row wrap — but a panel too wide for a phone can now be drawn at both widths instead of being scaled down, which AD-0007 makes affordable.
+
+## AD-0007: One Fetch Stands Behind Any Number Of Renders
+
+Date: 2026-08-24
+
+Status: Accepted
+
+Context: AD-0006 told profiles to compose a README out of tiles, and following that advice made every tile fetch the profile again. Rendering is already offline — a card is drawn from data and a config, and the client is nowhere in that path — so the repetition bought nothing. It cost a great deal: reading one profile of 194 repositories with `--authored-languages` takes about seven minutes, because attributing a language by who wrote it costs a request per repository per address. Fourteen tiles asking for that fourteen times exhausted the hourly API allowance partway through a run and committed nothing. The guidance was creating the failure.
+
+Decision: Separate reading a profile from drawing it. `fetch` reads once and saves the result in the shape `--fixture` already reads, so there is one file format rather than a second one. Name the options that shape a fetch — `--authored-languages`, `--author-email`, `--min-repo-language-share` — in one place that both commands read, and refuse them next to `--fixture` instead of ignoring them, since a saved profile has already answered them. Leave `--hide-language` on the render side, where it already acted. Do not add a config file to render several cards in one invocation: fourteen renders take a third of a second altogether, so the process count was never the cost.
+
+Consequences: A set of tiles costs one read, whatever the number of cards, themes, and widths, and the render steps need no token because they reach nothing. Drawing a panel at two widths is now a render rather than a fetch, which is what makes AD-0006's correction practical. The writer had to be correct rather than convenient: the existing reader finds a field by the first matching key and understood no escapes, so `name` has to be written before the languages that carry a name of their own, and both sides now handle escapes — a display name with a quote in it is real data, not a hypothetical. The refusal is a behaviour change for a combination that never did anything, and the action's `config`, `target-branch`, `committer`, and `author` inputs went with it: they described a config file and a commit step this action does not have.
+
+Review Date: 2026-11-24
