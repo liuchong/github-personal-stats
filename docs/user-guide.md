@@ -339,6 +339,119 @@ For a richer profile section:
 
 To follow the reader's colour scheme, generate a dark card too and reference both through `<picture>`, as described under [Themes](#following-the-readers-colour-scheme).
 
+## Composing Tiles
+
+One wide dashboard has to shrink to fit a phone. GitHub renders a README at about
+846px on a desktop and about 308px on a phone, so a 1000px card arrives on a phone
+at roughly a third of its size, taking 12.5px body text down to under 4px. GitHub's
+Markdown honours `<picture>` for colour scheme but not width media queries, so a
+card cannot be told to re-lay-out on a narrow screen.
+
+Several smaller cards can, though. Images with fixed pixel widths sit side by side
+while they fit and wrap when they do not, at their own size either way. Three
+275px tiles occupy 825px of the desktop column and stack into three rows on a
+phone, both at 1:1, so the text is the same size in both places.
+
+### Tile sizes worth knowing
+
+| Container | Measured width | Fits at 275px |
+| --- | --- | --- |
+| Desktop README | ~846px | 3 per row |
+| Phone README (390px viewport) | ~308px | 1 per row |
+
+### Fitting a card to its content
+
+`--height auto` sizes a card to what it draws, so a tile carries no dead space
+and needs no guessing:
+
+```sh
+cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card stats \
+  --width 275 \
+  --height auto \
+  --output profile/tiles/stats.svg
+```
+
+The `dashboard`, `activity`, and `status` cards divide a height between sections
+rather than having one of their own, so they need an explicit height; asking them
+for `auto` is refused rather than quietly ignored.
+
+### Splitting the streak card
+
+At a tile width the streak card gives the ring a full-width row and sits its two
+figures underneath, because three columns leave each figure about 90px:
+
+<img src="images/tiles/tile-streak.svg" alt="Streak card at 275px" width="275" />
+
+Its parts are also available on their own, which lets a README place them
+wherever it likes. `heat` draws the ring, and `metric` draws a single figure:
+
+<p>
+  <img src="images/tiles/tile-heat.svg" alt="Heat ring tile" width="275" />
+  <img src="images/tiles/tile-total.svg" alt="Total contributions tile" width="275" />
+  <img src="images/tiles/tile-longest.svg" alt="Longest streak tile" width="275" />
+</p>
+
+`--metric` accepts any name the panel lists accept, so the same vocabulary covers
+tiles: `stars`, `commits`, `prs`, `issues`, `reviews`, `repos`, `total`,
+`longest`, `current`, and `active`.
+
+```sh
+cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card metric --metric stars \
+  --width 275 --height auto \
+  --output profile/tiles/stars.svg
+```
+
+<img src="images/tiles/tile-stars.svg" alt="Total stars tile" width="275" />
+
+### Lining tiles up
+
+Padding scales with card width by default, which suits a card seen on its own but
+leaves the content edges of different widths out of line. Pin it when mixing
+widths in one block:
+
+```sh
+--padding 20
+```
+
+### Display size and layout size
+
+Because the cards are vector, the size a card is laid out at and the size it
+arrives at are separable. `--scale` multiplies only the latter, so a tile can be
+laid out for a narrow column and still be displayed larger:
+
+```sh
+--scale 1.5
+```
+
+### A row that reflows
+
+Give each tile an explicit `width` so GitHub keeps it at its own size:
+
+```md
+<p>
+  <img src="./profile/tiles/stats.svg" width="275" alt="GitHub stats" />
+  <img src="./profile/tiles/languages.svg" width="275" alt="Top languages" />
+  <img src="./profile/tiles/streak.svg" width="275" alt="Contribution streak" />
+</p>
+```
+
+<p>
+  <img src="images/tiles/tile-stats.svg" alt="Stats tile" width="275" />
+  <img src="images/tiles/tile-languages.svg" alt="Languages tile" width="275" />
+  <img src="images/tiles/tile-streak.svg" alt="Streak tile" width="275" />
+</p>
+
+Keep the widths in a row adding up to no more than about 825px, or a tile drops
+to the next row and leaves a gap beside the ones above it.
+
+Combine this with `<picture>` from [Themes](#following-the-readers-colour-scheme)
+to follow the reader's colour scheme as well. Regenerate the images in this
+section with `python3 scripts/render-tile-samples.py` after building the CLI.
+
 ## Card Types
 
 | Card | Output |
@@ -347,6 +460,8 @@ To follow the reader's colour scheme, generate a dark card too and reference bot
 | `stats` | Stats and rank card |
 | `languages` | Repository language share |
 | `streak` | Total contributions, current streak, longest streak |
+| `heat` | The contribution heat ring on its own |
+| `metric` | A single figure, chosen with `--metric` |
 | `activity` | Coding activity card |
 | `status` | Service status card |
 
@@ -392,6 +507,10 @@ cargo run -p github-personal-stats -- generate \
   --height 260 \
   --output profile/languages.svg
 ```
+
+Cards below 440px wide switch to layouts meant for a narrow column, and
+`--height auto` removes the need to pick a height at all. See
+[Composing Tiles](#composing-tiles) for building a row that reflows on a phone.
 
 ## Local Preview
 

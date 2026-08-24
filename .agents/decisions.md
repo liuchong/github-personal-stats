@@ -69,3 +69,17 @@ Decision: Model panel content as ordered lists of named metrics, `--stat-rows` a
 Consequences: Default output is unchanged byte for byte, which the committed examples verify. The workspace's own HTTP server had to move off its struct literal onto the builders, which is the change every downstream caller would face and the reason to make it while the only reverse dependency is ours. Layout now derives from the configured count instead of a constant, so the column split had to key on what was asked for rather than what data happened to arrive, or a profile with fewer languages than rows would have silently relaid out. Panel labels stay in the renderer, so a metric name is a stable identifier and the copy beside it can change without breaking a command line.
 
 Review Date: 2026-11-21
+
+## AD-0006: Reflow Comes From Composable Tiles, Not From A Responsive Card
+
+Date: 2026-08-24
+
+Status: Accepted
+
+Context: One 1000px dashboard is unreadable on a phone. GitHub renders a README at about 846px on a desktop and about 308px on a phone and scales an oversized image down to fit, taking 12.5px body text under 4px. The obvious fix — make the card responsive — is not available: GitHub's Markdown honours `<picture>` with `prefers-color-scheme` but not width media queries, and stripping the sizing attributes only hands the decision to the same downscaling. Measurement showed what does work: images with fixed pixel widths sit side by side while they fit and wrap when they do not, at their own size either way.
+
+Decision: Make reflow a composition property rather than a card property. Keep cards fixed-size and give a README the pieces to build a row that wraps: `heat` and `metric` cards so any single figure can stand alone, `--height auto` so a tile carries no dead space, `--padding` so tiles of different widths line their content up, and `--scale` so display size is not tied to layout size. Reuse the existing metric vocabulary for `--metric` rather than inventing a third list of names.
+
+Consequences: A profile composes its own layout and gets phone behaviour for free, with no media queries and no scaling. The cost is that the widths in a row have to add up: past about 825px a tile drops to the next row and leaves a gap, which is a documented constraint rather than something the tool can detect. Fitting a card to its content required every external measurement to be derived from the constant its layout draws with, which immediately exposed a wrong streak height that padding had been absorbing. Two card kinds and four options are now public surface; all four default to previous behaviour, so committed output is unchanged byte for byte.
+
+Review Date: 2026-11-24

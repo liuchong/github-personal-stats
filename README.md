@@ -15,6 +15,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 - A heat ring that shows each day of your streak, configurable down to its window, shape, scale, palette, and centre label.
 - Panels that report what you choose: which stats rows, how many languages, and which figures sit beside the ring.
 - Light, dark, and transparent themes, so a profile can follow the reader's colour scheme.
+- Tiles that reflow on a phone: any single figure or the ring on its own, each fitted to its content, so a README row stacks at full size instead of shrinking.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.
 - Deterministic rendering backed by fixtures and snapshot tests.

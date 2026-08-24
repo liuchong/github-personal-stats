@@ -68,3 +68,16 @@ Both rings encode a real measurement; neither is decoration.
 - Real contribution counts are heavy-tailed, so `linear` leaves ordinary days pale and only bursts deep. That is faithful and is the default; `sqrt` is the alternative worth reaching for when the ring looks washed out.
 - The centre label is free text over `{X}`, `{Y}`, and `{Z}`. `centre_text_size` steps the size down for longer templates so a configured label can never spill across the ring itself.
 - A fixed window is not a streak, so its caption reads `Last N Days` instead of `Current Streak`.
+
+## Composed Tile Contract
+
+A card may be one of several in a README row rather than the whole picture. GitHub renders that row at about 846px on a desktop and about 308px on a phone, and honours `<picture>` but not width media queries, so reflow comes from fixed-width images wrapping, not from the card re-laying-out. Three 275px tiles therefore sit in one desktop row and stack on a phone, both at 1:1.
+
+- Layout switches on width at `NARROW_WIDTH`, but a layout that needs vertical room must also check for it. The stacked streak layout is chosen only when the card is both narrow and at least `STACKED_STREAK_HEIGHT` tall; a short narrow card keeps the compact three columns, which fit where a stack would run off the bottom.
+- Anything measuring a layout from outside it reads the same constant the layout draws with. `natural_height` is built from `STAT_ROWS_TOP`, `LANGUAGE_TRACK_STEP`, `RING_DATE_OFFSET` and the rest for exactly this reason: the first version measured the three-column streak to its side notes when the ring's date line hangs lower, and the error only hid because the bottom padding absorbed it.
+- `--height auto` belongs to cards whose content decides their height. The dashboard, activity, and status cards divide a height between sections and have none of their own, so the command line refuses `auto` for them instead of ignoring it.
+- Supplementary lines give way before they clip. A single-figure tile too short for three lines drops its date note and keeps the label and the value; an absent note draws no element at all, so it cannot register a baseline.
+- Padding scales with width by default, which suits a card seen alone and misaligns tiles of different widths composed together, so it can be pinned. The default path must stay byte-identical: pinning is opt-in.
+- A caption may be wider than the thing it captions. The rank ring is placed by whichever of its radius and its caption's half-width is larger, or the caption reaches past the right margin on a tile.
+- Layout units and display units are separate. `--scale` multiplies only the `width` and `height` attributes and leaves the `viewBox` in layout units, so a scaled card is the same drawing delivered larger, never a re-laid-out or resampled one.
+- A tile centres its content because it owns its width; figures in a column align left. `Align` carries that choice, and a value and its unit centre as one group so centring the number alone cannot leave the unit off balance.

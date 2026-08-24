@@ -2,7 +2,7 @@
 
 ## Date
 
-2026-05-13
+2026-08-24
 
 ## Project State
 
@@ -10,7 +10,7 @@ The planned foundation, data client, aggregation, renderer, CLI, Action, server,
 
 ## Active Task
 
-Run final verification and continue hardening production behavior through focused follow-up tasks. The heat ring is fully configurable and themes are selectable from the CLI, with the ramp resolving against the theme; both are documented with illustrations in the user guide. The crates carry the metadata crates.io requires and the manifest version now tracks the release tags. Panel content is configurable too: `--stat-rows`, `--language-rows`, and `--streak-sides` choose what each panel reports, and `GithubStatsConfig` is now `#[non_exhaustive]` so later options ship as minor releases.
+Run final verification and continue hardening production behavior through focused follow-up tasks. The heat ring is fully configurable and themes are selectable from the CLI, with the ramp resolving against the theme; both are documented with illustrations in the user guide. The crates carry the metadata crates.io requires and the manifest version now tracks the release tags. Panel content is configurable too: `--stat-rows`, `--language-rows`, and `--streak-sides` choose what each panel reports, and `GithubStatsConfig` is now `#[non_exhaustive]` so later options ship as minor releases. A README can also compose its own layout out of tiles: `heat` and `metric` cards draw the ring or a single figure alone, `--height auto` fits a card to its content, and `--padding` and `--scale` keep a composed row aligned and legible on a phone.
 
 ## Next Safe Task After Commit
 
