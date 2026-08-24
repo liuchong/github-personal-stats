@@ -189,6 +189,7 @@ fn read_worked_time(
         if starts_session {
             days.entry(moment.day.clone())
                 .or_insert_with(|| DayBucket::new(moment.day.clone()))
+                .agent
                 .sessions += 1;
         }
 
@@ -248,7 +249,7 @@ fn spend(days: &mut BTreeMap<String, DayBucket>, moment: &Moment, seconds: u64) 
     let bucket = days
         .entry(moment.day.clone())
         .or_insert_with(|| DayBucket::new(moment.day.clone()));
-    bucket.seconds += seconds;
+    bucket.agent.seconds += seconds;
 
     let weight: u64 = moment.extensions.iter().map(|(_, weight)| weight).sum();
     if weight == 0 {
@@ -258,12 +259,12 @@ fn spend(days: &mut BTreeMap<String, DayBucket>, moment: &Moment, seconds: u64) 
     let mut spent = 0;
     for (language, share) in &moment.extensions {
         let slice = seconds * share / weight;
-        *bucket.languages.entry(language.to_string()).or_default() += slice;
+        *bucket.agent.languages.entry(language.to_string()).or_default() += slice;
         spent += slice;
     }
 
     if let Some((language, _)) = moment.extensions.first() {
-        *bucket.languages.entry(language.to_string()).or_default() += seconds - spent;
+        *bucket.agent.languages.entry(language.to_string()).or_default() += seconds - spent;
     }
 }
 

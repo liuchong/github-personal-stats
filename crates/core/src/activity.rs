@@ -120,20 +120,42 @@ impl GeneratedLines {
     }
 }
 
+/// One way of measuring time spent. Two of these live side by side in a day
+/// because "the editor was in use" and "code was being changed by an agent" are
+/// different quantities, and a day can be long in one and short in the other.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TimeBucket {
+    pub seconds: u64,
+    pub languages: BTreeMap<String, u64>,
+    pub sessions: u32,
+}
+
+impl TimeBucket {
+    fn absorb(&mut self, other: &Self) {
+        self.seconds += other.seconds;
+        self.sessions += other.sessions;
+        for (language, seconds) in &other.languages {
+            *self.languages.entry(language.clone()).or_default() += seconds;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DayBucket {
     pub date: String,
+    /// Time the editor was being worked in, reported by editor plugins.
     #[serde(default)]
-    pub seconds: u64,
+    pub editor: TimeBucket,
+    /// Time in which an agent was changing code, derived from the editor's own
+    /// record of what it generated.
     #[serde(default)]
-    pub languages: BTreeMap<String, u64>,
+    pub agent: TimeBucket,
     #[serde(default)]
     pub committed: LineCounts,
     #[serde(default)]
     pub generated: GeneratedLines,
-    #[serde(default)]
-    pub sessions: u32,
     #[serde(default)]
     pub requests: u32,
 }
@@ -146,15 +168,19 @@ impl DayBucket {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.editor.seconds == 0
+            && self.agent.seconds == 0
+            && self.committed.changed() == 0
+            && self.generated.total() == 0
+    }
+
     fn absorb(&mut self, other: &Self) {
-        self.seconds += other.seconds;
-        self.sessions += other.sessions;
+        self.editor.absorb(&other.editor);
+        self.agent.absorb(&other.agent);
         self.requests += other.requests;
         self.committed.absorb(&other.committed);
         self.generated.absorb(&other.generated);
-        for (language, seconds) in &other.languages {
-            *self.languages.entry(language.clone()).or_default() += seconds;
-        }
     }
 }
 
@@ -255,38 +281,51 @@ pub struct ModelUsage {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MeasureTotals {
+    pub seconds: u64,
+    pub sessions: u32,
+    pub languages: Vec<CodingActivityEntry>,
+    pub daily_seconds: Vec<(String, u64)>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ActivityTotals {
     pub first_day: Option<String>,
     pub last_day: Option<String>,
     pub active_days: u32,
-    pub total_seconds: u64,
-    pub languages: Vec<CodingActivityEntry>,
+    pub editor: MeasureTotals,
+    pub agent: MeasureTotals,
     pub committed: LineCounts,
     pub generated: GeneratedLines,
     pub models: Vec<ModelUsage>,
-    pub sessions: u32,
     pub requests: u32,
-    pub daily_seconds: Vec<(String, u64)>,
 }
 
 pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
-    let mut languages = BTreeMap::<&str, u64>::new();
+    let mut editor_languages = BTreeMap::<&str, u64>::new();
+    let mut agent_languages = BTreeMap::<&str, u64>::new();
     let mut models = BTreeMap::<&str, u64>::new();
     let mut totals = ActivityTotals::default();
 
     for day in days {
-        if day.seconds > 0 || day.committed.changed() > 0 || day.generated.total() > 0 {
+        if !day.is_empty() {
             totals.active_days += 1;
         }
-        totals.total_seconds += day.seconds;
-        totals.sessions += day.sessions;
         totals.requests += day.requests;
         totals.committed.absorb(&day.committed);
         totals.generated.absorb(&day.generated);
-        totals.daily_seconds.push((day.date.clone(), day.seconds));
-        for (language, seconds) in &day.languages {
-            *languages.entry(language.as_str()).or_default() += seconds;
-        }
+        gather(
+            &day.editor,
+            &day.date,
+            &mut totals.editor,
+            &mut editor_languages,
+        );
+        gather(
+            &day.agent,
+            &day.date,
+            &mut totals.agent,
+            &mut agent_languages,
+        );
         for (model, lines) in &day.generated.by_model {
             *models.entry(model.as_str()).or_default() += lines;
         }
@@ -294,13 +333,8 @@ pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
 
     totals.first_day = days.first().map(|day| day.date.clone());
     totals.last_day = days.last().map(|day| day.date.clone());
-    totals.languages = rank(languages)
-        .into_iter()
-        .map(|(language, seconds)| CodingActivityEntry {
-            language: language.to_string(),
-            seconds,
-        })
-        .collect();
+    totals.editor.languages = entries(editor_languages);
+    totals.agent.languages = entries(agent_languages);
     totals.models = rank(models)
         .into_iter()
         .map(|(name, lines)| ModelUsage {
@@ -309,6 +343,32 @@ pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
         })
         .collect();
     totals
+}
+
+fn gather<'day>(
+    bucket: &'day TimeBucket,
+    date: &str,
+    totals: &mut MeasureTotals,
+    languages: &mut BTreeMap<&'day str, u64>,
+) {
+    totals.seconds += bucket.seconds;
+    totals.sessions += bucket.sessions;
+    totals
+        .daily_seconds
+        .push((date.to_owned(), bucket.seconds));
+    for (language, seconds) in &bucket.languages {
+        *languages.entry(language.as_str()).or_default() += seconds;
+    }
+}
+
+fn entries(counts: BTreeMap<&str, u64>) -> Vec<CodingActivityEntry> {
+    rank(counts)
+        .into_iter()
+        .map(|(language, seconds)| CodingActivityEntry {
+            language: language.to_string(),
+            seconds,
+        })
+        .collect()
 }
 
 fn rank(counts: BTreeMap<&str, u64>) -> Vec<(&str, u64)> {

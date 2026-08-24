@@ -54,11 +54,19 @@ fn run() -> Result<(), Box<dyn Error>> {
         settings.snapshot.display()
     );
     println!(
-        "{} hrs {} mins worked across {} sessions",
-        totals.total_seconds / 3_600,
-        (totals.total_seconds % 3_600) / 60,
-        totals.sessions
+        "{} hrs {} mins of code changing by agents, across {} sessions",
+        totals.agent.seconds / 3_600,
+        (totals.agent.seconds % 3_600) / 60,
+        totals.agent.sessions
     );
+    if totals.editor.seconds > 0 {
+        println!(
+            "{} hrs {} mins in the editor, across {} sessions",
+            totals.editor.seconds / 3_600,
+            (totals.editor.seconds % 3_600) / 60,
+            totals.editor.sessions
+        );
+    }
     println!(
         "{} lines committed, {} of them attributable, {}% of those written by AI",
         totals.committed.added(),
