@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use github_personal_stats_core::DayBucket;
@@ -13,6 +14,9 @@ use crate::{
 
 const SCORED_COMMITS: &str = "scored_commits";
 const CODE_HASHES: &str = "ai_code_hashes";
+
+/// How long to wait for the editor to finish writing before giving up on a read.
+const LOCK_WAIT: Duration = Duration::from_secs(30);
 
 const COMMITTED_QUERY: &str = "SELECT commitDate, \
      tabLinesAdded, tabLinesDeleted, \
@@ -60,6 +64,19 @@ pub fn read(
         path: path.to_path_buf(),
         message: error.to_string(),
     })?;
+
+    // This database belongs to the editor, which writes to it continuously and
+    // keeps it on a rollback journal rather than a write-ahead log, so a write in
+    // progress locks readers out entirely. Waiting is the right answer: the editor
+    // is the owner and its commits are short, while a collection that gives up
+    // loses the run. The default would be five seconds, which measurement showed
+    // is close enough to real contention to be reached.
+    connection
+        .busy_timeout(LOCK_WAIT)
+        .map_err(|error| CollectError::Unreadable {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        })?;
 
     let mut days = BTreeMap::new();
     read_committed(&connection, &mut days)?;
@@ -275,7 +292,24 @@ fn positive(value: i64) -> u64 {
     u64::try_from(value).unwrap_or_default()
 }
 
+/// Sorts a failed query into the two things it can mean.
+///
+/// Losing the lock race and reading a database whose shape has changed both
+/// arrive here as one error type, and they ask for opposite responses: waiting
+/// again later, or changing this code. Reporting a lock as a schema problem sends
+/// the reader looking for a column that was never missing.
 fn schema_error(source: &'static str, error: rusqlite::Error) -> CollectError {
+    if let rusqlite::Error::SqliteFailure(failure, _) = &error {
+        if matches!(
+            failure.code,
+            rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+        ) {
+            return CollectError::Busy {
+                what: source,
+                waited: LOCK_WAIT,
+            };
+        }
+    }
     CollectError::UnexpectedSchema {
         source,
         message: error.to_string(),

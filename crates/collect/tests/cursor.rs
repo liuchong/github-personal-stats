@@ -10,7 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use github_personal_stats_collect::cursor::{commit_day, database_path, read};
+use github_personal_stats_collect::{
+    cursor::{commit_day, database_path, read},
+    error::CollectError,
+};
 use rusqlite::Connection;
 
 fn scratch(name: &str) -> PathBuf {
@@ -350,6 +353,61 @@ fn a_date_that_makes_no_sense_is_declined_rather_than_guessed() {
     assert_eq!(commit_day("Mon Smarch 24 19:00:00 2026 +0800"), None);
     assert_eq!(commit_day("Mon Aug 99 19:00:00 2026 +0800"), None);
     assert_eq!(commit_day("Mon Aug 24 19:00:00 1900 +0800"), None);
+}
+
+/// The editor writes to this database while the collector reads it, and keeps it
+/// on a rollback journal, so a write in progress shuts readers out completely.
+/// A read that gave up on the lock would lose the whole run, so it has to wait
+/// for the owner to finish instead.
+#[test]
+fn a_read_waits_for_the_editor_to_finish_writing() {
+    let root = scratch("locked");
+    let path = database(&root);
+    hash(&path, 1_756_000_000, "composer", "a-model", "rs", "r1");
+
+    let writer = Connection::open(&path).expect("a writer");
+    writer
+        .execute_batch("BEGIN EXCLUSIVE")
+        .expect("the writer should take the lock");
+
+    let holding = std::time::Duration::from_millis(400);
+    let released = std::thread::spawn(move || {
+        std::thread::sleep(holding);
+        writer
+            .execute_batch("COMMIT")
+            .expect("the writer should let go");
+    });
+
+    let started = std::time::Instant::now();
+    let days = read(&path, 300).expect("a read should wait rather than fail");
+    let waited = started.elapsed();
+    released.join().expect("the writer thread should finish");
+
+    assert_eq!(days.len(), 1, "the row should be read once the lock clears");
+    assert!(
+        waited >= holding,
+        "the read returned in {waited:?}, so it cannot have waited for the lock"
+    );
+}
+
+/// Waiting out a busy owner and repairing a changed schema are opposite jobs, so
+/// the message has to say which one happened. It previously reported a held lock
+/// as `scored_commits does not look the way this build expects`, which points at
+/// a column that was never missing.
+#[test]
+fn a_held_lock_does_not_read_as_a_broken_schema() {
+    let busy = CollectError::Busy {
+        what: "scored_commits",
+        waited: std::time::Duration::from_secs(30),
+    }
+    .to_string();
+
+    assert!(busy.contains("locked"), "{busy}");
+    assert!(busy.contains("30"), "{busy}");
+    assert!(
+        !busy.contains("does not look the way"),
+        "a lock is not a schema change: {busy}"
+    );
 }
 
 #[test]
