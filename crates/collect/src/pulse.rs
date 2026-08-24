@@ -133,7 +133,7 @@ pub fn reporters(state_dir: &Path, day: &str) -> Vec<Reporter> {
     }
 
     let mut reporters = seen.into_values().collect::<Vec<_>>();
-    reporters.sort_by(|left, right| right.last_seen.cmp(&left.last_seen));
+    reporters.sort_by_key(|reporter| std::cmp::Reverse(reporter.last_seen));
     reporters
 }
 
