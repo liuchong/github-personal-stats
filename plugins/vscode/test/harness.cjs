@@ -62,14 +62,30 @@ function documentAt(filePath) {
   return { document: { uri: { scheme: "file", fsPath: filePath } } };
 }
 
+function check(claim, held) {
+  if (!held) {
+    throw new Error(`failed: ${claim}`);
+  }
+  console.log(`ok: ${claim}`);
+}
+
 async function main() {
   extension.activate({ subscriptions: [] });
 
+  // A document change says text moved, not that a person did it: an agent
+  // editing a file raises it just as typing does. Subscribing to it would put
+  // agent work into the measure of the author being at the editor, which is the
+  // one thing that measure exists to keep out.
+  check("a document change is not treated as someone working", handlers.change.length === 0);
+  check("caret movement is watched instead", handlers.selection.length === 1);
+  check("switching file is watched", handlers.active.length === 1);
+  check("saving is watched", handlers.save.length === 1);
+
   const files = ["/private/secret-project/src/main.rs", "/private/secret-project/notes.md"];
   for (let index = 0; index < 6; index += 1) {
-    handlers.change.forEach((fn) => fn(documentAt(files[index % 2])));
+    handlers.selection.forEach((fn) => fn(documentAt(files[index % 2])));
     // Non-file documents must never be reported.
-    handlers.change.forEach((fn) =>
+    handlers.selection.forEach((fn) =>
       fn({ document: { uri: { scheme: "output", fsPath: "extension-output" } } }),
     );
     await new Promise((resolve) => setTimeout(resolve, 5100));

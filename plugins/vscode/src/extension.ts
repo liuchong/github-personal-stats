@@ -59,8 +59,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  // What counts as the editor being worked in, and what deliberately does not.
+  //
+  // `onDidChangeTextDocument` is missing here on purpose. It fires for every
+  // edit whatever made it, so an agent writing a file while its author reads
+  // something else would be recorded as the author sitting at the editor. That
+  // is the one thing this measure exists to exclude: agent work is counted
+  // separately, from the editor's own record of what it generated.
+  //
+  // Typing is still caught, because it moves the caret and so raises a
+  // selection change. What is lost is an edit that changes a document without
+  // moving the caret, such as a replace across files, which is a small price
+  // for not confusing the two measures.
   context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument(seen(true)),
     vscode.workspace.onDidSaveTextDocument(seen(true)),
     vscode.window.onDidChangeActiveTextEditor(seen(false)),
     vscode.window.onDidChangeTextEditorSelection(seen(false)),

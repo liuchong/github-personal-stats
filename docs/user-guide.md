@@ -726,15 +726,16 @@ Editor time appears in the snapshot only after the next rebuild, so a few minute
 
 ### What the plugin does and does not see
 
-The plugin measures the editor, so it reports what happens through the editor: typing, saving, moving between files. That makes it an IDE-mode instrument by nature.
+The plugin measures a person being at the editor, so it watches the things only a person does: moving the caret, switching file, saving. It deliberately does not watch documents changing. A document change says text moved, not who moved it — an agent editing an open file raises it exactly as typing does — so counting those would put agent work into the figure meant to describe you being at the keyboard. Typing is still caught, because typing moves the caret.
 
 Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why the snapshot keeps `editor` and `agent` as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.
 
 The practical consequences:
 
 - **Typing in the IDE** — the plugin reports it, and it becomes editor time.
-- **An agent in the IDE writing files** — the plugin usually does not see it, because files written behind the editor's back raise no document events. The work still lands as agent time.
+- **An agent in the IDE writing files** — not counted as editor time, because the plugin ignores document changes on purpose. The work lands as agent time instead.
 - **A terminal agent with no editor open** — no plugin is running at all, and only agent time is recorded.
+- **A replace across files** — changes documents without moving the caret, so it goes unreported. This is the cost of the rule above, accepted so that the two measures stay separate.
 
 So `editor 0h 0m` next to a large `agent` figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.
 
