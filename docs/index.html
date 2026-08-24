@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GitHub profile stats, as one SVG · GitHub Personal Stats</title>
+<meta name="description" content="Generate a polished GitHub profile dashboard as a single SVG: stats, language share, contributions, and a configurable streak heat ring." />
+<link rel="icon" type="image/svg+xml" href="brand/icon-small.svg" />
+<link rel="stylesheet" href="assets/site.css" />
+</head>
+<body class="wide">
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg" />
+      <img src="brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="index.html" class="current" aria-current="page">Home</a>
+      <a href="pages/getting-started.html">Getting started</a>
+      <a href="pages/cards.html">Cards and layout</a>
+      <a href="pages/configuration.html">Configuration</a>
+      <a href="pages/heat-ring.html">The heat ring</a>
+      <a href="pages/themes.html">Themes and colour</a>
+      <a href="pages/activity.html">Coding activity</a>
+      <a href="pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<section class="hero">
+  <div>
+    <h1>Your profile, drawn once<br />and read anywhere</h1>
+    <p class="lede">One SVG for your GitHub stats, language share, contributions, and
+    streak — laid out by the renderer, so your README does not have to fight tables,
+    image heights, or fragile HTML alignment.</p>
+    <div class="actions">
+      <a class="button primary" href="pages/getting-started.html">Get started</a>
+      <a class="button" href="pages/cards.html">See the cards</a>
+    </div>
+    <p class="fineprint">Runs as a GitHub Action, a local command, or a small service.
+    Light, dark, and transparent themes. Tiles that reflow on a phone.</p>
+  </div>
+  <div class="hero-art">
+    <img src="examples/dashboard.svg" alt="A dashboard card showing stats, languages, contributions, and a streak ring" />
+  </div>
+</section>
+
+<section class="section">
+  <h2>What it draws</h2>
+  <div class="gallery">
+    <figure><div class="shot"><img src="examples/stats.svg" alt="Stats card" /></div><figcaption>Stats</figcaption></figure>
+    <figure><div class="shot"><img src="examples/languages.svg" alt="Languages card" /></div><figcaption>Languages</figcaption></figure>
+    <figure><div class="shot"><img src="examples/streak.svg" alt="Streak card with a heat ring" /></div><figcaption>Streak, with the heat ring</figcaption></figure>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Documentation</h2>
+  <div class="cards">
+    <a class="card" href="pages/getting-started.html"><h3>Getting started</h3><p>Install it as an action, a command, or a service, and see a card.</p></a>
+    <a class="card" href="pages/cards.html"><h3>Cards and layout</h3><p>Every card, how to place them in a README, and how a row behaves on a phone.</p></a>
+    <a class="card" href="pages/configuration.html"><h3>Configuration</h3><p>What each panel reports, and which repositories count towards a language.</p></a>
+    <a class="card" href="pages/heat-ring.html"><h3>The heat ring</h3><p>The window it covers, the shape it takes, how it is scaled, and what sits in the middle.</p></a>
+    <a class="card" href="pages/themes.html"><h3>Themes and colour</h3><p>Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged.</p></a>
+    <a class="card" href="pages/activity.html"><h3>Coding activity</h3><p>Collecting time and lines from your own machine, and where the record is kept.</p></a>
+    <a class="card" href="pages/private-data.html"><h3>Private repository data</h3><p>Counting work that is not public, with a token scoped to just that.</p></a>
+  </div>
+</section>
+
+<section class="section">
+  <h2>One fetch behind every tile</h2>
+  <p class="prose">Read a profile once, save it, then draw every card, theme, and width
+  from what was saved. A README with five tiles asks GitHub for nothing five times.</p>
+  <pre><code>github-personal-stats fetch --user your-login --output profile.json
+github-personal-stats generate --fixture profile.json --card stats  --output stats.svg
+github-personal-stats generate --fixture profile.json --card heat   --output heat.svg</code></pre>
+</section>
+
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

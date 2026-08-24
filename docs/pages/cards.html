@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cards and layout · GitHub Personal Stats</title>
+<meta name="description" content="Every card, how to place them in a README, and how a row behaves on a phone." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html" class="current" aria-current="page">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Cards and layout</h1>
+<p class="lede">Every card, how to place them in a README, and how a row behaves on a phone.</p>
+<h2 id="card-types">Card Types<a class="permalink" href="#card-types" aria-label="Link to this section">#</a></h2>
+<div class="table-scroll"><table><thead><tr><th>Card</th><th>Output</th></tr></thead><tbody><tr><td><code>dashboard</code></td><td>Combined profile dashboard</td></tr><tr><td><code>stats</code></td><td>Stats and rank card</td></tr><tr><td><code>languages</code></td><td>Repository language share</td></tr><tr><td><code>streak</code></td><td>Total contributions, current streak, longest streak</td></tr><tr><td><code>heat</code></td><td>The contribution heat ring on its own</td></tr><tr><td><code>metric</code></td><td>A single figure, chosen with <code>--metric</code></td></tr><tr><td><code>activity</code></td><td>Coding activity card</td></tr><tr><td><code>status</code></td><td>Service status card</td></tr></tbody></table></div>
+<p>The aliases <code>top-langs</code>, <code>top-languages</code>, and <code>coding-activity</code> are accepted by the CLI parser.</p>
+<h2 id="readme-usage">README Usage<a class="permalink" href="#readme-usage" aria-label="Link to this section">#</a></h2>
+<p>Reference the generated dashboard:</p>
+<pre data-language="md"><code>![GitHub Personal Stats](./profile/github-personal-stats.svg)</code></pre>
+<p>For a richer profile section:</p>
+<pre data-language="md"><code>&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;./profile/github-personal-stats.svg&quot; alt=&quot;GitHub Personal Stats&quot; width=&quot;100%&quot; /&gt;
+&lt;/p&gt;</code></pre>
+<p>To follow the reader&#x27;s colour scheme, generate a dark card too and reference both through <code>&lt;picture&gt;</code>, as described under <a href="themes.html#following-the-readers-colour-scheme">Themes</a>.</p>
+<h2 id="composing-tiles">Composing Tiles<a class="permalink" href="#composing-tiles" aria-label="Link to this section">#</a></h2>
+<p>One wide dashboard has to shrink to fit a phone. GitHub renders a README at about 846px on a desktop and about 308px on a phone, so a 1000px card arrives on a phone at roughly a third of its size, taking 12.5px body text down to under 4px. A card cannot re-lay-out on its own either: GitHub strips <code>style</code> and CSS, so nothing in the page can react to the column it lands in.</p>
+<p>Several smaller cards can, though. Images with fixed pixel widths sit side by side while they fit and wrap when they do not, at their own size either way. Three 275px tiles occupy 825px of the desktop column and stack into three rows on a phone, both at 1:1, so the text is the same size in both places.</p>
+<h3 id="one-fetch-many-tiles">One fetch, many tiles<a class="permalink" href="#one-fetch-many-tiles" aria-label="Link to this section">#</a></h3>
+<p>Rendering never asks GitHub anything: a card is drawn from a profile that has already been read. Reading a profile, on the other hand, is the expensive part, and <code>--authored-languages</code> makes it far more so, because attributing a language by who wrote it costs a request per repository per address. A set of tiles that fetches once per tile pays that bill once per tile and can exhaust an hourly API allowance partway through.</p>
+<p><code>fetch</code> reads a profile once and saves it; <code>--fixture</code> draws from what was saved:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- fetch \
+  --user your-github-login \
+  --authored-languages \
+  --output profile.json
+
+cargo run -p github-personal-stats -- generate --fixture profile.json --card stats --output stats.svg
+cargo run -p github-personal-stats -- generate --fixture profile.json --card heat  --output heat.svg</code></pre>
+<p>For one profile of 194 repositories, the fetch took seven minutes and the fourteen tiles drawn from it took a third of a second altogether.</p>
+<p>A saved profile holds the answers to the options that shape a fetch, so those belong to <code>fetch</code>: <code>--authored-languages</code>, <code>--author-email</code>, and <code>--min-repo-language-share</code>. Passing one of them to <code>generate --fixture</code> is refused rather than quietly ignored. Everything about how a card is drawn, and <code>--hide-language</code>, still applies at render time, so one saved profile serves any number of themes, widths, and cards.</p>
+<p>In a workflow, that is one <code>fetch</code> step ahead of the render steps:</p>
+<pre data-language="yaml"><code>- uses: liuchong/github-personal-stats@v1.4.0
+  with:
+    mode: fetch
+    path: ${{ runner.temp }}/profile.json
+    options: --user ${{ github.repository_owner }} --authored-languages
+    token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+
+- uses: liuchong/github-personal-stats@v1.4.0
+  with:
+    card: stats
+    path: profile/stats.svg
+    options: --fixture ${{ runner.temp }}/profile.json --width 275 --height auto</code></pre>
+<p>The render steps need no token, because they reach nothing.</p>
+<h3 id="tile-sizes-worth-knowing">Tile sizes worth knowing<a class="permalink" href="#tile-sizes-worth-knowing" aria-label="Link to this section">#</a></h3>
+<div class="table-scroll"><table><thead><tr><th>Container</th><th>Measured width</th><th>Fits at 275px</th></tr></thead><tbody><tr><td>Desktop README</td><td>~846px</td><td>3 per row</td></tr><tr><td>Phone README (390px viewport)</td><td>~308px</td><td>1 per row</td></tr></tbody></table></div>
+<h3 id="fitting-a-card-to-its-content">Fitting a card to its content<a class="permalink" href="#fitting-a-card-to-its-content" aria-label="Link to this section">#</a></h3>
+<p><code>--height auto</code> sizes a card to what it draws, so a tile carries no dead space and needs no guessing:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card stats \
+  --width 275 \
+  --height auto \
+  --output profile/tiles/stats.svg</code></pre>
+<p>The <code>dashboard</code>, <code>activity</code>, and <code>status</code> cards divide a height between sections rather than having one of their own, so they need an explicit height; asking them for <code>auto</code> is refused rather than quietly ignored.</p>
+<h3 id="splitting-the-streak-card">Splitting the streak card<a class="permalink" href="#splitting-the-streak-card" aria-label="Link to this section">#</a></h3>
+<p>At a tile width the streak card gives the ring a full-width row and sits its two figures underneath, because three columns leave each figure about 90px:</p>
+<img src="../images/tiles/tile-streak.svg" alt="Streak card at 275px" width="275" />
+<p>Its parts are also available on their own, which lets a README place them wherever it likes. <code>heat</code> draws the ring, and <code>metric</code> draws a single figure:</p>
+<p>
+  <img src="../images/tiles/tile-heat.svg" alt="Heat ring tile" width="275" />
+  <img src="../images/tiles/tile-total.svg" alt="Total contributions tile" width="275" />
+  <img src="../images/tiles/tile-longest.svg" alt="Longest streak tile" width="275" />
+</p>
+<p><code>--metric</code> accepts any name the panel lists accept, so the same vocabulary covers tiles: <code>stars</code>, <code>commits</code>, <code>prs</code>, <code>issues</code>, <code>reviews</code>, <code>repos</code>, <code>total</code>, <code>longest</code>, <code>current</code>, and <code>active</code>.</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card metric --metric stars \
+  --width 275 --height auto \
+  --output profile/tiles/stars.svg</code></pre>
+<img src="../images/tiles/tile-stars.svg" alt="Total stars tile" width="275" />
+<h3 id="lining-tiles-up">Lining tiles up<a class="permalink" href="#lining-tiles-up" aria-label="Link to this section">#</a></h3>
+<p>Padding scales with card width by default, which suits a card seen on its own but leaves the content edges of different widths out of line. Pin it when mixing widths in one block:</p>
+<pre data-language="sh"><code>--padding 20</code></pre>
+<h3 id="display-size-and-layout-size">Display size and layout size<a class="permalink" href="#display-size-and-layout-size" aria-label="Link to this section">#</a></h3>
+<p>Because the cards are vector, the size a card is laid out at and the size it arrives at are separable. <code>--scale</code> multiplies only the latter, so a tile can be laid out for a narrow column and still be displayed larger:</p>
+<pre data-language="sh"><code>--scale 1.5</code></pre>
+<h3 id="a-row-that-reflows">A row that reflows<a class="permalink" href="#a-row-that-reflows" aria-label="Link to this section">#</a></h3>
+<p>Give each tile an explicit <code>width</code> so GitHub keeps it at its own size:</p>
+<pre data-language="md"><code>&lt;p&gt;
+  &lt;img src=&quot;./profile/tiles/stats.svg&quot; width=&quot;275&quot; alt=&quot;GitHub stats&quot; /&gt;
+  &lt;img src=&quot;./profile/tiles/languages.svg&quot; width=&quot;275&quot; alt=&quot;Top languages&quot; /&gt;
+  &lt;img src=&quot;./profile/tiles/streak.svg&quot; width=&quot;275&quot; alt=&quot;Contribution streak&quot; /&gt;
+&lt;/p&gt;</code></pre>
+<p>
+  <img src="../images/tiles/tile-stats.svg" alt="Stats tile" width="275" />
+  <img src="../images/tiles/tile-languages.svg" alt="Languages tile" width="275" />
+  <img src="../images/tiles/tile-streak.svg" alt="Streak tile" width="275" />
+</p>
+<p>Keep the widths in a row adding up to no more than about 825px, or a tile drops to the next row and leaves a gap beside the ones above it.</p>
+<h3 id="handing-a-phone-a-different-drawing">Handing a phone a different drawing<a class="permalink" href="#handing-a-phone-a-different-drawing" aria-label="Link to this section">#</a></h3>
+<p>A row of two cannot fill a desktop column and stay under 308px at the same time, so two rows of unequal width are the usual outcome. What CSS cannot do here, <code>&lt;picture&gt;</code> can: the <code>media</code> attribute on a <code>&lt;source&gt;</code> takes any media query, not only <code>prefers-color-scheme</code>, and the browser is the one evaluating it. Drawing a panel at both widths lets each column have the one it can show unscaled:</p>
+<pre data-language="md"><code>&lt;picture&gt;
+  &lt;source media=&quot;(max-width: 768px) and (prefers-color-scheme: dark)&quot; srcset=&quot;./profile/stats-narrow-dark.svg&quot; /&gt;
+  &lt;source media=&quot;(max-width: 768px)&quot; srcset=&quot;./profile/stats-narrow-light.svg&quot; /&gt;
+  &lt;source media=&quot;(prefers-color-scheme: dark)&quot; srcset=&quot;./profile/stats-dark.svg&quot; /&gt;
+  &lt;img src=&quot;./profile/stats-light.svg&quot; alt=&quot;GitHub stats&quot; /&gt;
+&lt;/picture&gt;</code></pre>
+<p>Leave the <code>width</code> attribute off here. It would apply to whichever drawing was chosen and stretch the narrow one; without it each drawing arrives at its own size. Because both come from one saved profile, the second width costs a render rather than a fetch.</p>
+<p>Combine this with <code>&lt;picture&gt;</code> from <a href="themes.html#following-the-readers-colour-scheme">Themes</a> to follow the reader&#x27;s colour scheme as well. Regenerate the images in this section with <code>python3 scripts/render-tile-samples.py</code> after building the CLI.</p>
+<h2 id="sizing">Sizing<a class="permalink" href="#sizing" aria-label="Link to this section">#</a></h2>
+<p>The default dashboard size is <code>1000x420</code>.</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card dashboard \
+  --authored-languages \
+  --author-email old@example.com,work@example.com \
+  --hide-language Ruby \
+  --min-repo-language-share 2 \
+  --width 1000 \
+  --height 420 \
+  --output profile/github-personal-stats.svg</code></pre>
+<p>For a local live preview, export a token with the same permissions:</p>
+<pre data-language="sh"><code>GITHUB_TOKEN=YOUR_PERSONAL_STATS_TOKEN cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card dashboard \
+  --output profile/github-personal-stats.svg</code></pre>
+<p>Individual cards can use smaller dimensions:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card languages \
+  --width 520 \
+  --height 260 \
+  --output profile/languages.svg</code></pre>
+<p>Cards below 440px wide switch to layouts meant for a narrow column, and <code>--height auto</code> removes the need to pick a height at all. See <a href="cards.html#composing-tiles">Composing Tiles</a> for building a row that reflows on a phone.</p>
+<nav class="steps"><a class="prev" href="getting-started.html"><span>Previous</span>Getting started</a><a class="next" href="configuration.html"><span>Next</span>Configuration</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

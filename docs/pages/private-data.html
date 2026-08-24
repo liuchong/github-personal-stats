@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Private repository data · GitHub Personal Stats</title>
+<meta name="description" content="Counting work that is not public, with a token scoped to just that." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html" class="current" aria-current="page">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Private repository data</h1>
+<p class="lede">Counting work that is not public, with a token scoped to just that.</p>
+<h2 id="private-repository-data">Private Repository Data<a class="permalink" href="#private-repository-data" aria-label="Link to this section">#</a></h2>
+<p>Use a dedicated personal access token when your dashboard should include private repositories. Do not rely on the default <code>GITHUB_TOKEN</code> for this purpose: it is scoped to the workflow repository and cannot read every private repository owned by the profile user.</p>
+<p>Create one of these tokens:</p>
+<ul><li>Classic PAT: use this template, then create the token with <code>repo</code> selected: &lt;https://github.com/settings/tokens/new?description=GitHub%20Personal%20Stats&amp;scopes=repo&gt;</li><li>Fine-grained PAT: use &lt;https://github.com/settings/personal-access-tokens/new&gt;, select the repositories you want counted, and grant read access to metadata and contents.</li></ul>
+<p>Save the token in your profile repository as an Actions secret:</p>
+<pre data-language="sh"><code>gh secret set PERSONAL_STATS_TOKEN --repo your-login/your-login</code></pre>
+<p>The workflow should pass only that secret to the Action:</p>
+<pre data-language="yaml"><code>token: ${{ secrets.PERSONAL_STATS_TOKEN }}</code></pre>
+<p>Add a check step before generation so a missing token fails the workflow instead of silently generating public-only data:</p>
+<pre data-language="yaml"><code>- name: Check personal stats token
+  env:
+    PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
+  run: test -n &quot;$PERSONAL_STATS_TOKEN&quot;</code></pre>
+<p>Private token access affects repository language share, contribution totals, streaks, and any stats based on private repository metadata. If the token is missing or under-scoped, the dashboard can still render, but the data will be public-only or incomplete.</p>
+<nav class="steps"><a class="prev" href="activity.html"><span>Previous</span>Coding activity</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

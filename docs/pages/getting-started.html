@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Getting started · GitHub Personal Stats</title>
+<meta name="description" content="Install it as an action, a command, or a service, and see a card." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html" class="current" aria-current="page">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Getting started</h1>
+<p class="lede">Install it as an action, a command, or a service, and see a card.</p>
+<h2 id="setup-overview">Setup Overview<a class="permalink" href="#setup-overview" aria-label="Link to this section">#</a></h2>
+<ol><li>Add a workflow to your profile repository.</li><li>Generate one or more SVG files into a tracked directory such as <code>profile/</code>.</li><li>Commit those SVG files from the workflow.</li><li>Reference the generated SVG from your profile README.</li></ol>
+<h2 id="github-action">GitHub Action<a class="permalink" href="#github-action" aria-label="Link to this section">#</a></h2>
+<p>Create <code>.github/workflows/github-personal-stats.yml</code>:</p>
+<pre data-language="yaml"><code>name: GitHub Personal Stats
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: &quot;0 0 * * *&quot;
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check personal stats token
+        env:
+          PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
+        run: test -n &quot;$PERSONAL_STATS_TOKEN&quot;
+      - uses: liuchong/github-personal-stats@v1.4.0
+        with:
+          card: dashboard
+          path: profile/github-personal-stats.svg
+          options: --user your-github-login --width 1000 --height 420 --authored-languages --author-email old@example.com,work@example.com --hide-language Ruby --min-repo-language-share 2
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: &quot;chore: update profile stats&quot;</code></pre>
+<h2 id="command-line">Command Line<a class="permalink" href="#command-line" aria-label="Link to this section">#</a></h2>
+<p><code>github-personal-stats help</code> lists every command and option with its default. <code>--help</code> and <code>-h</code> work in the same place, including after a command, so <code>generate --help</code> prints the same page without rendering anything. The Action takes these same options through its <code>options</code> input.</p>
+<h2 id="local-preview">Local Preview<a class="permalink" href="#local-preview" aria-label="Link to this section">#</a></h2>
+<p>The repository includes deterministic showcase data so you can preview changes without network access:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --fixture examples/showcase.json \
+  --user showcase \
+  --card dashboard \
+  --output examples/dashboard.svg</code></pre>
+<p>Preview individual cards:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card stats --width 520 --height 260 --output examples/stats.svg
+cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card languages --width 520 --height 260 --output examples/languages.svg
+cargo run -p github-personal-stats -- generate --fixture examples/showcase.json --user showcase --card streak --width 1000 --height 220 --output examples/streak.svg</code></pre>
+<p><code>examples/showcase.json</code> covers 30 days with a few quiet ones, which is what a fixed window needs to show. <code>examples/streak-117.json</code> carries a 117 day streak, which is where the ring changes geometry:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate --fixture examples/streak-117.json --card streak --width 1000 --height 220 --output /tmp/long-streak.svg</code></pre>
+<nav class="steps"><a class="next" href="cards.html"><span>Next</span>Cards and layout</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

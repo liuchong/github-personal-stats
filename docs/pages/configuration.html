@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Configuration · GitHub Personal Stats</title>
+<meta name="description" content="What each panel reports, and which repositories count towards a language." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html" class="current" aria-current="page">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Configuration</h1>
+<p class="lede">What each panel reports, and which repositories count towards a language.</p>
+<h2 id="panel-content">Panel Content<a class="permalink" href="#panel-content" aria-label="Link to this section">#</a></h2>
+<p>Each panel decides what it reports. The defaults are what the card has always shown, so none of this needs configuring.</p>
+<h3 id="stats-rows">Stats rows<a class="permalink" href="#stats-rows" aria-label="Link to this section">#</a></h3>
+<p>Six figures are collected, and all six already feed the rank score. Four are listed by default; <code>--stat-rows</code> chooses which ones appear and in what order.</p>
+<div class="table-scroll"><table><thead><tr><th>Name</th><th>Row</th></tr></thead><tbody><tr><td><code>stars</code></td><td>Total Stars</td></tr><tr><td><code>commits</code></td><td>Commits</td></tr><tr><td><code>prs</code></td><td>Pull Requests</td></tr><tr><td><code>issues</code></td><td>Issues</td></tr><tr><td><code>reviews</code></td><td>Reviews</td></tr><tr><td><code>repos</code></td><td>Contributed To</td></tr></tbody></table></div>
+<div class="comparison"><figure><figcaption>default</figcaption><div class="shot"><img src="../images/panels/stats-default.svg" alt="The four default stats rows" width="230" /></div><p>Stars, commits, pull requests, issues</p></figure><figure><figcaption><code>--stat-rows stars,commits,prs,issues,reviews,repos</code></figcaption><div class="shot"><img src="../images/panels/stats-all-six.svg" alt="All six stats rows" width="230" /></div><p>Reviews and repositories contributed to as well</p></figure><figure><figcaption><code>--stat-rows reviews,repos</code></figcaption><div class="shot"><img src="../images/panels/stats-two.svg" alt="Two stats rows" width="230" /></div><p>A short list spreads out</p></figure></div>
+<p>Rows share the height the panel has, so a longer list sits closer together, down to a floor that keeps two rows from touching. A list must name at least one row and cannot name the same row twice.</p>
+<h3 id="language-rows">Language rows<a class="permalink" href="#language-rows" aria-label="Link to this section">#</a></h3>
+<p><code>--language-rows</code> sets how many languages the panel lists, from 1 to 8, defaulting to 6. The dashboard splits them across two columns.</p>
+<div class="comparison"><figure><figcaption>default</figcaption><div class="shot"><img src="../images/panels/languages-default.svg" alt="Six languages" width="360" /></div></figure><figure><figcaption><code>--language-rows 3</code></figcaption><div class="shot"><img src="../images/panels/languages-three.svg" alt="Three languages" width="360" /></div></figure></div>
+<p>The bar above the list covers the languages the list shows, so when a profile has more languages than the panel lists, the remainder stays as visible track rather than being folded into the last segment.</p>
+<h3 id="streak-panels">Streak panels<a class="permalink" href="#streak-panels" aria-label="Link to this section">#</a></h3>
+<p>The panels either side of the ring each report one figure with the dates that figure covers. <code>--streak-sides</code> names the left and right one.</p>
+<div class="table-scroll"><table><thead><tr><th>Name</th><th>Panel</th></tr></thead><tbody><tr><td><code>total</code></td><td>Total contributions, all years</td></tr><tr><td><code>longest</code></td><td>Longest streak, with its range</td></tr><tr><td><code>current</code></td><td>Current streak, with its range</td></tr><tr><td><code>active</code></td><td>Days with at least one contribution</td></tr></tbody></table></div>
+<div class="comparison"><figure><figcaption>default</figcaption><div class="shot"><img src="../images/panels/streak-default.svg" alt="Total contributions and longest streak" width="470" /></div></figure><figure><figcaption><code>--heat-window 30 --streak-sides active,current</code></figcaption><div class="shot"><img src="../images/panels/streak-active-current.svg" alt="Active days and current streak" width="470" /></div></figure></div>
+<p><code>current</code> is worth putting in a panel when the ring is not already reporting it, which is the case for a fixed window: the ring then covers the last N days while the panel keeps the streak itself. On the default streak window the ring centre is already the current streak, so a <code>current</code> panel repeats it.</p>
+<p>A panel cannot be left empty and the two panels cannot report the same figure. Regenerate the images in this section with <code>python3 scripts/render-panel-samples.py</code> after building the CLI.</p>
+<h2 id="language-scope">Language Scope<a class="permalink" href="#language-scope" aria-label="Link to this section">#</a></h2>
+<p>By default, the language card counts all owned non-fork repositories. This matches repository language share, but it can include repositories owned by the profile user where most code was written by someone else.</p>
+<p>Add <code>--authored-languages</code> to count only owned non-fork repositories where the target user has commit contributions:</p>
+<pre data-language="yaml"><code>options: --user your-github-login --width 1000 --height 420 --authored-languages</code></pre>
+<p>If old commits used emails that GitHub no longer associates with the account, add those emails as supplements. The option accepts comma-separated values and can also be repeated:</p>
+<pre data-language="yaml"><code>options: --user your-github-login --width 1000 --height 420 --authored-languages --author-email old@example.com,work@example.com</code></pre>
+<p>This mode still uses only GitHub API data. It does not clone or check out target repositories. The scope is repository-level: once a repository qualifies through GitHub contribution data, username commits, or a configured email match, its repository language sizes are counted. It does not perform per-line authorship analysis.</p>
+<p>Hide languages that should not appear in the card:</p>
+<pre data-language="yaml"><code>options: --user your-github-login --width 1000 --height 420 --authored-languages --hide-language Ruby</code></pre>
+<p><code>--hide-language</code> accepts comma-separated values and can also be repeated.</p>
+<p>Filter small per-repository language noise without hiding the language everywhere:</p>
+<pre data-language="yaml"><code>options: --user your-github-login --width 1000 --height 420 --authored-languages --min-repo-language-share 2</code></pre>
+<p><code>--min-repo-language-share 2</code> ignores a language in a repository when that language is less than 2% of that repository&#x27;s language total. If another repository is actually Python-heavy, Python still counts there.</p>
+<nav class="steps"><a class="prev" href="cards.html"><span>Previous</span>Cards and layout</a><a class="next" href="heat-ring.html"><span>Next</span>The heat ring</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

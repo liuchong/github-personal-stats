@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="GitHub Personal Stats">
+  <title>GitHub Personal Stats</title>
+  <path d="M 32.73 6.01 A 26.00 26.00 0 0 1 38.03 6.71" fill="none" stroke="#ffa726" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 39.43 7.08 A 26.00 26.00 0 0 1 44.37 9.13" fill="none" stroke="#ffc65c" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 45.62 9.86 A 26.00 26.00 0 0 1 49.86 13.11" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 50.89 14.14 A 26.00 26.00 0 0 1 54.14 18.38" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 54.87 19.63 A 26.00 26.00 0 0 1 56.92 24.57" fill="none" stroke="#ffa726" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 57.29 25.97 A 26.00 26.00 0 0 1 57.99 31.27" fill="none" stroke="#43301a" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 57.99 32.73 A 26.00 26.00 0 0 1 57.29 38.03" fill="none" stroke="#ffc65c" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 56.92 39.43 A 26.00 26.00 0 0 1 54.87 44.37" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 54.14 45.62 A 26.00 26.00 0 0 1 50.89 49.86" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 49.86 50.89 A 26.00 26.00 0 0 1 45.62 54.14" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 44.37 54.87 A 26.00 26.00 0 0 1 39.43 56.92" fill="none" stroke="#ffa726" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 38.03 57.29 A 26.00 26.00 0 0 1 32.73 57.99" fill="none" stroke="#ffc65c" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 31.27 57.99 A 26.00 26.00 0 0 1 25.97 57.29" fill="none" stroke="#43301a" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 24.57 56.92 A 26.00 26.00 0 0 1 19.63 54.87" fill="none" stroke="#ffa726" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 18.38 54.14 A 26.00 26.00 0 0 1 14.14 50.89" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 13.11 49.86 A 26.00 26.00 0 0 1 9.86 45.62" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 9.13 44.37 A 26.00 26.00 0 0 1 7.08 39.43" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 6.71 38.03 A 26.00 26.00 0 0 1 6.01 32.73" fill="none" stroke="#ffa726" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 6.01 31.27 A 26.00 26.00 0 0 1 6.71 25.97" fill="none" stroke="#ffc65c" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 7.08 24.57 A 26.00 26.00 0 0 1 9.13 19.63" fill="none" stroke="#ffc65c" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 9.86 18.38 A 26.00 26.00 0 0 1 13.11 14.14" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 14.14 13.11 A 26.00 26.00 0 0 1 18.38 9.86" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 19.63 9.13 A 26.00 26.00 0 0 1 24.57 7.08" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <path d="M 25.97 6.71 A 26.00 26.00 0 0 1 31.27 6.01" fill="none" stroke="#fb8c00" stroke-width="7.0" stroke-linecap="butt" opacity="1.0"/>
+  <rect x="23.10" y="33.43" width="4.20" height="7.77" rx="2.10" fill="#4493f8"/>
+  <rect x="29.90" y="27.88" width="4.20" height="13.32" rx="2.10" fill="#4493f8"/>
+  <rect x="36.70" y="22.70" width="4.20" height="18.50" rx="2.10" fill="#4493f8"/>
+</svg>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coding activity · GitHub Personal Stats</title>
+<meta name="description" content="Collecting time and lines from your own machine, and where the record is kept." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html" class="current" aria-current="page">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Coding activity</h1>
+<p class="lede">Collecting time and lines from your own machine, and where the record is kept.</p>
+<h2 id="coding-activity-section">Coding Activity Section<a class="permalink" href="#coding-activity-section" aria-label="Link to this section">#</a></h2>
+<p>Update a marked README section:</p>
+<pre data-language="md"><code>&lt;!--START_SECTION:activity--&gt;
+&lt;!--END_SECTION:activity--&gt;</code></pre>
+<p>Run:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- update-readme --section activity --target README.md</code></pre>
+<h2 id="local-activity-storage">Local Activity Storage<a class="permalink" href="#local-activity-storage" aria-label="Link to this section">#</a></h2>
+<p>Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so a snapshot has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.</p>
+<p>The configuration lives at <code>&lt;state&gt;/config</code>, which on Linux and macOS is <code>~/.local/state/github-personal-stats/config</code> unless <code>XDG_STATE_HOME</code> says otherwise. Lines are <code>name = value</code> using an option&#x27;s own name without the dashes, <code>#</code> starts a comment, and a flag on the command line overrides the file.</p>
+<h3 id="file">File<a class="permalink" href="#file" aria-label="Link to this section">#</a></h3>
+<p>The default. One snapshot, one path. This is what you want if the machine that collects also renders.</p>
+<pre><code>sink = file
+output = /Users/you/.local/state/github-personal-stats/activity.json</code></pre>
+<h3 id="git">Git<a class="permalink" href="#git" aria-label="Link to this section">#</a></h3>
+<p>A git repository as storage. This is the one to use when your cards are rendered by a scheduled GitHub Actions run, because CI has no way to read your laptop.</p>
+<pre><code>sink = git
+origin = git@github.com:your-login/personal-stats-data.git
+repo = /Users/you/.local/state/github-personal-stats/storage
+branch = master</code></pre>
+<p><code>repo</code> is a working checkout the collector owns: it clones it if it is not there, brings it up to date before each commit, and you can delete it whenever you like. Keep it in the state directory rather than among your projects — it is storage, not somewhere to work.</p>
+<p>Each machine writes <code>snapshots/&lt;machine&gt;.json</code> under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the files up. A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.</p>
+<p>Nothing here is specific to GitHub. Any git remote both your machine and your renderer can reach will do, including one on a server of your own that the public internet cannot see.</p>
+<h3 id="http">HTTP<a class="permalink" href="#http" aria-label="Link to this section">#</a></h3>
+<p>For sending snapshots to a service that collects from many people. The interface exists; the implementation does not, because the protocol and what counts as an identity are decisions for whoever runs such a service.</p>
+<h3 id="reading-private-storage-from-your-profile-workflow">Reading private storage from your profile workflow<a class="permalink" href="#reading-private-storage-from-your-profile-workflow" aria-label="Link to this section">#</a></h3>
+<p>If the storage repository is private — and per-day detail is a good reason to keep it private — your profile repository&#x27;s workflow needs permission to read it. The built-in <code>GITHUB_TOKEN</code> cannot: it is scoped to the repository the workflow runs in.</p>
+<p>This needs no personal access token. A read-only deploy key is narrower and enough:</p>
+<pre data-language="sh"><code>ssh-keygen -t ed25519 -N &quot;&quot; -C &quot;stats renderer&quot; -f /tmp/key
+gh repo deploy-key add /tmp/key.pub --title &quot;stats renderer (read-only)&quot; \
+  --repo your-login/personal-stats-data
+gh secret set STATS_DATA_KEY --repo your-login/your-login &lt; /tmp/key
+rm /tmp/key /tmp/key.pub</code></pre>
+<p>Then check the storage out alongside your profile repository:</p>
+<pre data-language="yaml"><code>- name: Read the storage repository
+  uses: actions/checkout@v4
+  with:
+    repository: your-login/personal-stats-data
+    ssh-key: ${{ secrets.STATS_DATA_KEY }}
+    path: storage</code></pre>
+<p>Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.</p>
+<p>Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and <strong>not</strong> the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And <code>actions/checkout</code> fails against a repository with no commits in it, in a way that reads like a permission problem, so publish one snapshot before judging your credentials.</p>
+<h3 id="telling-whether-it-is-working">Telling whether it is working<a class="permalink" href="#telling-whether-it-is-working" aria-label="Link to this section">#</a></h3>
+<p>An installed plugin and a working one look identical from the extensions list, so ask instead:</p>
+<pre data-language="sh"><code>github-personal-stats-daemon status</code></pre>
+<pre><code>daemon      listening on 127.0.0.1:7391
+token       /Users/you/.local/state/github-personal-stats/token
+publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
+editors     vscode - 412 pulses today, last 30s ago
+collected   100 days, agent 146h 29m, editor 3h 12m</code></pre>
+<p>Each line is something that can be separately broken. <code>editors no plugin has loaded</code> means exactly that: reload the editor window. <code>token missing</code> means no plugin can report at all, because the shared secret it needs is not there yet.</p>
+<p>A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:</p>
+<pre><code>editors     vscode 1.4.0 - loaded 12m ago, nothing typed today</code></pre>
+<p>That line is the normal state of a window you are not typing in, including one where an agent is doing all the writing. It is not a fault.</p>
+<p>Your editor&#x27;s status bar says the same thing from the other side:</p>
+<ul><li><code>$(pulse) stats</code> — loaded and reporting.</li><li><code>$(pulse) stats 14</code> — loaded, but 14 pulses are queued because the daemon is not answering.</li><li><code>$(circle-slash) stats</code> — no token found, so nothing is being sent.</li></ul>
+<p>Editor time appears in the snapshot only after the next rebuild, so a few minutes of reported work shows up as <code>editor 0h 0m</code> until then.</p>
+<h3 id="what-the-plugin-does-and-does-not-see">What the plugin does and does not see<a class="permalink" href="#what-the-plugin-does-and-does-not-see" aria-label="Link to this section">#</a></h3>
+<p>The plugin measures the editor, so it reports what happens through the editor: typing, saving, moving between files. That makes it an IDE-mode instrument by nature.</p>
+<p>Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor&#x27;s own record of what it generated, which is read directly. This is why the snapshot keeps <code>editor</code> and <code>agent</code> as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.</p>
+<p>The practical consequences:</p>
+<ul><li><strong>Typing in the IDE</strong> — the plugin reports it, and it becomes editor time.</li><li><strong>An agent in the IDE writing files</strong> — the plugin usually does not see it, because files written behind the editor&#x27;s back raise no document events. The work still lands as agent time.</li><li><strong>A terminal agent with no editor open</strong> — no plugin is running at all, and only agent time is recorded.</li></ul>
+<p>So <code>editor 0h 0m</code> next to a large <code>agent</code> figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.</p>
+<h3 id="publishing-a-snapshot">Publishing a snapshot<a class="permalink" href="#publishing-a-snapshot" aria-label="Link to this section">#</a></h3>
+<p>With the configuration in place, no arguments are needed:</p>
+<pre data-language="sh"><code>github-personal-stats-collect</code></pre>
+<p>The daemon does the same thing on a timer once installed, using the same configuration:</p>
+<pre data-language="sh"><code>github-personal-stats-daemon install</code></pre>
+<nav class="steps"><a class="prev" href="themes.html"><span>Previous</span>Themes and colour</a><a class="next" href="private-data.html"><span>Next</span>Private repository data</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

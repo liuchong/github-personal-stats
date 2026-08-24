@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The heat ring · GitHub Personal Stats</title>
+<meta name="description" content="The window it covers, the shape it takes, how it is scaled, and what sits in the middle." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html" class="current" aria-current="page">The heat ring</a>
+      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>The heat ring</h1>
+<p class="lede">The window it covers, the shape it takes, how it is scaled, and what sits in the middle.</p>
+<h2 id="heat-ring">Heat Ring<a class="permalink" href="#heat-ring" aria-label="Link to this section">#</a></h2>
+<p>The dashboard and streak cards draw the current streak as a ring, where each node is one day and its depth is that day&#x27;s contribution count. The ring covers exactly the days the number in its centre reports, so the two never disagree.</p>
+<p>Everything below is optional. The defaults need no configuration.</p>
+<h3 id="window">Window<a class="permalink" href="#window" aria-label="Link to this section">#</a></h3>
+<p>The window decides how many days the ring covers. <code>streak</code> follows the current streak, so every node is an active day. A fixed window covers a set number of days ending on the latest one, including quiet days.</p>
+<div class="comparison"><figure><figcaption><code>--heat-window streak</code> (default)</figcaption><div class="shot"><img src="../images/heat-ring/window-streak.svg" alt="A 117 day streak" width="164" /></div><p>117 active days, one node each</p></figure><figure><figcaption><code>--heat-window 30</code></figcaption><div class="shot"><img src="../images/heat-ring/window-fixed-30.svg" alt="A fixed window of 30 days" width="164" /></div><p>30 days, quiet ones in grey</p></figure><figure><figcaption><code>--heat-limit 30</code></figcaption><div class="shot"><img src="../images/heat-ring/window-limit-30.svg" alt="A streak capped at 30 days" width="164" /></div><p>The last 30 days of a 117 day streak</p></figure></div>
+<p>A streak is uncapped by default. <code>--heat-limit</code> caps how many days the ring draws without changing the streak itself, which is useful once a streak grows past the point where the ring stays informative. The date line under the ring always describes what the ring covers, not the whole streak.</p>
+<h3 id="centre-label">Centre label<a class="permalink" href="#centre-label" aria-label="Link to this section">#</a></h3>
+<p>Three counts are available, and a template places them:</p>
+<div class="table-scroll"><table><thead><tr><th>Placeholder</th><th>Meaning</th></tr></thead><tbody><tr><td><code>{X}</code></td><td>Days inside the window with at least one contribution</td></tr><tr><td><code>{Y}</code></td><td>Days the window covers, which is the number of nodes on the ring</td></tr><tr><td><code>{Z}</code></td><td>The current streak in full, before any limit shortens the ring</td></tr></tbody></table></div>
+<p>The default template depends on the window: <code>{Y}</code> for a streak, where all three counts are the same number, and <code>{X}/last {Y}</code> for a fixed window.</p>
+<div class="comparison"><figure><figcaption>default, streak</figcaption><div class="shot"><img src="../images/heat-ring/label-streak.svg" alt="Streak label" width="164" /></div></figure><figure><figcaption>default, fixed</figcaption><div class="shot"><img src="../images/heat-ring/label-active-of-window.svg" alt="Active days over window" width="164" /></div></figure><figure><figcaption><code>--heat-label &quot;{X}/{Y}/{Z}&quot;</code></figcaption><div class="shot"><img src="../images/heat-ring/label-three-counts.svg" alt="Three counts" width="164" /></div></figure><figure><figcaption><code>--heat-label &quot;{X} of {Y} → {Z}&quot;</code></figcaption><div class="shot"><img src="../images/heat-ring/label-arrow.svg" alt="Custom arrow template" width="164" /></div></figure></div>
+<p>A template is free text, so any separator works. Longer text is set at a smaller size to stay inside the ring; keep templates short if you want the count to stay prominent.</p>
+<h3 id="shape">Shape<a class="permalink" href="#shape" aria-label="Link to this section">#</a></h3>
+<p>Radial ticks read well while they stay separable. Past roughly a hundred days they overlap into a furred edge, so the ring switches to arcs and averages neighbouring days into bands wide enough to see. <code>segmented</code> does this automatically and is the default.</p>
+<div class="comparison"><figure><figcaption><code>--heat-shape ticks</code>, 30 days</figcaption><div class="shot"><img src="../images/heat-ring/shape-ticks-30.svg" alt="Ticks at 30 days" width="164" /></div><p>Clean and countable</p></figure><figure><figcaption><code>ticks</code>, 117 days</figcaption><div class="shot"><img src="../images/heat-ring/shape-ticks-117.svg" alt="Ticks at 117 days" width="164" /></div><p>Crowded</p></figure><figure><figcaption><code>arcs</code>, 117 days</figcaption><div class="shot"><img src="../images/heat-ring/shape-arcs-117.svg" alt="One arc per day at 117 days" width="164" /></div><p>One arc per day, under two pixels each</p></figure><figure><figcaption><code>bands</code>, 117 days</figcaption><div class="shot"><img src="../images/heat-ring/shape-bands-117.svg" alt="Averaged bands at 117 days" width="164" /></div><p>Days averaged into readable bands</p></figure></div>
+<div class="table-scroll"><table><thead><tr><th>Value</th><th>Behaviour</th></tr></thead><tbody><tr><td><code>segmented</code></td><td>Ticks up to the threshold, averaged bands beyond it (default)</td></tr><tr><td><code>ticks</code></td><td>Always one radial tick per day</td></tr><tr><td><code>arcs</code></td><td>Always one arc per day, however thin</td></tr><tr><td><code>bands</code></td><td>Always averaged arcs</td></tr></tbody></table></div>
+<p><code>--heat-threshold</code> moves where <code>segmented</code> switches over. It defaults to 100 days; <code>--heat-threshold 87</code> switches at 87 instead.</p>
+<h3 id="scale">Scale<a class="permalink" href="#scale" aria-label="Link to this section">#</a></h3>
+<p>The scale maps a day&#x27;s contribution count onto the four colour stops. Contribution counts are usually heavy-tailed — many ordinary days and a few large ones — and each scale handles that tail differently.</p>
+<div class="comparison"><figure><figcaption><code>--heat-scale linear</code> (default)</figcaption><div class="shot"><img src="../images/heat-ring/scale-linear.svg" alt="Linear scale" width="164" /></div><p>Faithful to the raw counts, so a few big days dominate and ordinary days stay pale</p></figure><figure><figcaption><code>sqrt</code></figcaption><div class="shot"><img src="../images/heat-ring/scale-sqrt.svg" alt="Square root scale" width="164" /></div><p>Keeps ordinary days visible while big days still stand out</p></figure><figure><figcaption><code>log</code></figcaption><div class="shot"><img src="../images/heat-ring/scale-log.svg" alt="Logarithmic scale" width="164" /></div><p>Compresses hard, so almost everything reads as busy</p></figure><figure><figcaption><code>quantile</code></figcaption><div class="shot"><img src="../images/heat-ring/scale-quantile.svg" alt="Quantile scale" width="164" /></div><p>Splits the window into four equal shares, giving the most contrast and the least relation to raw counts</p></figure></div>
+<p>Pick <code>linear</code> when you want the ring to be literal about volume. Pick <code>sqrt</code> when your busiest days are many times larger than your typical ones and the ring looks washed out.</p>
+<h3 id="colour">Colour<a class="permalink" href="#colour" aria-label="Link to this section">#</a></h3>
+<p><code>heat-orange</code> is the default. Six palettes are built in:</p>
+<div class="comparison"><figure><figcaption><code>heat-orange</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-heat-orange.svg" alt="Heat orange" width="140" /></div></figure><figure><figcaption><code>github-blue</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-github-blue.svg" alt="GitHub blue" width="140" /></div></figure><figure><figcaption><code>forest</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-forest.svg" alt="Forest" width="140" /></div></figure><figure><figcaption><code>violet</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-violet.svg" alt="Violet" width="140" /></div></figure><figure><figcaption><code>crimson</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-crimson.svg" alt="Crimson" width="140" /></div></figure><figure><figcaption><code>graphite</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-graphite.svg" alt="Graphite" width="140" /></div></figure></div>
+<p><code>--heat-color</code> also takes colours directly. One hex value becomes the busiest stop and the other three are derived from it in OkLab, which keeps the hue instead of fading towards grey; on a dark card the derivation runs the other way, as described under <a href="themes.html#what-the-dark-palette-changes">Themes</a>. Four hex values, quietest first, are used exactly as given on every theme.</p>
+<div class="comparison"><figure><figcaption><code>--heat-color &quot;#8250df&quot;</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-derived.svg" alt="Ramp derived from one colour" width="164" /></div></figure><figure><figcaption><code>--heat-color &quot;#dbe9d5,#a3cf9a,#5aa04f,#1f6f2f&quot;</code></figcaption><div class="shot"><img src="../images/heat-ring/palette-explicit.svg" alt="Four explicit stops" width="164" /></div></figure></div>
+<h3 id="option-reference">Option reference<a class="permalink" href="#option-reference" aria-label="Link to this section">#</a></h3>
+<div class="table-scroll"><table><thead><tr><th>Option</th><th>Default</th><th>Accepts</th></tr></thead><tbody><tr><td><code>--heat-window</code></td><td><code>streak</code></td><td><code>streak</code> or a day count</td></tr><tr><td><code>--heat-limit</code></td><td>none</td><td>a day count, or <code>none</code></td></tr><tr><td><code>--heat-shape</code></td><td><code>segmented</code></td><td><code>segmented</code>, <code>ticks</code>, <code>arcs</code>, <code>bands</code></td></tr><tr><td><code>--heat-threshold</code></td><td><code>100</code></td><td>a day count</td></tr><tr><td><code>--heat-scale</code></td><td><code>linear</code></td><td><code>linear</code>, <code>sqrt</code>, <code>log</code>, <code>quantile</code></td></tr><tr><td><code>--heat-color</code></td><td><code>heat-orange</code></td><td>a palette name, one hex value, or four hex values</td></tr><tr><td><code>--heat-label</code></td><td>per window</td><td>free text with <code>{X}</code>, <code>{Y}</code>, <code>{Z}</code></td></tr></tbody></table></div>
+<p>Pass them through the Action the same way as any other option:</p>
+<pre data-language="yaml"><code>options: --user your-github-login --heat-window 60 --heat-scale sqrt --heat-color github-blue --heat-label &quot;{X}/last {Y}&quot;</code></pre>
+<h3 id="behaviour-worth-knowing">Behaviour worth knowing<a class="permalink" href="#behaviour-worth-knowing" aria-label="Link to this section">#</a></h3>
+<ul><li>Above the threshold, neighbouring days are averaged so each band stays at least four pixels wide. The ring still spans exactly the days the centre reports, but the bands you can count are fewer than the days.</li><li>A streak window has no quiet days by definition. Only a fixed window shows grey nodes.</li><li>A window longer than the available history pads the missing days as quiet.</li><li>When the streak is zero the ring falls back to a plain track and the centre reads <code>0</code>.</li><li>Regenerate the images in this section with <code>python3 scripts/render-ring-samples.py</code> after building the CLI.</li></ul>
+<nav class="steps"><a class="prev" href="configuration.html"><span>Previous</span>Configuration</a><a class="next" href="themes.html"><span>Next</span>Themes and colour</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Themes and colour · GitHub Personal Stats</title>
+<meta name="description" content="Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged." />
+<link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
+<link rel="stylesheet" href="../assets/site.css" />
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+  <a class="brand" href="../index.html">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../brand/logo-dark.svg" />
+      <img src="../brand/logo.svg" alt="GitHub Personal Stats" height="34" />
+    </picture>
+  </a>
+  <nav aria-label="Documentation">
+      <a href="../index.html">Home</a>
+      <a href="../pages/getting-started.html">Getting started</a>
+      <a href="../pages/cards.html">Cards and layout</a>
+      <a href="../pages/configuration.html">Configuration</a>
+      <a href="../pages/heat-ring.html">The heat ring</a>
+      <a href="../pages/themes.html" class="current" aria-current="page">Themes and colour</a>
+      <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/private-data.html">Private repository data</a>
+  </nav>
+  <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
+</header>
+<main id="content">
+<article class="doc">
+<h1>Themes and colour</h1>
+<p class="lede">Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged.</p>
+<h2 id="themes">Themes<a class="permalink" href="#themes" aria-label="Link to this section">#</a></h2>
+<p><code>--theme</code> picks the palette: <code>light</code> (default), <code>dark</code>, or <code>transparent</code>. An unrecognised name fails the run rather than quietly rendering the default.</p>
+<pre data-language="yaml"><code>options: --user your-github-login --theme dark</code></pre>
+<p><code>transparent</code> drops the background but keeps the dark text of the light palette, so it belongs on a light surface. For a dark surface use <code>dark</code>.</p>
+<h3 id="following-the-readers-colour-scheme">Following the reader&#x27;s colour scheme<a class="permalink" href="#following-the-readers-colour-scheme" aria-label="Link to this section">#</a></h3>
+<p>GitHub honours <code>&lt;picture&gt;</code> in a README, so generate one card per surface and let the browser choose. Add a second generate step:</p>
+<pre data-language="yaml"><code>      - uses: liuchong/github-personal-stats@v1.4.0
+        with:
+          card: dashboard
+          path: profile/github-personal-stats.svg
+          options: --user your-github-login --theme light
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}
+      - uses: liuchong/github-personal-stats@v1.4.0
+        with:
+          card: dashboard
+          path: profile/github-personal-stats-dark.svg
+          options: --user your-github-login --theme dark
+          token: ${{ secrets.PERSONAL_STATS_TOKEN }}</code></pre>
+<p>Then reference both, keeping the light file as the fallback for clients that ignore the media query:</p>
+<pre data-language="html"><code>&lt;picture&gt;
+  &lt;source media=&quot;(prefers-color-scheme: dark)&quot; srcset=&quot;./profile/github-personal-stats-dark.svg&quot; /&gt;
+  &lt;img src=&quot;./profile/github-personal-stats.svg&quot; alt=&quot;GitHub Personal Stats&quot; width=&quot;100%&quot; /&gt;
+&lt;/picture&gt;</code></pre>
+<p>Colour scheme queries inside the SVG are not a substitute. GitHub serves the file as an image through its own proxy, so a single self-switching SVG cannot be relied on; two files and <code>&lt;picture&gt;</code> is the supported path.</p>
+<h3 id="what-the-dark-palette-changes">What the dark palette changes<a class="permalink" href="#what-the-dark-palette-changes" aria-label="Link to this section">#</a></h3>
+<p>A heat ramp encodes intensity as distance from the background, so the same stops cannot serve both surfaces. On a light card the quiet end is pale and recedes; on a dark card that same pale stop is the brightest thing in the ring, which makes a one-commit day outshout a fifty-commit day. The built-in palettes and single-colour ramps therefore turn around on <code>dark</code>: the quiet end sinks to just above the ring track and the busy end climbs.</p>
+<div class="comparison"><figure><figcaption><code>--theme light</code></figcaption><div class="shot"><img src="../images/heat-ring/theme-light.svg" alt="Ring on a light card" width="164" /></div><p>Quiet days recede, busy days read orange</p></figure><figure><figcaption><code>--theme dark</code></figcaption><div class="shot"><img src="../images/heat-ring/theme-dark.svg" alt="Ring on a dark card" width="164" /></div><p>Quiet days recede into the surface, busy days glow</p></figure><figure><figcaption><code>dark</code> with light stops forced</figcaption><div class="shot"><img src="../images/heat-ring/theme-dark-explicit.svg" alt="Light stops on a dark card" width="164" /></div><p>The quiet majority dominates and the ring reads inside out</p></figure></div>
+<p>Four explicit stops are always taken exactly as given, on every theme, which is how the third example above is produced. If you spell out stops and also want dark support, spell out a second set for the dark card.</p>
+<h2 id="visual-notes">Visual Notes<a class="permalink" href="#visual-notes" aria-label="Link to this section">#</a></h2>
+<ul><li>Use the default dashboard when you want a clean profile header without layout drift.</li><li>Use individual cards only when your README needs a custom arrangement.</li><li>Keep generated SVGs committed so profile pages render quickly and do not depend on a live image server.</li><li>Prefer a scheduled workflow cadence such as daily updates; profile stats rarely need minute-level refreshes.</li></ul>
+<nav class="steps"><a class="prev" href="heat-ring.html"><span>Previous</span>The heat ring</a><a class="next" href="activity.html"><span>Next</span>Coding activity</a></nav>
+</article>
+</main>
+<footer class="footer">
+  <p>Generated from <a href="https://github.com/liuchong/github-personal-stats/blob/master/docs/user-guide.md">the guide</a>, so the site and the documentation cannot disagree.</p>
+</footer>
+</body>
+</html>

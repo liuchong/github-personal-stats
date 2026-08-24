@@ -1,6 +1,11 @@
 **Code is cheap, help out with your tokens!**
 
-# GitHub Personal Stats
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/brand/logo-dark.svg" />
+    <img src="./docs/brand/logo.svg" alt="GitHub Personal Stats" height="52" />
+  </picture>
+</p>
 
 Generate a polished GitHub profile dashboard as one SVG. The renderer owns the layout, so your README does not have to fight tables, image heights, or fragile HTML alignment.
 
@@ -141,7 +146,8 @@ Add `--min-repo-language-share 2` to ignore languages that make up less than 2% 
 
 ## Documentation
 
-- [User Guide](docs/user-guide.md): Action setup, CLI usage, card types, sizing, and README patterns.
+- [Documentation site](https://liuchong.github.io/github-personal-stats/): the guide as a set of pages, with every card, ring, and palette shown.
+- [User Guide](docs/user-guide.md): the same content in one file, readable on GitHub. The site is generated from it, so the two cannot disagree.
 - [Deployment Guide](deploy/README.md): HTTP server, container, and Kubernetes deployment notes.
 - [Vercel Notes](deploy/vercel/README.md): lightweight serverless deployment considerations.
 
@@ -150,6 +156,10 @@ Add `--min-repo-language-share 2` to ignore languages that make up less than 2% 
 - `crates/core`: shared data model, aggregation, rendering, and configuration.
 - `crates/cli`: command-line interface.
 - `crates/server`: HTTP interface.
+- `crates/collect`: reads local coding activity and publishes a snapshot.
+- `crates/daemon`: the resident collector, its local panel, and the endpoint plugins report to.
+- `plugins/vscode`: the editor plugin, covering VS Code, Cursor, and VSCodium.
+- `docs`: the guide, the illustrations, the brand marks, and the generated site.
 - `examples`: deterministic showcase data and generated SVG previews.
 - `.agents`: durable AI development memory and process files.
 
@@ -162,6 +172,15 @@ cargo test
 ```
 
 Coverage is enforced in CI with `cargo llvm-cov`.
+
+The site and the brand marks are generated, and both checked in, so GitHub Pages
+has something to serve without a build step:
+
+```sh
+python3 docs/brand/build.py   # the icon and wordmark
+python3 docs/build.py         # docs/index.html and docs/pages/
+python3 docs/check.py         # every reference reachable from docs/
+```
 
 ## License
 
