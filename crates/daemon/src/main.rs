@@ -215,10 +215,13 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
     Ok(())
 }
 
+/// How long ago, in the largest unit that still says something. A negative gap
+/// means the reporting machine's clock is ahead of this one, which is worth
+/// reading as "just now" rather than as a negative duration.
 fn ago(seconds: i64) -> String {
-    match seconds {
-        ..=90 => format!("{seconds}s"),
-        ..=5400 => format!("{}m", seconds / 60),
+    match seconds.max(0) {
+        0..=90 => format!("{}s", seconds.max(0)),
+        91..=5_400 => format!("{}m", seconds / 60),
         _ => format!("{}h", seconds / 3_600),
     }
 }
