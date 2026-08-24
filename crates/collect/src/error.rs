@@ -16,6 +16,11 @@ pub enum CollectError {
         source: &'static str,
         message: String,
     },
+    /// A caller sent something the journal is not allowed to hold. Separate from
+    /// the read errors because it is answerable: the daemon turns it into a 400.
+    Rejected {
+        message: String,
+    },
     Snapshot(GithubStatsError),
 }
 
@@ -32,6 +37,7 @@ impl fmt::Display for CollectError {
                 formatter,
                 "{source} does not look the way this build expects: {message}"
             ),
+            Self::Rejected { message } => write!(formatter, "refused: {message}"),
             Self::Snapshot(error) => write!(formatter, "{error}"),
         }
     }

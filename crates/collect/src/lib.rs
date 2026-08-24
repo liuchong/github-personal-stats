@@ -3,6 +3,9 @@ pub mod cursor;
 pub mod error;
 pub mod language;
 pub mod machine;
+pub mod pulse;
+pub mod random;
+pub mod sessions;
 
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
@@ -30,9 +33,25 @@ pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
         settings.idle_timeout_seconds,
     )?;
 
+    let worked = pulse::read(&settings.state_dir, settings.idle_timeout_seconds)?;
+
+    // Both sources are recomputed in full every run, so a fresh reading replaces
+    // the side of the day it owns and leaves the other side alone. Days older
+    // than either source keeps are carried over untouched, which is how history
+    // outlives the editor's own retention window.
     let mut days = kept;
-    for (date, bucket) in fresh {
-        days.insert(date, bucket);
+    for (date, reading) in fresh {
+        let slot = days
+            .entry(date.clone())
+            .or_insert_with(|| DayBucket::new(&date));
+        let editor = std::mem::take(&mut slot.editor);
+        *slot = reading;
+        slot.editor = editor;
+    }
+    for (date, editor) in worked {
+        days.entry(date.clone())
+            .or_insert_with(|| DayBucket::new(&date))
+            .editor = editor;
     }
 
     let mut snapshot = ActivitySnapshot::new(machine, clock::utc_timestamp(clock::now()));

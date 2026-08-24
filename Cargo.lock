@@ -140,6 +140,7 @@ version = "1.4.0"
 dependencies = [
  "github-personal-stats-core",
  "rusqlite",
+ "serde",
  "serde_json",
 ]
 
@@ -155,6 +156,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "github-personal-stats-daemon"
+version = "1.4.0"
+dependencies = [
+ "github-personal-stats-collect",
+ "github-personal-stats-core",
+ "serde_json",
 ]
 
 [[package]]

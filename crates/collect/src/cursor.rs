@@ -6,7 +6,10 @@ use std::{
 use github_personal_stats_core::DayBucket;
 use rusqlite::{Connection, OpenFlags};
 
-use crate::error::CollectError;
+use crate::{
+    error::CollectError,
+    sessions::{self, Event},
+};
 
 const SCORED_COMMITS: &str = "scored_commits";
 const CODE_HASHES: &str = "ai_code_hashes";
@@ -158,48 +161,23 @@ fn read_generated(
     Ok(())
 }
 
-struct Moment {
-    second: i64,
-    day: String,
-    extensions: Vec<(&'static str, u64)>,
-}
-
 fn read_worked_time(
     connection: &Connection,
     idle_timeout_seconds: i64,
     days: &mut BTreeMap<String, DayBucket>,
 ) -> Result<(), CollectError> {
     let moments = read_moments(connection)?;
-    let mut previous: Option<&Moment> = None;
 
-    for moment in &moments {
-        let starts_session = match previous {
-            None => true,
-            Some(earlier) => {
-                let gap = moment.second - earlier.second;
-                if gap > 0 && gap <= idle_timeout_seconds {
-                    spend(days, earlier, positive(gap));
-                    false
-                } else {
-                    gap > idle_timeout_seconds
-                }
-            }
-        };
-
-        if starts_session {
-            days.entry(moment.day.clone())
-                .or_insert_with(|| DayBucket::new(moment.day.clone()))
-                .agent
-                .sessions += 1;
-        }
-
-        previous = Some(moment);
+    for (date, bucket) in sessions::accumulate(&moments, idle_timeout_seconds) {
+        days.entry(date.clone())
+            .or_insert_with(|| DayBucket::new(date))
+            .agent = bucket;
     }
 
     Ok(())
 }
 
-fn read_moments(connection: &Connection) -> Result<Vec<Moment>, CollectError> {
+fn read_moments(connection: &Connection) -> Result<Vec<Event>, CollectError> {
     let mut statement = connection
         .prepare(EVENT_QUERY)
         .map_err(|error| schema_error(CODE_HASHES, error))?;
@@ -215,7 +193,7 @@ fn read_moments(connection: &Connection) -> Result<Vec<Moment>, CollectError> {
         })
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
-    let mut moments = Vec::<Moment>::new();
+    let mut moments = Vec::<Event>::new();
     for row in rows {
         let (second, day, extension, weight) =
             row.map_err(|error| schema_error(CODE_HASHES, error))?;
@@ -226,46 +204,23 @@ fn read_moments(connection: &Connection) -> Result<Vec<Moment>, CollectError> {
 
         match moments.last_mut() {
             Some(moment) if moment.second == second => {
-                moment.extensions.push((language, positive(weight)));
+                moment.languages.push((language, positive(weight)));
             }
-            _ => moments.push(Moment {
+            _ => moments.push(Event {
                 second,
                 day,
-                extensions: vec![(language, positive(weight))],
+                languages: vec![(language, positive(weight))],
             }),
         }
     }
 
     for moment in &mut moments {
         moment
-            .extensions
+            .languages
             .sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
     }
 
     Ok(moments)
-}
-
-fn spend(days: &mut BTreeMap<String, DayBucket>, moment: &Moment, seconds: u64) {
-    let bucket = days
-        .entry(moment.day.clone())
-        .or_insert_with(|| DayBucket::new(moment.day.clone()));
-    bucket.agent.seconds += seconds;
-
-    let weight: u64 = moment.extensions.iter().map(|(_, weight)| weight).sum();
-    if weight == 0 {
-        return;
-    }
-
-    let mut spent = 0;
-    for (language, share) in &moment.extensions {
-        let slice = seconds * share / weight;
-        *bucket.agent.languages.entry(language.to_string()).or_default() += slice;
-        spent += slice;
-    }
-
-    if let Some((language, _)) = moment.extensions.first() {
-        *bucket.agent.languages.entry(language.to_string()).or_default() += seconds - spent;
-    }
 }
 
 fn read_requests(

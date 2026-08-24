@@ -353,9 +353,7 @@ fn gather<'day>(
 ) {
     totals.seconds += bucket.seconds;
     totals.sessions += bucket.sessions;
-    totals
-        .daily_seconds
-        .push((date.to_owned(), bucket.seconds));
+    totals.daily_seconds.push((date.to_owned(), bucket.seconds));
     for (language, seconds) in &bucket.languages {
         *languages.entry(language.as_str()).or_default() += seconds;
     }

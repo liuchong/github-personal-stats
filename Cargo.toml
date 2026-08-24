@@ -3,6 +3,7 @@ members = [
     "crates/core",
     "crates/cli",
     "crates/collect",
+    "crates/daemon",
     "crates/server",
 ]
 resolver = "3"
@@ -18,4 +19,5 @@ rust-version = "1.85"
 version = "1.4.0"
 
 [workspace.dependencies]
+github-personal-stats-collect = { path = "crates/collect", version = "1.4.0" }
 github-personal-stats-core = { path = "crates/core", version = "1.4.0" }

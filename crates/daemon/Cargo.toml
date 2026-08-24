@@ -1,7 +1,7 @@
 [package]
-name = "github-personal-stats-collect"
-description = "Reads local editor and AI agent records into an activity snapshot the stats renderer can draw."
-categories = ["command-line-utilities"]
+name = "github-personal-stats-daemon"
+description = "Local daemon that receives editor pulses, collects activity, and serves a panel"
+categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 authors.workspace = true
 edition.workspace = true
@@ -12,8 +12,11 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[[bin]]
+name = "github-personal-stats-daemon"
+path = "src/main.rs"
+
 [dependencies]
+github-personal-stats-collect.workspace = true
 github-personal-stats-core.workspace = true
-rusqlite = { version = "0.40.2", features = ["bundled"] }
-serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

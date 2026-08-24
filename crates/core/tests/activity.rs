@@ -279,16 +279,15 @@ fn editor_time_and_agent_time_are_kept_apart_because_they_measure_different_thin
     let mut bucket = DayBucket::new("2026-08-24");
     bucket.editor.seconds = 20 * 3600;
     bucket.editor.sessions = 4;
-    bucket.editor.languages.insert("Markdown".to_string(), 20 * 3600);
+    bucket
+        .editor
+        .languages
+        .insert("Markdown".to_string(), 20 * 3600);
     bucket.agent.seconds = 3 * 3600;
     bucket.agent.sessions = 9;
     bucket.agent.languages.insert("Rust".to_string(), 3 * 3600);
 
-    let merged = merge_snapshots(&[snapshot(
-        "m-laptop",
-        "2026-08-24T19:00:00Z",
-        vec![bucket],
-    )]);
+    let merged = merge_snapshots(&[snapshot("m-laptop", "2026-08-24T19:00:00Z", vec![bucket])]);
     let totals = summarise_activity(&merged);
 
     assert_eq!(totals.editor.seconds, 20 * 3600);

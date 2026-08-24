@@ -1,10 +1,9 @@
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
 };
 
-use crate::{clock, error::CollectError};
+use crate::error::CollectError;
 
 const MACHINE_FILE: &str = "machine";
 
@@ -25,21 +24,7 @@ pub fn identity(state_dir: &Path) -> Result<String, CollectError> {
 }
 
 fn mint() -> String {
-    let mut bytes = [0_u8; 4];
-    let random = fs::File::open("/dev/urandom")
-        .and_then(|mut file| file.read_exact(&mut bytes))
-        .is_ok();
-
-    if !random {
-        let fallback = (clock::now() as u64) ^ (u64::from(std::process::id()) << 32);
-        bytes = (fallback as u32).to_be_bytes();
-    }
-
-    let hex = bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    format!("m-{hex}")
+    format!("m-{}", crate::random::hex(4))
 }
 
 fn is_usable(candidate: &str) -> bool {
