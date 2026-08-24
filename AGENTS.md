@@ -62,6 +62,14 @@ Before the Rust workspace exists, use repository inspection, Markdown review, an
 - Update `.agents/decisions.md` for durable architecture decisions.
 - Update `.agents/knowledge/` when a lesson should survive chat history.
 
+## Release And Version Rules
+
+- Never change a version number unless the user asks for that change in that message. This covers the workspace `version`, the version a path dependency is pinned to, version constants, tags, and the version in documentation and workflow examples.
+- Never publish anything unless the user asks for it in that message: no tag, no GitHub release, no Marketplace listing, no crates.io upload.
+- Finishing a feature is not a request to release it. Being asked to release one version is not standing permission to release the next one.
+- A publish to crates.io cannot be undone. A version can only be yanked, it stays downloadable, and its number is spent permanently. Treat every publish as irreversible and ask first.
+- When work is finished and a release looks warranted, say so and stop there. Choosing the number is the user's decision, not a semver deduction.
+
 ## Required Reading Order
 
 1. `AGENTS.md`

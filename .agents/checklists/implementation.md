@@ -14,3 +14,4 @@ Before completion:
 - Update `.agents/log.md`.
 - Update knowledge or decisions when durable information changed.
 - Run the private forbidden-reference scan.
+- Leave the version number alone, and publish nothing. Completing a change is not a release; report that the work is done and let the user decide whether, and as what number, it ships.

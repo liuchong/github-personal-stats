@@ -14,6 +14,8 @@ The HTTP server should expose the same core renderer through request parameters 
 
 ## Release
 
+A release happens only when the user asks for one and says which number it carries. Neither is inferable: finishing a change does not authorise shipping it, and the version is a promise to users rather than a conclusion drawn from the diff. A crates.io upload is the irreversible case — a version can only be yanked, it stays downloadable, and its number is spent for good.
+
 Release assets must include platform binaries and checksums. Smoke tests must verify installation and at least one dashboard generation path.
 
 `checksums.txt` records one archive per line under its published basename, in the layout `shasum -a 256` writes, so `shasum -c` and `sha256sum -c` accept the file unchanged. The publish job hashes the archives from a flat directory and verifies the file it wrote before uploading; it must never rewrite the paths afterwards, because that is how the separator was lost before. The installer reads only the first field, so a broken layout survives every Action run and only surfaces when a person verifies a download.

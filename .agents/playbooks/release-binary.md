@@ -1,5 +1,6 @@
 # Playbook: Release Binary
 
+0. Confirm the user asked for this release and gave the version number, in the message being answered. If either is missing, stop here and ask. Do not choose a number and do not read a finished feature as permission.
 1. Confirm version and changelog source.
 2. Build supported platform binaries.
 3. Generate checksums.

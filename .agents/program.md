@@ -52,6 +52,7 @@ Do not leave experimental behavior wired into production paths unless it passes 
 
 Stop and ask the user when:
 
+- A version number would change, or anything would be published, and the user did not ask for it in that message. Finishing the work is not the authorisation, and neither is a release the user asked for earlier.
 - Requirements conflict.
 - A secret or private data appears in files or logs.
 - A structural decision would materially change the committed plan.
