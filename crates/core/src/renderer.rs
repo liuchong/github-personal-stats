@@ -17,6 +17,11 @@ const TITLE_ID: &str = "gps-title";
 
 const GUTTER: u32 = 24;
 
+/// Where the ring's two caption lines sit below its edge. Anything stacked under
+/// a ring measures from these, so the block cannot drift into the caption.
+const RING_CAPTION_OFFSET: u32 = 26;
+const RING_DATE_OFFSET: u32 = 43;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderTheme {
     pub kind: Theme,
@@ -543,16 +548,83 @@ fn streak_section(
     config: &HeatRing,
     sides: [StreakMetric; 2],
 ) -> String {
-    let column = area.width / 3;
-    let compact = area.is_narrow();
-    let (label_y, value_y, note_y) = if compact {
-        (area.y + 44, area.y + 80, area.y + 104)
-    } else {
-        (area.y + 52, area.y + 92, area.y + 118)
+    if area.is_narrow() {
+        return streak_stacked(area, streak, theme, config, sides);
+    }
+
+    streak_columns(area, streak, theme, config, sides)
+}
+
+/// Three columns need room the ring's own date line already struggles for, so a
+/// narrow card gives the ring a full-width row of its own and sits the two
+/// figures side by side underneath it.
+fn streak_stacked(
+    area: Rect,
+    streak: &StreakSummary,
+    theme: &RenderTheme,
+    config: &HeatRing,
+    sides: [StreakMetric; 2],
+) -> String {
+    let ring_radius = 26;
+    let ring_cx = area.x + area.width / 2;
+    let ring_cy = area.y + 30 + ring_radius;
+    let ring_bottom = ring_cy + ring_radius + RING_DATE_OFFSET;
+    let figures_y = ring_bottom + 28;
+    let column = area.width / 2;
+    let placement = SidePlacement {
+        label_y: figures_y,
+        value_y: figures_y + 30,
+        note_y: figures_y + 50,
+        value_size: 22.0,
+        compact: true,
     };
-    let value_size = if compact { 26.0 } else { 34.0 };
-    let ring_radius = if compact { 26 } else { 32 };
-    let ring_cy = area.y + if compact { 62 } else { 70 };
+
+    let figures = sides
+        .iter()
+        .enumerate()
+        .map(|(index, metric)| {
+            side_metric(streak_side(
+                *metric,
+                area.x + index as u32 * column,
+                SidePlacement { ..placement },
+                streak,
+                theme,
+            ))
+        })
+        .collect::<String>();
+
+    format!(
+        "{}{}{}{}",
+        eyebrow(area.x, area.y + 12, "Streak", theme),
+        current_streak_ring(
+            &Ring {
+                cx: ring_cx,
+                cy: ring_cy,
+                radius: ring_radius,
+                compact: true,
+                theme,
+                config,
+                stops: config.ramp.stops(theme.kind),
+            },
+            streak
+        ),
+        horizontal_rule(area.x, area.right(), ring_bottom + 12, theme),
+        figures,
+    )
+}
+
+fn streak_columns(
+    area: Rect,
+    streak: &StreakSummary,
+    theme: &RenderTheme,
+    config: &HeatRing,
+    sides: [StreakMetric; 2],
+) -> String {
+    let column = area.width / 3;
+    let (label_y, value_y, note_y) = (area.y + 52, area.y + 92, area.y + 118);
+    let value_size = 34.0;
+    let ring_radius = 32;
+    let ring_cy = area.y + 70;
     let ring_cx = area.x + column + column / 2;
 
     let total = side_metric(streak_side(
@@ -563,7 +635,7 @@ fn streak_section(
             value_y,
             note_y,
             value_size,
-            compact,
+            compact: false,
         },
         streak,
         theme,
@@ -576,7 +648,7 @@ fn streak_section(
             value_y,
             note_y,
             value_size,
-            compact,
+            compact: false,
         },
         streak,
         theme,
@@ -597,7 +669,7 @@ fn streak_section(
                 cx: ring_cx,
                 cy: ring_cy,
                 radius: ring_radius,
-                compact,
+                compact: false,
                 theme,
                 config,
                 stops: config.ramp.stops(theme.kind),
@@ -770,7 +842,7 @@ fn current_streak_ring(ring: &Ring, streak: &StreakSummary) -> String {
         ),
         text_middle(
             ring.cx,
-            ring.cy + ring.radius + 26,
+            ring.cy + ring.radius + RING_CAPTION_OFFSET,
             11.5,
             400,
             ring.theme.muted,
@@ -778,7 +850,7 @@ fn current_streak_ring(ring: &Ring, streak: &StreakSummary) -> String {
         ),
         text_middle(
             ring.cx,
-            ring.cy + ring.radius + 43,
+            ring.cy + ring.radius + RING_DATE_OFFSET,
             10.5,
             400,
             ring.theme.muted,
