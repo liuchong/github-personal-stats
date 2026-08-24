@@ -276,7 +276,7 @@ OPTIONS
     --sink <file|git>     Where a rebuilt snapshot goes. Default file.
     --repo <path>         Where to keep the storage checkout, for the git sink.
     --origin <url>        Git remote to clone the checkout from, and push to.
-    --branch <name>       Branch to push to. Default main.
+    --branch <name>       Branch to push to. Default master.
     --no-push             Commit locally without pushing.
 
     Any of these can be written once in <state>/config as `name = value`,

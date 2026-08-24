@@ -12,6 +12,16 @@ The CLI is the stable local interface and should share behavior with the Action 
 
 The HTTP server should expose the same core renderer through request parameters and should be deployable on common container and cloud platforms.
 
+## Activity Storage
+
+Local activity has to reach whatever renders the cards, and the three ways it can are file, git, and HTTP. See `.agents/knowledge/architecture.md` for the boundary; what matters when deploying:
+
+- The serverless case is the git backend. A repository holds `snapshots/<machine>.json`, one file per machine, and CI checks it out to render. The repository is storage, not a GitHub arrangement: any git remote the collector and the renderer can both reach qualifies.
+- A private storage repository read from another repository's workflow needs **no personal access token**. A read-only deploy key on the storage repository, with its private half held as a secret in the rendering repository and passed to `actions/checkout` as `ssh-key`, is sufficient and is narrower than a token. This is verified behaviour, not an assumption.
+- A personal access token *is* required for reading the storage repository through the GitHub REST API, because deploy keys authenticate git transport only and not the API. This is the main reason the git backend exists rather than an API client.
+- Committing rendered output back into the rendering repository uses the built-in `GITHUB_TOKEN`. A token is only needed to write to a *different* repository.
+- `git ls-remote --exit-code` fails on a repository with no commits, so `actions/checkout` of an empty storage repository fails for reasons that look like authentication and are not. Publish once before concluding anything about credentials.
+
 ## Release
 
 A release happens only when the user asks for one and says which number it carries. Neither is inferable: finishing a change does not authorise shipping it, and the version is a promise to users rather than a conclusion drawn from the diff. A crates.io upload is the irreversible case — a version can only be yanked, it stays downloadable, and its number is spent for good.

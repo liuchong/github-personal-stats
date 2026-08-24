@@ -245,7 +245,7 @@ pub fn choose(
             Ok(Box::new(GitSink {
                 repo: PathBuf::from(repo),
                 origin: origin.map(str::to_owned),
-                branch: branch.unwrap_or("main").to_owned(),
+                branch: branch.unwrap_or("master").to_owned(),
                 push,
             }))
         }

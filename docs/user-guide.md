@@ -625,6 +625,85 @@ Run:
 cargo run -p github-personal-stats -- update-readme --section activity --target README.md
 ```
 
+## Local Activity Storage
+
+Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so a snapshot has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.
+
+The configuration lives at `<state>/config`, which on Linux and macOS is `~/.local/state/github-personal-stats/config` unless `XDG_STATE_HOME` says otherwise. Lines are `name = value` using an option's own name without the dashes, `#` starts a comment, and a flag on the command line overrides the file.
+
+### File
+
+The default. One snapshot, one path. This is what you want if the machine that collects also renders.
+
+```
+sink = file
+output = /Users/you/.local/state/github-personal-stats/activity.json
+```
+
+### Git
+
+A git repository as storage. This is the one to use when your cards are rendered by a scheduled GitHub Actions run, because CI has no way to read your laptop.
+
+```
+sink = git
+origin = git@github.com:your-login/personal-stats-data.git
+repo = /Users/you/.local/state/github-personal-stats/storage
+branch = master
+```
+
+`repo` is a working checkout the collector owns: it clones it if it is not there, brings it up to date before each commit, and you can delete it whenever you like. Keep it in the state directory rather than among your projects — it is storage, not somewhere to work.
+
+Each machine writes `snapshots/<machine>.json` under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the files up. A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.
+
+Nothing here is specific to GitHub. Any git remote both your machine and your renderer can reach will do, including one on a server of your own that the public internet cannot see.
+
+### HTTP
+
+For sending snapshots to a service that collects from many people. The interface exists; the implementation does not, because the protocol and what counts as an identity are decisions for whoever runs such a service.
+
+### Reading private storage from your profile workflow
+
+If the storage repository is private — and per-day detail is a good reason to keep it private — your profile repository's workflow needs permission to read it. The built-in `GITHUB_TOKEN` cannot: it is scoped to the repository the workflow runs in.
+
+This needs no personal access token. A read-only deploy key is narrower and enough:
+
+```sh
+ssh-keygen -t ed25519 -N "" -C "stats renderer" -f /tmp/key
+gh repo deploy-key add /tmp/key.pub --title "stats renderer (read-only)" \
+  --repo your-login/personal-stats-data
+gh secret set STATS_DATA_KEY --repo your-login/your-login < /tmp/key
+rm /tmp/key /tmp/key.pub
+```
+
+Then check the storage out alongside your profile repository:
+
+```yaml
+- name: Read the storage repository
+  uses: actions/checkout@v4
+  with:
+    repository: your-login/personal-stats-data
+    ssh-key: ${{ secrets.STATS_DATA_KEY }}
+    path: storage
+```
+
+Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.
+
+Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and **not** the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And `actions/checkout` fails against a repository with no commits in it, in a way that reads like a permission problem, so publish one snapshot before judging your credentials.
+
+### Publishing a snapshot
+
+With the configuration in place, no arguments are needed:
+
+```sh
+github-personal-stats-collect
+```
+
+The daemon does the same thing on a timer once installed, using the same configuration:
+
+```sh
+github-personal-stats-daemon install
+```
+
 ## Visual Notes
 
 - Use the default dashboard when you want a clean profile header without layout drift.

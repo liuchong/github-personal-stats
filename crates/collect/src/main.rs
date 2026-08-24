@@ -134,7 +134,7 @@ Options:
   --sink <file|git>        Where the snapshot goes (default: file)
   --repo <dir>             Where to keep the storage checkout, for --sink git
   --origin <url>           Git remote to clone the checkout from, and push to
-  --branch <name>          Branch to push to (default: main)
+  --branch <name>          Branch to push to (default: master)
   --no-push                Commit locally without pushing
   --idle-timeout <minutes> Gap that ends a working stretch (default: {DEFAULT_IDLE_TIMEOUT_MINUTES})
   --state <dir>            Where the machine identity, token and pulse journal live

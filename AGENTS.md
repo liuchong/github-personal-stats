@@ -62,6 +62,19 @@ Before the Rust workspace exists, use repository inspection, Markdown review, an
 - Update `.agents/decisions.md` for durable architecture decisions.
 - Update `.agents/knowledge/` when a lesson should survive chat history.
 
+## Branch Naming
+
+- The default branch is `master`, here and in every repository this project creates or configures. Never use `main`, and never leave a tool's default in place because it happened to pick `main`.
+- This covers code defaults, help text, configuration files, workflow examples, documentation, and any repository created on the user's behalf. A repository created with `main` must be renamed before anything is built on top of it.
+
+## Activity Storage Rules
+
+- Activity snapshots reach the renderer through one of three backends behind `sink::Sink`: file, git, or HTTP. Which one is used is configuration, never a hardcoded path.
+- The git backend is storage, not a GitHub integration. Any git remote both ends can reach qualifies, public internet or not. Do not reach for a host's REST API to do what git transport already does; that trades away self-hosting and forces a token where a read-only deploy key would serve.
+- One file per machine, named after the machine. Never write a path another machine also writes.
+- Never decide whether to publish by comparing bytes. `collected_at` moves on every collection, so a byte comparison makes a scheduled collector commit forever. Compare the record.
+- The storage checkout belongs in the app's runtime state directory. Never put it among the user's projects, and never ask the user to create it by hand.
+
 ## Release And Version Rules
 
 - Never change a version number unless the user asks for that change in that message. This covers the workspace `version`, the version a path dependency is pinned to, version constants, tags, and the version in documentation and workflow examples.

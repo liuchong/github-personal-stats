@@ -58,7 +58,7 @@ fn sink(repo: &Path) -> GitSink {
     GitSink {
         repo: repo.to_path_buf(),
         origin: None,
-        branch: "main".to_owned(),
+        branch: "master".to_owned(),
         push: false,
     }
 }
@@ -171,7 +171,7 @@ fn a_snapshot_already_published_by_a_newer_build_is_replaced_rather_than_trusted
 fn bare(root: &Path) -> String {
     let remote = root.join("remote.git");
     let output = std::process::Command::new("git")
-        .args(["init", "--quiet", "--bare", "--initial-branch=main"])
+        .args(["init", "--quiet", "--bare", "--initial-branch=master"])
         .arg(&remote)
         .output()
         .expect("git should be runnable");
@@ -183,7 +183,7 @@ fn cloning(repo: &Path, origin: &str) -> GitSink {
     GitSink {
         repo: repo.to_path_buf(),
         origin: Some(origin.to_owned()),
-        branch: "main".to_owned(),
+        branch: "master".to_owned(),
         push: true,
     }
 }
@@ -212,7 +212,7 @@ fn the_first_snapshot_reaches_an_empty_remote() {
         .publish(&snapshot("2026-08-24T19:00:00Z", 60))
         .unwrap();
 
-    let landed = git(&PathBuf::from(&origin), &["log", "--oneline", "main"]);
+    let landed = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
     assert_eq!(landed.lines().count(), 1);
 }
 
@@ -234,13 +234,13 @@ fn a_second_machine_lands_on_top_of_the_first_without_conflict() {
         .publish(&desktop)
         .expect("a remote that moved should be caught up with, not fought over");
 
-    let history = git(&PathBuf::from(&origin), &["log", "--oneline", "main"]);
+    let history = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
     assert_eq!(history.lines().count(), 2);
 
     // Both files survive: neither machine overwrote the other's.
     let listing = git(
         &PathBuf::from(&origin),
-        &["ls-tree", "--name-only", "main", "snapshots/"],
+        &["ls-tree", "--name-only", "master", "snapshots/"],
     );
     assert!(listing.contains("m-laptop.json"), "{listing}");
     assert!(listing.contains("m-desktop.json"), "{listing}");
@@ -261,7 +261,7 @@ fn a_machine_that_cannot_reach_the_remote_still_records_locally() {
     let sink = GitSink {
         repo: repo.clone(),
         origin: Some(origin),
-        branch: "main".to_owned(),
+        branch: "master".to_owned(),
         push: false,
     };
     sink.publish(&snapshot("2026-08-24T19:30:00Z", 120))
