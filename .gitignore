@@ -12,3 +12,7 @@
 profile/*.svg
 coverage/
 *.profraw
+node_modules/
+plugins/*/out/
+plugins/*/*.vsix
+plugins/*/package-lock.json

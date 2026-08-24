@@ -1,0 +1,65 @@
+{
+  "name": "github-personal-stats-vscode",
+  "displayName": "GitHub Personal Stats",
+  "description": "Reports what you are working on to the local github-personal-stats daemon, so editor time can be measured alongside agent time.",
+  "version": "1.4.0",
+  "publisher": "liuchong",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liuchong/github-personal-stats.git",
+    "directory": "plugins/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["statistics", "activity", "time tracking", "profile"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "githubPersonalStats.sendNow",
+        "title": "GitHub Personal Stats: Send pulses now"
+      }
+    ],
+    "configuration": {
+      "title": "GitHub Personal Stats",
+      "properties": {
+        "githubPersonalStats.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report what you are working on to the local daemon."
+        },
+        "githubPersonalStats.daemonUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:7391",
+          "description": "Where the local daemon is listening."
+        },
+        "githubPersonalStats.statePath": {
+          "type": "string",
+          "default": "",
+          "description": "Where the daemon keeps its token. Empty means the XDG state directory."
+        },
+        "githubPersonalStats.pulseSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 240,
+          "description": "How often continuous work turns into a pulse. Keep this well below the daemon's idle timeout."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "package": "vsce package --out github-personal-stats-vscode.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
