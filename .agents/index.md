@@ -19,6 +19,7 @@
 - `.agents/knowledge/rendering.md`: SVG and text rendering rules.
 - `.agents/knowledge/deployment.md`: CLI, Action, server, release, and hosting notes.
 - `.agents/knowledge/compatibility.md`: compatibility concepts and parameter mapping notes.
+- `.agents/knowledge/activity-sources.md`: where local coding activity can be read from, and in what order to prefer.
 
 ## Intake
 
