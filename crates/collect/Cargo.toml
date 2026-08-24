@@ -1,0 +1,18 @@
+[package]
+name = "github-personal-stats-collect"
+description = "Reads local editor and AI agent records into an activity snapshot the stats renderer can draw."
+categories = ["command-line-utilities"]
+readme = "README.md"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license-file.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+github-personal-stats-core.workspace = true
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde_json = "1.0.151"

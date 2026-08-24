@@ -1,0 +1,87 @@
+const LANGUAGES: [(&str, &str); 71] = [
+    ("astro", "Astro"),
+    ("bash", "Shell"),
+    ("bat", "Batchfile"),
+    ("c", "C"),
+    ("cc", "C++"),
+    ("cjs", "JavaScript"),
+    ("clj", "Clojure"),
+    ("cljc", "Clojure"),
+    ("cljs", "Clojure"),
+    ("cpp", "C++"),
+    ("cs", "C#"),
+    ("css", "CSS"),
+    ("csv", "CSV"),
+    ("dart", "Dart"),
+    ("edn", "Clojure"),
+    ("el", "Emacs Lisp"),
+    ("elm", "Elm"),
+    ("erl", "Erlang"),
+    ("ex", "Elixir"),
+    ("exs", "Elixir"),
+    ("fish", "Shell"),
+    ("go", "Go"),
+    ("gradle", "Gradle"),
+    ("graphql", "GraphQL"),
+    ("h", "C"),
+    ("hpp", "C++"),
+    ("hs", "Haskell"),
+    ("html", "HTML"),
+    ("ipynb", "Jupyter Notebook"),
+    ("java", "Java"),
+    ("jl", "Julia"),
+    ("js", "JavaScript"),
+    ("json", "JSON"),
+    ("jsx", "JavaScript"),
+    ("kt", "Kotlin"),
+    ("kts", "Kotlin"),
+    ("lua", "Lua"),
+    ("md", "Markdown"),
+    ("mjs", "JavaScript"),
+    ("mk", "Makefile"),
+    ("mm", "Objective-C"),
+    ("mod", "Go"),
+    ("nim", "Nim"),
+    ("nix", "Nix"),
+    ("php", "PHP"),
+    ("pl", "Perl"),
+    ("proto", "Protocol Buffers"),
+    ("ps1", "PowerShell"),
+    ("py", "Python"),
+    ("r", "R"),
+    ("rb", "Ruby"),
+    ("rs", "Rust"),
+    ("scala", "Scala"),
+    ("scss", "SCSS"),
+    ("sh", "Shell"),
+    ("sql", "SQL"),
+    ("sum", "Go"),
+    ("svelte", "Svelte"),
+    ("swift", "Swift"),
+    ("tf", "Terraform"),
+    ("toml", "TOML"),
+    ("ts", "TypeScript"),
+    ("tsx", "TypeScript"),
+    ("txt", "Text"),
+    ("vim", "Vim Script"),
+    ("vue", "Vue"),
+    ("xml", "XML"),
+    ("yaml", "YAML"),
+    ("yml", "YAML"),
+    ("zig", "Zig"),
+    ("zsh", "Shell"),
+];
+
+pub const OTHER: &str = "Other";
+
+pub fn from_extension(extension: &str) -> &'static str {
+    let trimmed = extension
+        .trim()
+        .trim_start_matches('.')
+        .to_ascii_lowercase();
+    LANGUAGES
+        .iter()
+        .find(|(candidate, _)| *candidate == trimmed)
+        .map(|(_, language)| *language)
+        .unwrap_or(OTHER)
+}

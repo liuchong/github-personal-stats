@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod aggregation;
 pub mod client;
 pub mod color;
@@ -8,6 +9,11 @@ pub mod json;
 pub mod renderer;
 pub mod workspace;
 
+pub use activity::{
+    ACTIVITY_SCHEMA, ActivitySnapshot, ActivityTotals, DayBucket, GeneratedLines, LineCounts,
+    ModelUsage, merge_snapshots, parse_activity_snapshot, summarise_activity,
+    write_activity_snapshot,
+};
 pub use aggregation::{
     AggregatedStats, CardData, CodingActivityEntry, CodingActivitySummary, LanguageShare,
     StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity, aggregate_languages,
