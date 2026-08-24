@@ -179,10 +179,9 @@ impl GitSink {
             return Ok(());
         }
 
-        self.git(&["rebase", "--quiet", &remote]).map_err(|error| {
+        self.git(&["rebase", "--quiet", &remote]).inspect_err(|_| {
             // Leave no rebase in progress for the next run to trip over.
             let _ = self.git(&["rebase", "--abort"]);
-            error
         })?;
         Ok(())
     }
