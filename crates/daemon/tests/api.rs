@@ -4,7 +4,7 @@ use std::{
 };
 
 use github_personal_stats_collect::{
-    Settings, pulse,
+    Settings, presence, pulse,
     sink::{FileSink, Sink},
 };
 use github_personal_stats_daemon::{
@@ -210,4 +210,83 @@ fn a_refusal_says_what_was_wrong_without_repeating_the_body_back() {
     assert_eq!(problem.status, 400);
     assert!(problem.body.contains("must look like"));
     assert!(problem.body.starts_with("{\"error\":\""));
+}
+
+#[test]
+fn a_plugin_that_says_hello_is_known_even_before_it_reports() {
+    let root = scratch("hello");
+    let daemon = daemon(&root);
+
+    let answer = daemon.answer(&request(
+        "POST",
+        "/v1/hello",
+        Some(daemon.token()),
+        "{\"editor\":\"vscode\",\"version\":\"1.4.0\"}",
+    ));
+
+    assert_eq!(answer.status, 200);
+    let announced = presence::read(&root.join("state"));
+    assert_eq!(announced.len(), 1);
+    assert_eq!(announced[0].editor, "vscode");
+    assert_eq!(announced[0].version, "1.4.0");
+}
+
+#[test]
+fn saying_hello_twice_leaves_one_record() {
+    let root = scratch("hello-twice");
+    let daemon = daemon(&root);
+    let body = "{\"editor\":\"vscode\",\"version\":\"1.4.0\"}";
+
+    daemon.answer(&request("POST", "/v1/hello", Some(daemon.token()), body));
+    daemon.answer(&request("POST", "/v1/hello", Some(daemon.token()), body));
+
+    assert_eq!(presence::read(&root.join("state")).len(), 1);
+}
+
+#[test]
+fn an_announcement_never_becomes_time_worked() {
+    let root = scratch("hello-is-not-work");
+    let daemon = daemon(&root);
+
+    daemon.answer(&request(
+        "POST",
+        "/v1/hello",
+        Some(daemon.token()),
+        "{\"editor\":\"vscode\",\"version\":\"1.4.0\"}",
+    ));
+
+    // Presence is kept apart from the journal, so nothing an announcement does
+    // can be mistaken for a day's work.
+    assert!(pulse::read(&root.join("state"), 300).unwrap().is_empty());
+}
+
+#[test]
+fn a_hostile_editor_name_cannot_arrive_by_saying_hello() {
+    let root = scratch("hello-hostile");
+    let daemon = daemon(&root);
+
+    let answer = daemon.answer(&request(
+        "POST",
+        "/v1/hello",
+        Some(daemon.token()),
+        "{\"editor\":\"../../etc/passwd\",\"version\":\"1\"}",
+    ));
+
+    assert_eq!(answer.status, 400);
+    assert!(presence::read(&root.join("state")).is_empty());
+}
+
+#[test]
+fn saying_hello_needs_the_token_like_everything_else() {
+    let root = scratch("hello-unauthorised");
+    let daemon = daemon(&root);
+
+    let answer = daemon.answer(&request(
+        "POST",
+        "/v1/hello",
+        None,
+        "{\"editor\":\"vscode\"}",
+    ));
+
+    assert_eq!(answer.status, 401);
 }

@@ -9,7 +9,7 @@ use std::{
 };
 
 use github_personal_stats_collect::{
-    CollectError, Settings, collect,
+    CollectError, Settings, collect, presence,
     pulse::{self, PulseBatch},
     sink::Sink,
 };
@@ -87,6 +87,9 @@ impl Daemon {
             // caller nothing it did not already know by connecting.
             ("GET", "/v1/health") => Response::text(200, "ok"),
             ("GET", "/") => self.guarded(offered.as_deref(), |daemon| daemon.panel()),
+            ("POST", "/v1/hello") => {
+                self.guarded(offered.as_deref(), |daemon| daemon.take_hello(request))
+            }
             ("POST", "/v1/pulses") => {
                 self.guarded(offered.as_deref(), |daemon| daemon.take_pulses(request))
             }
@@ -133,6 +136,45 @@ impl Daemon {
         match pulse::append(&self.settings.state_dir, &batch) {
             Ok(accepted) => Response::json(200, format!("{{\"accepted\":{accepted}}}\n")),
             Err(CollectError::Rejected { message }) => Response::problem(400, &message),
+            Err(error) => Response::problem(500, &error.to_string()),
+        }
+    }
+
+    /// Records that a plugin has loaded. This is not work and never becomes time;
+    /// it exists so that a plugin sitting in an idle window can be told apart from
+    /// one that was never loaded, which otherwise look identical.
+    fn take_hello(&self, request: &Request) -> Response {
+        #[derive(serde::Deserialize)]
+        struct Hello {
+            editor: String,
+            #[serde(default)]
+            version: String,
+        }
+
+        let hello = match serde_json::from_str::<Hello>(&request.body) {
+            Ok(hello) => hello,
+            Err(error) => {
+                return Response::problem(400, &format!("that is not an announcement: {error}"));
+            }
+        };
+
+        // The same naming rule as a pulse batch, because this name is written to
+        // disk and compared against the one on pulses.
+        let batch = PulseBatch {
+            editor: hello.editor.clone(),
+            pulses: vec![pulse::Pulse {
+                at: 1,
+                day: "1970-01-01".to_owned(),
+                ext: String::new(),
+                write: false,
+            }],
+        };
+        if let Err(CollectError::Rejected { message }) = batch.validate() {
+            return Response::problem(400, &message);
+        }
+
+        match presence::announce(&self.settings.state_dir, &hello.editor, &hello.version) {
+            Ok(()) => Response::json(200, "{\"noted\":true}\n".to_owned()),
             Err(error) => Response::problem(500, &error.to_string()),
         }
     }

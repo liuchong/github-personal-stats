@@ -19,4 +19,5 @@ path = "src/main.rs"
 [dependencies]
 github-personal-stats-collect.workspace = true
 github-personal-stats-core.workspace = true
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"

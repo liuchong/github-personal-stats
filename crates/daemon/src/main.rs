@@ -6,7 +6,7 @@ use std::{
 use github_personal_stats_collect::{
     DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, clock, machine,
     preferences::Preferences,
-    pulse,
+    presence, pulse,
     sink::{self, Sink},
 };
 use github_personal_stats_core::{parse_activity_snapshot, summarise_activity};
@@ -176,14 +176,39 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
     // the timestamp's date is here too.
     let today = clock::utc_timestamp(clock::now())[..10].to_owned();
     let reporters = pulse::reporters(&settings.state_dir, &today);
-    if reporters.is_empty() {
-        println!("editors     none have reported today");
-        println!(
-            "            the plugin is loaded only after the editor window is reloaded,\n            \
-             and reports on its own timer once it is"
-        );
-    } else {
-        for reporter in reporters {
+    let announced = presence::read(&settings.state_dir);
+
+    if reporters.is_empty() && announced.is_empty() {
+        println!("editors     no plugin has loaded");
+        println!("            reload the editor window; a plugin announces itself when it starts");
+    }
+    for announcement in &announced {
+        let reported = reporters
+            .iter()
+            .find(|reporter| reporter.editor == announcement.editor);
+        match reported {
+            Some(reporter) => println!(
+                "editors     {} {} — {} pulses today, last {} ago",
+                announcement.editor,
+                announcement.version,
+                reporter.pulses,
+                ago(clock::now() - reporter.last_seen)
+            ),
+            // Loaded but with nothing to report. Typing in the editor produces
+            // pulses; an agent writing files behind its back does not.
+            None => println!(
+                "editors     {} {} — loaded {} ago, nothing typed today",
+                announcement.editor,
+                announcement.version,
+                ago(clock::now() - announcement.at)
+            ),
+        }
+    }
+    for reporter in &reporters {
+        if !announced
+            .iter()
+            .any(|announcement| announcement.editor == reporter.editor)
+        {
             println!(
                 "editors     {} — {} pulses today, last {} ago",
                 reporter.editor,

@@ -164,6 +164,7 @@ version = "1.4.0"
 dependencies = [
  "github-personal-stats-collect",
  "github-personal-stats-core",
+ "serde",
  "serde_json",
 ]
 

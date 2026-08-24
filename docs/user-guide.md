@@ -706,7 +706,15 @@ editors     vscode - 412 pulses today, last 30s ago
 collected   100 days, agent 146h 29m, editor 3h 12m
 ```
 
-Each line is something that can be separately broken. `editors none have reported today` with the daemon listening means the plugin is installed but has not loaded: reload the editor window. `token missing` means no plugin can report at all, because the shared secret it needs is not there yet.
+Each line is something that can be separately broken. `editors no plugin has loaded` means exactly that: reload the editor window. `token missing` means no plugin can report at all, because the shared secret it needs is not there yet.
+
+A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
+
+```
+editors     vscode 1.4.0 - loaded 12m ago, nothing typed today
+```
+
+That line is the normal state of a window you are not typing in, including one where an agent is doing all the writing. It is not a fault.
 
 Your editor's status bar says the same thing from the other side:
 
@@ -715,6 +723,20 @@ Your editor's status bar says the same thing from the other side:
 - `$(circle-slash) stats` — no token found, so nothing is being sent.
 
 Editor time appears in the snapshot only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
+
+### What the plugin does and does not see
+
+The plugin measures the editor, so it reports what happens through the editor: typing, saving, moving between files. That makes it an IDE-mode instrument by nature.
+
+Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why the snapshot keeps `editor` and `agent` as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.
+
+The practical consequences:
+
+- **Typing in the IDE** — the plugin reports it, and it becomes editor time.
+- **An agent in the IDE writing files** — the plugin usually does not see it, because files written behind the editor's back raise no document events. The work still lands as agent time.
+- **A terminal agent with no editor open** — no plugin is running at all, and only agent time is recorded.
+
+So `editor 0h 0m` next to a large `agent` figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.
 
 ### Publishing a snapshot
 

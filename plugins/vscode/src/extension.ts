@@ -76,6 +76,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Say hello before any work happens. A window nobody is typing in produces no
+  // pulses, which is indistinguishable from a plugin that never loaded, and the
+  // difference is the first thing anyone wants to know.
+  void announce();
+
   flushTimer = setInterval(() => void flush(), FLUSH_SECONDS * 1000);
   context.subscriptions.push({
     dispose: () => {
@@ -177,9 +182,35 @@ async function flush(): Promise<void> {
   showState();
 }
 
-function post(body: string): Promise<void> {
+async function announce(): Promise<void> {
+  if (!enabled()) {
+    return;
+  }
+  if (!token) {
+    token = readToken();
+    if (!token) {
+      showState();
+      return;
+    }
+  }
+  try {
+    await post(JSON.stringify({ editor: EDITOR, version: version() }), "/v1/hello");
+  } catch {
+    // The daemon may not be up yet. There is nothing to keep and nothing lost:
+    // the next start says hello again.
+  }
+}
+
+function version(): string {
+  return (
+    vscode.extensions.getExtension("liuchong.github-personal-stats-vscode")?.packageJSON
+      ?.version ?? ""
+  );
+}
+
+function post(body: string, path = "/v1/pulses"): Promise<void> {
   return new Promise((resolve, reject) => {
-    const target = new URL("/v1/pulses", daemonUrl());
+    const target = new URL(path, daemonUrl());
     const request = http.request(
       {
         hostname: target.hostname,
@@ -201,7 +232,7 @@ function post(body: string): Promise<void> {
         if (status >= 200 && status < 300) {
           resolve();
         } else if (status >= 400 && status < 500) {
-          console.warn(`github-personal-stats: daemon refused pulses (${status})`);
+          console.warn(`github-personal-stats: daemon refused ${path} (${status})`);
           resolve();
         } else {
           reject(new Error(`daemon answered ${status}`));
