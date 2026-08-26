@@ -4,10 +4,14 @@
 //! read the editor's records is not the machine that renders the cards, and the
 //! two are connected by a file arriving somewhere the renderer can reach it.
 //!
-//! Each machine writes its own file, named after its own id. Two machines
+//! Each machine writes its own directory, named after its own id. Two machines
 //! therefore never touch the same path, which is what makes a shared git
 //! repository workable without a merge strategy: there is nothing to merge,
 //! because the reader adds the files up itself.
+//!
+//! What goes in that directory, and how a collection is folded into what is
+//! already there rather than replacing it, is `records`. A sink decides where the
+//! root is and what to do afterwards; it does not decide the shape.
 
 use std::{
     fs,
@@ -15,11 +19,9 @@ use std::{
     process::Command,
 };
 
-use github_personal_stats_core::{
-    ActivitySnapshot, parse_activity_snapshot, write_activity_snapshot,
-};
+use github_personal_stats_core::ActivitySnapshot;
 
-use crate::error::CollectError;
+use crate::{error::CollectError, records};
 
 const SNAPSHOT_DIR: &str = "snapshots";
 
@@ -31,24 +33,33 @@ pub trait Sink {
     /// before it has done it. Reporting the configured file path regardless of
     /// sink would name a file nothing is written to.
     fn describe(&self) -> String;
+
+    /// The root the record can be read back from, for a caller that wants to show
+    /// what has been collected without publishing to find out. The record holds
+    /// years; a fresh reading holds a month, so the two are not interchangeable.
+    fn root(&self) -> PathBuf;
 }
 
-/// Writes the snapshot to one path and stops there. This is the sink for a
-/// machine that renders its own cards, or that hands the file onward by some
-/// other means.
+/// Writes into one directory and stops there. This is the sink for a machine that
+/// renders its own cards, or that hands the record onward by some other means.
 #[derive(Debug, Clone)]
 pub struct FileSink {
+    /// The root the machine's directory of days goes under.
     pub path: PathBuf,
 }
 
 impl Sink for FileSink {
     fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError> {
-        write_to(&self.path, snapshot)?;
-        Ok(self.path.clone())
+        let written = records::publish(&self.path, snapshot)?;
+        Ok(written.directory)
     }
 
     fn describe(&self) -> String {
-        format!("file {}", self.path.display())
+        format!("files under {}", self.path.display())
+    }
+
+    fn root(&self) -> PathBuf {
+        self.path.clone()
     }
 }
 
@@ -83,42 +94,50 @@ impl Sink for GitSink {
         // machine's commit lands on top of whatever other machines have pushed.
         self.catch_up()?;
 
-        let relative = PathBuf::from(SNAPSHOT_DIR).join(format!("{}.json", snapshot.machine));
-        let path = self.repo.join(&relative);
+        let root = self.repo.join(SNAPSHOT_DIR);
+        let written = records::publish(&root, snapshot)?;
 
-        // Every collection moves `collected_at`, so the file always differs even
-        // in an hour when nothing was worked on. Comparing the record itself is
-        // what keeps a daemon on a timer from writing a commit every time it
-        // wakes up.
-        if let Some(published) = read_published(&path) {
-            if published.records_the_same_as(snapshot) {
-                return Ok(path);
-            }
+        // A publication that changed nothing is what a daemon on a timer produces
+        // most of the time, and it must not become a commit.
+        if written.is_empty() {
+            return Ok(written.directory);
         }
 
-        write_to(&path, snapshot)?;
+        let inside = |path: &Path| {
+            Path::new(SNAPSHOT_DIR)
+                .join(path)
+                .to_string_lossy()
+                .into_owned()
+        };
+        let touched = written
+            .changed
+            .iter()
+            .chain(&written.removed)
+            .map(|path| inside(path))
+            .collect::<Vec<_>>();
 
-        let inside = relative.to_string_lossy().to_string();
-        self.git(&["add", &inside])?;
+        let mut add = vec!["add", "--all", "--"];
+        add.extend(touched.iter().map(String::as_str));
+        self.git(&add)?;
 
-        if self
-            .git(&["diff", "--cached", "--quiet", "--", &inside])
-            .is_ok()
-        {
-            return Ok(path);
+        let mut staged = vec!["diff", "--cached", "--quiet", "--"];
+        staged.extend(touched.iter().map(String::as_str));
+        if self.git(&staged).is_ok() {
+            return Ok(written.directory);
         }
 
-        let message = format!("Record activity through {}", snapshot.collected_at);
+        let message = describe_change(&written, snapshot);
         let identity = self.identity();
         let mut commit = identity.iter().map(String::as_str).collect::<Vec<_>>();
-        commit.extend(["commit", "--quiet", "--message", &message, "--", &inside]);
+        commit.extend(["commit", "--quiet", "--message", &message, "--"]);
+        commit.extend(touched.iter().map(String::as_str));
         self.git(&commit)?;
 
         if self.push {
             self.push_it()?;
         }
 
-        Ok(path)
+        Ok(written.directory)
     }
 
     fn describe(&self) -> String {
@@ -131,6 +150,10 @@ impl Sink for GitSink {
         } else {
             format!("git {} on {}, without pushing", where_to, self.branch)
         }
+    }
+
+    fn root(&self) -> PathBuf {
+        self.repo.join(SNAPSHOT_DIR)
     }
 }
 
@@ -305,24 +328,23 @@ pub fn choose(
 // service, and the trait above is the whole of what the rest of the code needs to
 // know about where a snapshot goes.
 
-/// What is already published, if it is readable. An unreadable or unparseable
-/// file is treated as absent: the point of reading it is to avoid a needless
-/// commit, and failing to read it should cost a commit rather than the run.
-fn read_published(path: &Path) -> Option<ActivitySnapshot> {
-    let body = fs::read_to_string(path).ok()?;
-    parse_activity_snapshot(&body).ok()
-}
+/// Names the days a commit recorded, because that is what the history of this
+/// repository is for. A record rewritten whole every half hour produces commits
+/// that all look alike and none of which can be read; one day per file means the
+/// subject line can say which day changed.
+fn describe_change(written: &records::Written, snapshot: &ActivitySnapshot) -> String {
+    let days = written
+        .changed
+        .iter()
+        .filter_map(|path| path.file_stem()?.to_str())
+        .filter(|name| *name != "manifest")
+        .collect::<Vec<_>>();
 
-fn write_to(path: &Path, snapshot: &ActivitySnapshot) -> Result<(), CollectError> {
-    let body = write_activity_snapshot(snapshot)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| CollectError::Unreadable {
-            path: parent.to_path_buf(),
-            message: error.to_string(),
-        })?;
+    match days.as_slice() {
+        [] => format!("Reindex activity for {}", snapshot.machine),
+        [day] => format!("Record activity for {day}"),
+        [first, .., last] => {
+            format!("Record activity for {} days, {first} to {last}", days.len())
+        }
     }
-    fs::write(path, body).map_err(|error| CollectError::Unreadable {
-        path: path.to_path_buf(),
-        message: error.to_string(),
-    })
 }

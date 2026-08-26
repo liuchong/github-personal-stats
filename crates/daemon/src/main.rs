@@ -6,19 +6,19 @@ use std::{
 use github_personal_stats_collect::{
     DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, clock, machine,
     preferences::Preferences,
-    presence, pulse,
+    presence, pulse, records,
     sink::{self, Sink},
 };
-use github_personal_stats_core::{parse_activity_snapshot, summarise_activity};
+use github_personal_stats_core::summarise_activity;
 use github_personal_stats_daemon::{
     DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, status, token,
 };
 
-/// Named relative to the state directory, not to whoever is calling. The
-/// snapshot is data the app manages, like the token and the pulse journal, and a
-/// default that moved with the working directory made every command disagree
-/// about where it lived.
-const DEFAULT_SNAPSHOT: &str = "activity.json";
+/// Named relative to the state directory, not to whoever is calling. The record
+/// is data the app manages, like the token and the pulse journal, and a default
+/// that moved with the working directory made every command disagree about where
+/// it lived. It must match the collector's default, since both publish.
+const DEFAULT_SNAPSHOT: &str = "record";
 
 fn main() {
     if let Err(error) = run() {
@@ -151,13 +151,18 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
     let now = clock::now();
     let today = clock::utc_timestamp(now)[..10].to_owned();
 
-    let collected = fs::read_to_string(&settings.snapshot)
+    // Read from where the sink publishes, not from the configured output path:
+    // with a git sink those are different places, and the configured one holds
+    // nothing.
+    let sink = sink_for(args, settings, prefs)?;
+    let collected = machine::identity(&settings.state_dir)
         .ok()
-        .and_then(|body| parse_activity_snapshot(&body).ok())
-        .map(|snapshot| {
-            let totals = summarise_activity(&snapshot.days);
+        .and_then(|machine| records::read_days(&sink.root(), &machine).ok())
+        .filter(|days| !days.is_empty())
+        .map(|days| {
+            let totals = summarise_activity(&days);
             status::Collected {
-                days: snapshot.days.len(),
+                days: days.len(),
                 agent_seconds: totals.agent.seconds,
                 editor_seconds: totals.editor.seconds,
             }
@@ -343,7 +348,7 @@ OPTIONS
     without the dashes, instead of repeated. A flag overrides the file.
     --idle-timeout <min>  A gap longer than this ends a session rather than
                           counting as time worked. Default {DEFAULT_IDLE_TIMEOUT_MINUTES}.
-    --output <path>       Where to write the snapshot. Default <state>/{DEFAULT_SNAPSHOT}.
+    --output <path>       Directory to grow the record in. Default <state>/{DEFAULT_SNAPSHOT}.
     --state <path>        Where the machine id, the token and the pulse journal
                           live. Defaults to the XDG state directory.
     --home <path>         Where to look for local editor records. Defaults to HOME.

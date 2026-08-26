@@ -28,7 +28,7 @@ fn reading<'a>(
         address: "127.0.0.1:7391",
         listening: true,
         token: Some("/state/token"),
-        publishing: "file /state/activity.json",
+        publishing: "file /state/record",
         announced,
         reporters,
         at: NOW,

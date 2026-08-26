@@ -40,12 +40,22 @@
 <p>Run:</p>
 <pre data-language="sh"><code>cargo run -p github-personal-stats -- update-readme --section activity --target README.md</code></pre>
 <h2 id="local-activity-storage">Local Activity Storage<a class="permalink" href="#local-activity-storage" aria-label="Link to this section">#</a></h2>
-<p>Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so a snapshot has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.</p>
+<p>Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.</p>
 <p>The configuration lives at <code>&lt;state&gt;/config</code>, which on Linux and macOS is <code>~/.local/state/github-personal-stats/config</code> unless <code>XDG_STATE_HOME</code> says otherwise. Lines are <code>name = value</code> using an option&#x27;s own name without the dashes, <code>#</code> starts a comment, and a flag on the command line overrides the file.</p>
+<h3 id="how-your-history-is-kept">How your history is kept<a class="permalink" href="#how-your-history-is-kept" aria-label="Link to this section">#</a></h3>
+<p>This is worth understanding before choosing a backend, because it is the reason the record is shaped the way it is.</p>
+<p>Your editor does not keep its detail forever. Cursor holds roughly the last thirty days, so a collection run today can tell you a great deal about this week and nothing whatsoever about April. Run the collector and it will report April as zero hours — not because you did not work, but because nothing on your machine remembers.</p>
+<p>So a collection is never written out as your history. It is merged into it. Each day is kept in its own file, and a day&#x27;s file is replaced only when a later reading of *that same day* saw more than the one before. A day that has aged out of your editor&#x27;s store keeps the figures it was recorded with, which means your history grows longer than any source it was read from:</p>
+<pre><code>snapshots/m-1a2b3c4d/manifest.json
+snapshots/m-1a2b3c4d/2026-05-12.json
+snapshots/m-1a2b3c4d/2026-08-25.json
+snapshots/m-1a2b3c4d/2026-08-26.json</code></pre>
+<p>Two practical consequences. Running the collector twice in an hour is harmless — it changes nothing, so there is nothing to commit. And <strong>the record is the only copy</strong> of anything older than about a month: deleting a day&#x27;s file does not free up something that can be collected again, it forgets that day permanently. The one time you would want to delete one is if a day was recorded wrongly, since a smaller correction cannot otherwise replace a larger figure already written.</p>
+<p>The manifest holds an index of the days and a running total of all of them, so anything that just wants your lifetime hours reads one small file rather than your whole history.</p>
 <h3 id="file">File<a class="permalink" href="#file" aria-label="Link to this section">#</a></h3>
-<p>The default. One snapshot, one path. This is what you want if the machine that collects also renders.</p>
+<p>The default. Everything under one directory. This is what you want if the machine that collects also renders.</p>
 <pre><code>sink = file
-output = /Users/you/.local/state/github-personal-stats/activity.json</code></pre>
+output = /Users/you/.local/state/github-personal-stats/record</code></pre>
 <h3 id="git">Git<a class="permalink" href="#git" aria-label="Link to this section">#</a></h3>
 <p>A git repository as storage. This is the one to use when your cards are rendered by a scheduled GitHub Actions run, because CI has no way to read your laptop.</p>
 <pre><code>sink = git
@@ -53,7 +63,11 @@ origin = git@github.com:your-login/personal-stats-data.git
 repo = /Users/you/.local/state/github-personal-stats/storage
 branch = master</code></pre>
 <p><code>repo</code> is a working checkout the collector owns: it clones it if it is not there, brings it up to date before each commit, and you can delete it whenever you like. Keep it in the state directory rather than among your projects — it is storage, not somewhere to work.</p>
-<p>Each machine writes <code>snapshots/&lt;machine&gt;.json</code> under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the files up. A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.</p>
+<p>Each machine writes into <code>snapshots/&lt;machine&gt;/</code> under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the days up.</p>
+<p>Because a run only rewrites the days it learned something about, the history reads as a log of your work rather than a wall of identical commits:</p>
+<pre><code>Record activity for 2026-08-26
+Record activity for 3 days, 2026-08-24 to 2026-08-26</code></pre>
+<p>A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.</p>
 <p>Nothing here is specific to GitHub. Any git remote both your machine and your renderer can reach will do, including one on a server of your own that the public internet cannot see.</p>
 <h3 id="http">HTTP<a class="permalink" href="#http" aria-label="Link to this section">#</a></h3>
 <p>For sending snapshots to a service that collects from many people. The interface exists; the implementation does not, because the protocol and what counts as an identity are decisions for whoever runs such a service.</p>
@@ -73,7 +87,7 @@ rm /tmp/key /tmp/key.pub</code></pre>
     ssh-key: ${{ secrets.STATS_DATA_KEY }}
     path: storage</code></pre>
 <p>Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.</p>
-<p>Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and <strong>not</strong> the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And <code>actions/checkout</code> fails against a repository with no commits in it, in a way that reads like a permission problem, so publish one snapshot before judging your credentials.</p>
+<p>Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and <strong>not</strong> the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And <code>actions/checkout</code> fails against a repository with no commits in it, in a way that reads like a permission problem, so publish once before judging your credentials.</p>
 <h3 id="telling-whether-it-is-working">Telling whether it is working<a class="permalink" href="#telling-whether-it-is-working" aria-label="Link to this section">#</a></h3>
 <p>An installed plugin and a working one look identical from the extensions list, so ask instead:</p>
 <pre data-language="sh"><code>github-personal-stats-daemon status</code></pre>
@@ -88,14 +102,14 @@ collected   100 days, agent 146h 29m, editor 3h 12m</code></pre>
 <p>That line is the normal state of a window you are not typing in, including one where an agent is doing all the writing. It is not a fault.</p>
 <p>Your editor&#x27;s status bar says the same thing from the other side:</p>
 <ul><li><code>$(pulse) stats</code> — loaded and reporting.</li><li><code>$(pulse) stats 14</code> — loaded, but 14 pulses are queued because the daemon is not answering.</li><li><code>$(circle-slash) stats</code> — no token found, so nothing is being sent.</li></ul>
-<p>Editor time appears in the snapshot only after the next rebuild, so a few minutes of reported work shows up as <code>editor 0h 0m</code> until then.</p>
+<p>Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as <code>editor 0h 0m</code> until then.</p>
 <h3 id="what-the-plugin-does-and-does-not-see">What the plugin does and does not see<a class="permalink" href="#what-the-plugin-does-and-does-not-see" aria-label="Link to this section">#</a></h3>
 <p>The plugin measures a person being at the editor, so it watches the things only a person does: moving the caret, switching file, saving. It deliberately does not watch documents changing. A document change says text moved, not who moved it — an agent editing an open file raises it exactly as typing does — so counting those would put agent work into the figure meant to describe you being at the keyboard. Typing is still caught, because typing moves the caret.</p>
-<p>Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor&#x27;s own record of what it generated, which is read directly. This is why the snapshot keeps <code>editor</code> and <code>agent</code> as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.</p>
+<p>Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor&#x27;s own record of what it generated, which is read directly. This is why each day keeps <code>editor</code> and <code>agent</code> as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.</p>
 <p>The practical consequences:</p>
 <ul><li><strong>Typing in the IDE</strong> — the plugin reports it, and it becomes editor time.</li><li><strong>An agent in the IDE writing files</strong> — not counted as editor time, because the plugin ignores document changes on purpose. The work lands as agent time instead.</li><li><strong>A terminal agent with no editor open</strong> — no plugin is running at all, and only agent time is recorded.</li><li><strong>A replace across files</strong> — changes documents without moving the caret, so it goes unreported. This is the cost of the rule above, accepted so that the two measures stay separate.</li></ul>
 <p>So <code>editor 0h 0m</code> next to a large <code>agent</code> figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.</p>
-<h3 id="publishing-a-snapshot">Publishing a snapshot<a class="permalink" href="#publishing-a-snapshot" aria-label="Link to this section">#</a></h3>
+<h3 id="publishing-your-record">Publishing your record<a class="permalink" href="#publishing-your-record" aria-label="Link to this section">#</a></h3>
 <p>With the configuration in place, no arguments are needed:</p>
 <pre data-language="sh"><code>github-personal-stats-collect</code></pre>
 <p>The daemon does the same thing on a timer once installed, using the same configuration:</p>

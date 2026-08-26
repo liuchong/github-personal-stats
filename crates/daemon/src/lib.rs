@@ -12,9 +12,10 @@ use std::{
 use github_personal_stats_collect::{
     CollectError, Settings, collect, presence,
     pulse::{self, PulseBatch},
+    records,
     sink::Sink,
 };
-use github_personal_stats_core::summarise_activity;
+use github_personal_stats_core::{ActivitySnapshot, store::keep_fuller_days, summarise_activity};
 
 use crate::http::{Request, Response, quote, read_request, write_response};
 
@@ -114,8 +115,23 @@ impl Daemon {
         work(self)
     }
 
+    /// The record as it stands, which is what anyone asking wants to see.
+    ///
+    /// A fresh reading alone would be wrong here: it reaches back only as far as
+    /// the sources do, so a panel built from one would show a month and call it
+    /// everything. The published record holds the whole history, and the fresh
+    /// reading holds today's hours, which are not published yet. So both, merged
+    /// the same way publishing merges them — but written nowhere, because this is
+    /// a question, not a collection.
+    fn record(&self) -> Result<ActivitySnapshot, CollectError> {
+        let mut snapshot = collect(&self.settings)?;
+        let published = records::read_days(&self.sink.root(), &snapshot.machine)?;
+        snapshot.days = keep_fuller_days(&published, &snapshot.days);
+        Ok(snapshot)
+    }
+
     fn panel(&self) -> Response {
-        match collect(&self.settings) {
+        match self.record() {
             Ok(snapshot) => {
                 let totals = summarise_activity(&snapshot.days);
                 Response::html(panel::page(&snapshot, &totals))
@@ -205,7 +221,7 @@ impl Daemon {
     }
 
     fn summary(&self) -> Response {
-        let snapshot = match collect(&self.settings) {
+        let snapshot = match self.record() {
             Ok(snapshot) => snapshot,
             Err(error) => return Response::problem(500, &error.to_string()),
         };

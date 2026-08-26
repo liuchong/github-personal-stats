@@ -627,17 +627,36 @@ cargo run -p github-personal-stats -- update-readme --section activity --target 
 
 ## Local Activity Storage
 
-Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so a snapshot has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.
+Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.
 
 The configuration lives at `<state>/config`, which on Linux and macOS is `~/.local/state/github-personal-stats/config` unless `XDG_STATE_HOME` says otherwise. Lines are `name = value` using an option's own name without the dashes, `#` starts a comment, and a flag on the command line overrides the file.
 
+### How your history is kept
+
+This is worth understanding before choosing a backend, because it is the reason the record is shaped the way it is.
+
+Your editor does not keep its detail forever. Cursor holds roughly the last thirty days, so a collection run today can tell you a great deal about this week and nothing whatsoever about April. Run the collector and it will report April as zero hours — not because you did not work, but because nothing on your machine remembers.
+
+So a collection is never written out as your history. It is merged into it. Each day is kept in its own file, and a day's file is replaced only when a later reading of *that same day* saw more than the one before. A day that has aged out of your editor's store keeps the figures it was recorded with, which means your history grows longer than any source it was read from:
+
+```
+snapshots/m-1a2b3c4d/manifest.json
+snapshots/m-1a2b3c4d/2026-05-12.json
+snapshots/m-1a2b3c4d/2026-08-25.json
+snapshots/m-1a2b3c4d/2026-08-26.json
+```
+
+Two practical consequences. Running the collector twice in an hour is harmless — it changes nothing, so there is nothing to commit. And **the record is the only copy** of anything older than about a month: deleting a day's file does not free up something that can be collected again, it forgets that day permanently. The one time you would want to delete one is if a day was recorded wrongly, since a smaller correction cannot otherwise replace a larger figure already written.
+
+The manifest holds an index of the days and a running total of all of them, so anything that just wants your lifetime hours reads one small file rather than your whole history.
+
 ### File
 
-The default. One snapshot, one path. This is what you want if the machine that collects also renders.
+The default. Everything under one directory. This is what you want if the machine that collects also renders.
 
 ```
 sink = file
-output = /Users/you/.local/state/github-personal-stats/activity.json
+output = /Users/you/.local/state/github-personal-stats/record
 ```
 
 ### Git
@@ -653,7 +672,16 @@ branch = master
 
 `repo` is a working checkout the collector owns: it clones it if it is not there, brings it up to date before each commit, and you can delete it whenever you like. Keep it in the state directory rather than among your projects — it is storage, not somewhere to work.
 
-Each machine writes `snapshots/<machine>.json` under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the files up. A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.
+Each machine writes into `snapshots/<machine>/` under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the days up.
+
+Because a run only rewrites the days it learned something about, the history reads as a log of your work rather than a wall of identical commits:
+
+```
+Record activity for 2026-08-26
+Record activity for 3 days, 2026-08-24 to 2026-08-26
+```
+
+A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.
 
 Nothing here is specific to GitHub. Any git remote both your machine and your renderer can reach will do, including one on a server of your own that the public internet cannot see.
 
@@ -688,7 +716,7 @@ Then check the storage out alongside your profile repository:
 
 Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.
 
-Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and **not** the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And `actions/checkout` fails against a repository with no commits in it, in a way that reads like a permission problem, so publish one snapshot before judging your credentials.
+Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and **not** the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And `actions/checkout` fails against a repository with no commits in it, in a way that reads like a permission problem, so publish once before judging your credentials.
 
 ### Telling whether it is working
 
@@ -722,13 +750,13 @@ Your editor's status bar says the same thing from the other side:
 - `$(pulse) stats 14` — loaded, but 14 pulses are queued because the daemon is not answering.
 - `$(circle-slash) stats` — no token found, so nothing is being sent.
 
-Editor time appears in the snapshot only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
+Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
 
 ### What the plugin does and does not see
 
 The plugin measures a person being at the editor, so it watches the things only a person does: moving the caret, switching file, saving. It deliberately does not watch documents changing. A document change says text moved, not who moved it — an agent editing an open file raises it exactly as typing does — so counting those would put agent work into the figure meant to describe you being at the keyboard. Typing is still caught, because typing moves the caret.
 
-Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why the snapshot keeps `editor` and `agent` as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.
+Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.
 
 The practical consequences:
 
@@ -739,7 +767,7 @@ The practical consequences:
 
 So `editor 0h 0m` next to a large `agent` figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.
 
-### Publishing a snapshot
+### Publishing your record
 
 With the configuration in place, no arguments are needed:
 

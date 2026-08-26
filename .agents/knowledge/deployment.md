@@ -16,7 +16,9 @@ The HTTP server should expose the same core renderer through request parameters 
 
 Local activity has to reach whatever renders the cards, and the three ways it can are file, git, and HTTP. See `.agents/knowledge/architecture.md` for the boundary; what matters when deploying:
 
-- The serverless case is the git backend. A repository holds `snapshots/<machine>.json`, one file per machine, and CI checks it out to render. The repository is storage, not a GitHub arrangement: any git remote the collector and the renderer can both reach qualifies.
+- The serverless case is the git backend. A repository holds `snapshots/<machine>/<date>.json` and `snapshots/<machine>/manifest.json`, one directory per machine and one file per day, and CI checks it out to render. The repository is storage, not a GitHub arrangement: any git remote the collector and the renderer can both reach qualifies.
+- A reader wanting lifetime totals reads each machine's `manifest.json` rollup and does not need the day files at all. A reader wanting a recent window reads the days it names. Both are cheap; reading everything is not required for either.
+- The record accumulates and the sources do not. Cursor keeps about thirty days, so the repository holds days that can no longer be collected from anywhere. Treat it as the only copy: it is not reconstructible by re-running the collector.
 - A private storage repository read from another repository's workflow needs **no personal access token**. A read-only deploy key on the storage repository, with its private half held as a secret in the rendering repository and passed to `actions/checkout` as `ssh-key`, is sufficient and is narrower than a token. This is verified behaviour, not an assumption.
 - A personal access token *is* required for reading the storage repository through the GitHub REST API, because deploy keys authenticate git transport only and not the API. This is the main reason the git backend exists rather than an API client.
 - Committing rendered output back into the rendering repository uses the built-in `GITHUB_TOKEN`. A token is only needed to write to a *different* repository.

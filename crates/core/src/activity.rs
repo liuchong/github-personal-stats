@@ -86,6 +86,20 @@ impl LineCounts {
         self.unattributed_added += other.unattributed_added;
         self.unattributed_deleted += other.unattributed_deleted;
     }
+
+    /// Keeps whichever reading saw more of the day.
+    pub(crate) fn keep_fuller(&mut self, other: &Self) {
+        self.agent_added = self.agent_added.max(other.agent_added);
+        self.agent_deleted = self.agent_deleted.max(other.agent_deleted);
+        self.tab_added = self.tab_added.max(other.tab_added);
+        self.tab_deleted = self.tab_deleted.max(other.tab_deleted);
+        self.human_added = self.human_added.max(other.human_added);
+        self.human_deleted = self.human_deleted.max(other.human_deleted);
+        self.blank_added = self.blank_added.max(other.blank_added);
+        self.blank_deleted = self.blank_deleted.max(other.blank_deleted);
+        self.unattributed_added = self.unattributed_added.max(other.unattributed_added);
+        self.unattributed_deleted = self.unattributed_deleted.max(other.unattributed_deleted);
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +132,15 @@ impl GeneratedLines {
             *self.by_model.entry(model.clone()).or_default() += lines;
         }
     }
+
+    /// Keeps whichever reading saw more of the day.
+    pub(crate) fn keep_fuller(&mut self, other: &Self) {
+        self.human = self.human.max(other.human);
+        for (model, lines) in &other.by_model {
+            let held = self.by_model.entry(model.clone()).or_default();
+            *held = (*held).max(*lines);
+        }
+    }
 }
 
 /// One way of measuring time spent. Two of these live side by side in a day
@@ -137,6 +160,16 @@ impl TimeBucket {
         self.sessions += other.sessions;
         for (language, seconds) in &other.languages {
             *self.languages.entry(language.clone()).or_default() += seconds;
+        }
+    }
+
+    /// Keeps whichever reading saw more of the day.
+    pub(crate) fn keep_fuller(&mut self, other: &Self) {
+        self.seconds = self.seconds.max(other.seconds);
+        self.sessions = self.sessions.max(other.sessions);
+        for (language, seconds) in &other.languages {
+            let held = self.languages.entry(language.clone()).or_default();
+            *held = (*held).max(*seconds);
         }
     }
 }
@@ -181,6 +214,34 @@ impl DayBucket {
         self.requests += other.requests;
         self.committed.absorb(&other.committed);
         self.generated.absorb(&other.generated);
+    }
+
+    /// Combines two readings of the same day, keeping the fuller one field by
+    /// field.
+    ///
+    /// This is not `absorb`. Absorbing sums, which is right for two machines or
+    /// two sources contributing different work to one day, and wrong for reading
+    /// the same day twice: the second reading would double it.
+    ///
+    /// Taking the larger of each field is right because a day in the past holds a
+    /// fixed amount of work, and a reading of it can only be complete or cut
+    /// short — never larger than the truth. The editor's own store keeps about a
+    /// month, so a day re-read after that window reads as empty; the reading taken
+    /// while it was still there is the better one and is what survives. Re-reading
+    /// a day still inside the window reproduces the same numbers, so nothing
+    /// changes, and re-reading today after more work reads larger, so the new
+    /// figure wins.
+    ///
+    /// The cost of this rule is that a genuine correction downwards — a fix to how
+    /// time is counted, say — cannot land on days already published, because the
+    /// old larger figure outranks it. Such a change needs the day files deleted
+    /// rather than rewritten.
+    pub fn keep_fuller(&mut self, other: &Self) {
+        self.editor.keep_fuller(&other.editor);
+        self.agent.keep_fuller(&other.agent);
+        self.requests = self.requests.max(other.requests);
+        self.committed.keep_fuller(&other.committed);
+        self.generated.keep_fuller(&other.generated);
     }
 }
 

@@ -71,8 +71,12 @@ Before the Rust workspace exists, use repository inspection, Markdown review, an
 
 - Activity snapshots reach the renderer through one of three backends behind `sink::Sink`: file, git, or HTTP. Which one is used is configuration, never a hardcoded path.
 - The git backend is storage, not a GitHub integration. Any git remote both ends can reach qualifies, public internet or not. Do not reach for a host's REST API to do what git transport already does; that trades away self-hosting and forces a token where a read-only deploy key would serve.
-- One file per machine, named after the machine. Never write a path another machine also writes.
-- Never decide whether to publish by comparing bytes. `collected_at` moves on every collection, so a byte comparison makes a scheduled collector commit forever. Compare the record.
+- One directory per machine, named after the machine, one file per day inside it, plus a manifest. Never write a path another machine also writes.
+- A collection is not the record. The local sources forget after about a month, so a collection read today cannot describe an older day. Never write a collection out as the record; merge it in with `records::publish`, which keeps whichever reading of each day saw more.
+- Merging readings of the same day takes the larger of each field, never the sum. Summing inflates the record on every run, because every run re-reads the same days.
+- Never decide whether to publish by comparing bytes of the whole record. `collected_at` moves on every collection, so that makes a scheduled collector commit forever. Compare file by file, and write the manifest only when it describes something new.
+- A published file that cannot be read stops the run. It may be the only surviving copy of a day no source still remembers. Never overwrite what could not be read.
+- Anything reporting what has been collected reads the record through `Sink::root`. Never report a fresh collection as though it were the history.
 - The storage checkout belongs in the app's runtime state directory. Never put it among the user's projects, and never ask the user to create it by hand.
 
 ## Release And Version Rules

@@ -7,14 +7,13 @@ pub mod preferences;
 pub mod presence;
 pub mod pulse;
 pub mod random;
+pub mod records;
 pub mod sessions;
 pub mod sink;
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
-use github_personal_stats_core::{
-    ActivitySnapshot, DayBucket, parse_activity_snapshot, write_activity_snapshot,
-};
+use github_personal_stats_core::{ActivitySnapshot, DayBucket};
 
 pub use error::CollectError;
 
@@ -24,13 +23,24 @@ pub const DEFAULT_IDLE_TIMEOUT_MINUTES: i64 = 5;
 pub struct Settings {
     pub home: PathBuf,
     pub state_dir: PathBuf,
+    /// The root the record is published under. One directory per machine goes
+    /// here, and one file per day inside that.
     pub snapshot: PathBuf,
     pub idle_timeout_seconds: i64,
 }
 
+/// Reads what the local sources say right now.
+///
+/// This is a reading, not the record. It reaches back only as far as the sources
+/// do — Cursor keeps roughly a month — and it deliberately does not consult what
+/// has already been published. Growing a history out of successive readings is
+/// `records::publish`, which folds a reading into the days already on disk and
+/// keeps whichever reading of each day saw more.
+///
+/// Keeping the two apart is what makes a reading safe to take at any time: it
+/// cannot shrink a record it never opened.
 pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
     let machine = machine::identity(&settings.state_dir)?;
-    let kept = surviving_days(&settings.snapshot)?;
     let fresh = cursor::read(
         &cursor::database_path(&settings.home),
         settings.idle_timeout_seconds,
@@ -38,19 +48,10 @@ pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
 
     let worked = pulse::read(&settings.state_dir, settings.idle_timeout_seconds)?;
 
-    // Both sources are recomputed in full every run, so a fresh reading replaces
-    // the side of the day it owns and leaves the other side alone. Days older
-    // than either source keeps are carried over untouched, which is how history
-    // outlives the editor's own retention window.
-    let mut days = kept;
-    for (date, reading) in fresh {
-        let slot = days
-            .entry(date.clone())
-            .or_insert_with(|| DayBucket::new(&date));
-        let editor = std::mem::take(&mut slot.editor);
-        *slot = reading;
-        slot.editor = editor;
-    }
+    // The two sources measure different things and neither can fill in for the
+    // other: Cursor's store knows what an agent changed, and the editor plugins
+    // know when someone was present. So each owns its own side of the day.
+    let mut days: BTreeMap<String, DayBucket> = fresh.into_iter().collect();
     for (date, editor) in worked {
         days.entry(date.clone())
             .or_insert_with(|| DayBucket::new(&date))
@@ -60,30 +61,4 @@ pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
     let mut snapshot = ActivitySnapshot::new(machine, clock::utc_timestamp(clock::now()));
     snapshot.days = days.into_values().collect();
     Ok(snapshot)
-}
-
-pub fn save(snapshot: &ActivitySnapshot, path: &PathBuf) -> Result<(), CollectError> {
-    let body = write_activity_snapshot(snapshot)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| CollectError::Unreadable {
-            path: parent.to_path_buf(),
-            message: error.to_string(),
-        })?;
-    }
-    fs::write(path, body).map_err(|error| CollectError::Unreadable {
-        path: path.clone(),
-        message: error.to_string(),
-    })
-}
-
-fn surviving_days(path: &PathBuf) -> Result<BTreeMap<String, DayBucket>, CollectError> {
-    let Ok(existing) = fs::read_to_string(path) else {
-        return Ok(BTreeMap::new());
-    };
-    let snapshot = parse_activity_snapshot(&existing)?;
-    Ok(snapshot
-        .days
-        .into_iter()
-        .map(|day| (day.date.clone(), day))
-        .collect())
 }

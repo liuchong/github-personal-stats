@@ -66,18 +66,19 @@ fn sink(repo: &Path) -> GitSink {
 #[test]
 fn a_file_sink_writes_where_it_was_told() {
     let root = scratch("file");
-    let path = root.join("nested").join("activity.json");
+    let path = root.join("nested");
 
     let written = FileSink { path: path.clone() }
         .publish(&snapshot("2026-08-24T19:00:00Z", 60))
         .unwrap();
 
-    assert_eq!(written, path);
-    assert!(fs::read_to_string(&path).unwrap().contains("2026-08-24"));
+    assert_eq!(written, path.join("m-1234abcd"));
+    let day = fs::read_to_string(path.join("m-1234abcd/2026-08-24.json")).unwrap();
+    assert!(day.contains("2026-08-24"), "{day}");
 }
 
 #[test]
-fn a_machine_writes_a_file_named_after_itself() {
+fn a_machine_writes_a_directory_named_after_itself() {
     let root = scratch("named");
     let repo = repository(&root);
 
@@ -85,8 +86,24 @@ fn a_machine_writes_a_file_named_after_itself() {
         .publish(&snapshot("2026-08-24T19:00:00Z", 60))
         .unwrap();
 
-    assert_eq!(written, repo.join("snapshots").join("m-1234abcd.json"));
+    assert_eq!(written, repo.join("snapshots").join("m-1234abcd"));
+    assert!(written.join("2026-08-24.json").is_file());
+    assert!(written.join("manifest.json").is_file());
     assert_eq!(commits(&repo), 2);
+}
+
+#[test]
+fn a_commit_says_which_day_it_recorded() {
+    // Half the reason a day is its own file. A record rewritten whole every half
+    // hour produces a history of identical subject lines that nobody can read.
+    let root = scratch("subject");
+    let repo = repository(&root);
+    let sink = sink(&repo);
+
+    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60)).unwrap();
+
+    let subject = git(&repo, &["log", "-1", "--format=%s"]);
+    assert_eq!(subject.trim(), "Record activity for 2026-08-24");
 }
 
 #[test]
@@ -139,7 +156,13 @@ fn two_machines_never_touch_the_same_file() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect::<Vec<_>>();
     written.sort();
-    assert_eq!(written, ["m-desktop.json", "m-laptop.json"]);
+    assert_eq!(written, ["m-desktop", "m-laptop"]);
+    // Same date, different machines, and still separate paths, so a shared
+    // repository needs no merge strategy.
+    assert!(
+        repo.join("snapshots/m-laptop/2026-08-24.json").is_file()
+            && repo.join("snapshots/m-desktop/2026-08-24.json").is_file()
+    );
 }
 
 #[test]
@@ -154,18 +177,27 @@ fn publishing_into_something_that_is_not_a_checkout_says_so() {
 }
 
 #[test]
-fn a_snapshot_already_published_by_a_newer_build_is_replaced_rather_than_trusted() {
+fn a_published_record_that_cannot_be_read_stops_the_run() {
+    // This used to overwrite the unreadable file and carry on, on the grounds
+    // that failing to read what was published should cost a commit rather than
+    // the run. That was the wrong way round once the record started outliving
+    // the sources it is read from: the file may hold the only surviving copy of
+    // days Cursor has long since forgotten, and a collection made today cannot
+    // reconstruct them. Overwriting it would destroy them silently, which is
+    // worse than stopping and saying which file to look at.
     let root = scratch("unreadable");
     let repo = repository(&root);
-    let path = repo.join("snapshots").join("m-1234abcd.json");
+    let path = repo.join("snapshots").join("m-1234abcd/2026-05-12.json");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(&path, "{ this is not a snapshot").unwrap();
+    fs::write(&path, "{ this is not a day").unwrap();
 
-    sink(&repo)
+    let refused = sink(&repo)
         .publish(&snapshot("2026-08-24T19:00:00Z", 60))
-        .expect("an unreadable file should not stop the run");
+        .expect_err("an unreadable day should stop the run");
 
-    assert!(fs::read_to_string(&path).unwrap().contains("2026-08-24"));
+    assert!(refused.to_string().contains("2026-05-12"), "{refused}");
+    // And it is left alone, so whoever looks can still see what is in it.
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{ this is not a day");
 }
 
 fn bare(root: &Path) -> String {
@@ -237,13 +269,13 @@ fn a_second_machine_lands_on_top_of_the_first_without_conflict() {
     let history = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
     assert_eq!(history.lines().count(), 2);
 
-    // Both files survive: neither machine overwrote the other's.
+    // Both records survive: neither machine overwrote the other's.
     let listing = git(
         &PathBuf::from(&origin),
-        &["ls-tree", "--name-only", "master", "snapshots/"],
+        &["ls-tree", "-r", "--name-only", "master", "snapshots/"],
     );
-    assert!(listing.contains("m-laptop.json"), "{listing}");
-    assert!(listing.contains("m-desktop.json"), "{listing}");
+    assert!(listing.contains("m-laptop/2026-08-24.json"), "{listing}");
+    assert!(listing.contains("m-desktop/2026-08-24.json"), "{listing}");
 }
 
 #[test]

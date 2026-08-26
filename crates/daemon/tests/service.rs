@@ -37,17 +37,17 @@ fn a_path_with_a_space_survives_the_service_description() {
         &PathBuf::from("/Applications/My Tools/daemon"),
         &[
             "--output".to_owned(),
-            "/Users/me/My Files/activity.json".to_owned(),
+            "/Users/me/My Files/record".to_owned(),
         ],
         &PathBuf::from("/tmp/daemon.log"),
     );
 
     if cfg!(target_os = "macos") {
         // Each argument is its own element, so spaces need no quoting.
-        assert!(body.contains("<string>/Users/me/My Files/activity.json</string>"));
+        assert!(body.contains("<string>/Users/me/My Files/record</string>"));
     } else {
         // One command line, so spaces do need quoting.
-        assert!(body.contains("'/Users/me/My Files/activity.json'"));
+        assert!(body.contains("'/Users/me/My Files/record'"));
     }
 }
 
@@ -101,10 +101,10 @@ fn a_relative_snapshot_path_is_not_resolved_against_wherever_install_was_run() {
             "--state".to_owned(),
             "/var/state".to_owned(),
             "--output".to_owned(),
-            "/var/state/activity.json".to_owned(),
+            "/var/state/record".to_owned(),
         ],
         &PathBuf::from("/tmp/daemon.log"),
     );
 
-    assert!(body.contains("/var/state/activity.json"));
+    assert!(body.contains("/var/state/record"));
 }

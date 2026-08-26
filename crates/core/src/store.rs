@@ -12,6 +12,15 @@
 //! written from the day files, never the other way round; `roll_up` is the only
 //! thing that produces one, and a reader that distrusts it can call the same
 //! function on the days themselves.
+//!
+//! The layout also decides how long the record lasts, which is the reason it
+//! matters more than tidiness. The editor's own store keeps roughly a month, and
+//! every collection rebuilds from it, so a collection made today knows nothing
+//! about the day three months ago. A published record that mirrored the latest
+//! collection would therefore lose a day's work a month after it was done. A day
+//! that is its own file, written once and afterwards only ever replaced by a
+//! fuller reading of that same day, cannot lose it: the accumulation is in the
+//! layout rather than in code that has to remember to merge.
 
 use std::{
     collections::BTreeMap,
@@ -199,6 +208,22 @@ pub fn write_day(record: &DayRecord) -> Result<String, GithubStatsError> {
     crate::activity::validate_machine(&record.machine)?;
     crate::activity::validate_date(&record.day.date)?;
     render(record)
+}
+
+/// Combines readings of the same days into one set, keeping the fuller reading of
+/// each day. Days that appear in only one of the two come through untouched.
+///
+/// This is how a collection is folded into what is already published: the days
+/// the collector can still see are refreshed, and the days that have aged out of
+/// the source it reads keep the figures they were published with.
+pub fn keep_fuller_days(published: &[DayBucket], fresh: &[DayBucket]) -> Vec<DayBucket> {
+    let mut held = BTreeMap::new();
+    for day in published.iter().chain(fresh) {
+        held.entry(day.date.clone())
+            .and_modify(|kept: &mut DayBucket| kept.keep_fuller(day))
+            .or_insert_with(|| day.clone());
+    }
+    held.into_values().collect()
 }
 
 fn render<T: Serialize>(value: &T) -> Result<String, GithubStatsError> {

@@ -7,8 +7,8 @@
 use github_personal_stats_core::{
     ACTIVITY_SCHEMA, DayBucket, LineCounts,
     store::{
-        DayRecord, MachineManifest, day_file, machine_directory, manifest_file, parse_day,
-        parse_manifest, roll_up, write_day, write_manifest,
+        DayRecord, MachineManifest, day_file, keep_fuller_days, machine_directory, manifest_file,
+        parse_day, parse_manifest, roll_up, write_day, write_manifest,
     },
 };
 
@@ -174,4 +174,81 @@ fn a_day_is_one_file_so_a_later_day_leaves_it_alone() {
         day_file(root, "m-laptop", "2026-08-25"),
         "recording today must not rewrite yesterday"
     );
+}
+
+#[test]
+fn a_day_the_source_has_forgotten_keeps_what_it_was_published_with() {
+    // The case this whole layout exists for. The editor's store keeps about a
+    // month, so a collection made today sees the old day as empty. Mirroring that
+    // collection would erase a day of real work.
+    let published = vec![worked("2026-05-12", 7_200, 3_600)];
+    let fresh = vec![DayBucket::new("2026-05-12")];
+
+    let held = keep_fuller_days(&published, &fresh);
+
+    assert_eq!(held.len(), 1);
+    assert_eq!(held[0].editor.seconds, 7_200);
+    assert_eq!(held[0].agent.seconds, 3_600);
+    assert_eq!(held[0].committed.agent_added, 10);
+}
+
+#[test]
+fn a_day_still_being_worked_on_takes_the_larger_reading() {
+    let published = vec![worked("2026-08-26", 3_600, 1_800)];
+    let fresh = vec![worked("2026-08-26", 7_200, 5_400)];
+
+    let held = keep_fuller_days(&published, &fresh);
+
+    assert_eq!(held[0].editor.seconds, 7_200);
+    assert_eq!(held[0].agent.seconds, 5_400);
+    // Per language too, not just the total.
+    assert_eq!(held[0].editor.languages.get("Rust"), Some(&7_200));
+}
+
+#[test]
+fn reading_a_day_twice_does_not_double_it() {
+    // The reason this is not `absorb`: every collection re-reads the same days,
+    // and summing them would inflate the record on a timer.
+    let once = vec![worked("2026-08-26", 3_600, 1_800)];
+
+    let twice = keep_fuller_days(&once, &once);
+    let thrice = keep_fuller_days(&twice, &once);
+
+    assert_eq!(thrice[0].editor.seconds, 3_600);
+    assert_eq!(thrice[0].committed.agent_added, 10);
+    assert_eq!(thrice[0].requests, 3);
+}
+
+#[test]
+fn days_only_one_side_knows_about_all_come_through() {
+    let published = vec![
+        worked("2026-05-12", 100, 100),
+        worked("2026-08-25", 200, 200),
+    ];
+    let fresh = vec![
+        worked("2026-08-25", 200, 200),
+        worked("2026-08-26", 300, 300),
+    ];
+
+    let held = keep_fuller_days(&published, &fresh);
+
+    let dates = held.iter().map(|day| day.date.as_str()).collect::<Vec<_>>();
+    assert_eq!(dates, ["2026-05-12", "2026-08-25", "2026-08-26"]);
+}
+
+#[test]
+fn a_lifetime_total_survives_the_source_forgetting() {
+    // What the reader ends up showing: the rollup over the merged days still
+    // counts the old day, which is the whole point.
+    let published = vec![worked("2026-05-12", 7_200, 3_600)];
+    let fresh = vec![
+        DayBucket::new("2026-05-12"),
+        worked("2026-08-26", 3_600, 1_800),
+    ];
+
+    let rollup = roll_up(&keep_fuller_days(&published, &fresh)).expect("two days roll up");
+
+    assert_eq!(rollup.first_day, "2026-05-12");
+    assert_eq!(rollup.editor.seconds, 10_800);
+    assert_eq!(rollup.active_days, 2);
 }

@@ -21,7 +21,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn daemon(root: &Path) -> Daemon {
-    let snapshot = root.join("activity.json");
+    let snapshot = root.join("record");
     let sink: Box<dyn Sink + Send + Sync> = Box::new(FileSink {
         path: snapshot.clone(),
     });
