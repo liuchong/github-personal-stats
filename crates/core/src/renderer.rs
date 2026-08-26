@@ -1874,7 +1874,8 @@ fn icon_markup(kind: IconKind, color: &str) -> String {
     }
 }
 
-fn format_number(value: u64) -> String {
+/// Groups digits in threes, the way every figure on a card is written.
+pub fn format_number(value: u64) -> String {
     let digits = value.to_string();
     let mut formatted = String::new();
     for (index, character) in digits.chars().rev().enumerate() {
@@ -1998,7 +1999,19 @@ fn progress_bar(seconds: u64, total: u64) -> String {
 pub fn format_duration(seconds: u64) -> String {
     let hours = seconds / 3600;
     let minutes = seconds % 3600 / 60;
-    format!("{hours} hrs {minutes} mins")
+    format!("{} hrs {minutes} mins", format_number(hours))
+}
+
+/// Words a duration for a column of them.
+///
+/// The same figures as `format_duration`, with the minutes held to two
+/// characters. Right aligning the whole string lines up the word `mins` but not
+/// the digits before it, so a single-digit minute leaves the column looking
+/// broken; padding the field is what makes the digits sit above each other.
+pub fn format_duration_aligned(seconds: u64) -> String {
+    let hours = seconds / 3600;
+    let minutes = seconds % 3600 / 60;
+    format!("{} hrs {minutes:>2} mins", format_number(hours))
 }
 
 fn escape_xml(value: &str) -> String {

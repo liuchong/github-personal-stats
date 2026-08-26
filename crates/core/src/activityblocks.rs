@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact,
-    renderer::format_duration,
+    renderer::{format_duration_aligned, format_number as thousands},
     textchart::{ChartBlock, ChartRow, ChartSummary},
 };
 
@@ -217,7 +217,7 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Opt
         return Some(ChartSummary::new(
             "Longest",
             match spec.value {
-                ChartValue::Time => format_duration(total),
+                ChartValue::Time => format_duration_aligned(total),
                 _ => thousands(total),
             },
             "spans overlap; each reads as a share of this",
@@ -228,7 +228,7 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Opt
     Some(match spec.value {
         ChartValue::Time => ChartSummary::new(
             "Total",
-            format_duration(total),
+            format_duration_aligned(total),
             format!(
                 "{}, {}",
                 window.span.label().to_lowercase(),
@@ -265,7 +265,7 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Char
         .map(|language| {
             ChartRow::new(
                 &language.name,
-                format_duration(language.recent_seconds),
+                format_duration_aligned(language.recent_seconds),
                 language.recent_seconds,
             )
         })
@@ -350,7 +350,7 @@ fn window_time(comparison: &ActivityComparison) -> (Vec<ChartRow>, u64) {
         .map(|window| {
             ChartRow::new(
                 window.span.label(),
-                format_duration(window.seconds),
+                format_duration_aligned(window.seconds),
                 window.seconds,
             )
         })
@@ -391,18 +391,6 @@ pub fn fold_by_language(facts: &[LineFact]) -> BTreeMap<String, (u64, u64)> {
         }
     }
     held
-}
-
-fn thousands(value: u64) -> String {
-    let digits = value.to_string();
-    let mut out = String::new();
-    for (index, character) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(character);
-    }
-    out
 }
 
 fn percent(basis_points: u32) -> String {

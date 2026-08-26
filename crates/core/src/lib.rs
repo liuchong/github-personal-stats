@@ -37,7 +37,10 @@ pub use config::{
 };
 pub use data::{ContributionDay, GithubData, GithubProfile, RepositoryLanguage, UserStats};
 pub use error::{GithubStatsError, RemoteErrorKind};
-pub use renderer::{RenderTheme, format_duration, render_card, render_readme_section};
+pub use renderer::{
+    RenderTheme, format_duration, format_duration_aligned, format_number, render_card,
+    render_readme_section,
+};
 pub use textchart::{
     BarGlyphs, ChartBlock, ChartRow, ChartStyle, ChartSummary, Column, DEFAULT_BAR_CELLS,
     render_text_chart,

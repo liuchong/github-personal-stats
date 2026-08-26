@@ -8,7 +8,7 @@
 use github_personal_stats_core::{
     ActivityMeasure, ActivitySpan, Author, BarGlyphs, ChartBlock, ChartRow, ChartRows, ChartStyle,
     ChartSummary, ChartValue, Column, DayBucket, MEASURE_AGENT, build_blocks, compare_activity,
-    default_blocks, parse_blocks, render_text_chart,
+    default_blocks, format_duration_aligned, parse_blocks, render_text_chart,
 };
 
 fn block() -> ChartBlock {
@@ -247,7 +247,7 @@ fn the_blocks_a_record_can_fill_are_folded_from_its_facts() {
     );
 
     assert!(text.contains("TIME  BY LANGUAGE"), "{text}");
-    assert!(text.contains("2 hrs 0 mins"), "{text}");
+    assert!(text.contains("2 hrs  0 mins"), "{text}");
     assert!(text.contains("LINES  BY AUTHOR"), "{text}");
     // Eleven hundred agent lines against two hundred of mine.
     assert!(text.contains("1,100"), "{text}");
@@ -367,4 +367,39 @@ fn a_blocks_total_is_the_total_of_what_it_shows() {
     assert!(by_model.contains("Total"), "{by_model}");
     assert!(by_model.contains("900"), "{by_model}");
     assert!(!by_model.contains("1,000"), "{by_model}");
+}
+
+#[test]
+fn minutes_line_up_even_when_one_row_has_a_single_digit() {
+    let hours = ChartBlock::new("TIME  BY LANGUAGE").with_rows(
+        vec![
+            ChartRow::new("Clojure", format_duration_aligned(5_901_180), 5_901_180),
+            ChartRow::new("Go", format_duration_aligned(3_431_220), 3_431_220),
+        ],
+        9_332_400,
+    );
+    let text = render_text_chart(&[hours], &ChartStyle::default());
+    let lines = text
+        .lines()
+        .filter(|line| line.contains("mins"))
+        .collect::<Vec<_>>();
+
+    // Seven minutes and thirteen minutes have to put their last digit in the
+    // same column, which right aligning the whole phrase does not achieve.
+    let digits = lines
+        .iter()
+        .map(|line| line.find(" mins").unwrap())
+        .collect::<Vec<_>>();
+
+    assert!(
+        digits.windows(2).all(|pair| pair[0] == pair[1]),
+        "the minute digits wander\n{text}"
+    );
+    assert!(text.contains("1,639 hrs 13 mins"), "{text}");
+    assert!(text.contains("953 hrs  7 mins"), "{text}");
+}
+
+#[test]
+fn a_long_duration_groups_its_hours() {
+    assert_eq!(format_duration_aligned(25_703_112), "7,139 hrs 45 mins");
 }
