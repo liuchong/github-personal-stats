@@ -95,37 +95,65 @@ pub fn journal_directory(state_dir: &Path) -> PathBuf {
     state_dir.join(JOURNAL_DIR)
 }
 
-/// What the journal knows about one editor's reporting: when it was last heard
-/// from and how many pulses it has sent on a given day.
+/// What the journal knows about one editor's reporting: the latest day it wrote
+/// anything on, how much it wrote that day, and when it was last heard from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reporter {
     pub editor: String,
+    pub day: String,
     pub pulses: usize,
     pub last_seen: i64,
 }
 
-/// Who has reported on a day, most recently heard from first. Answering "is
-/// anything being collected" from the journal rather than from a running process
-/// means the answer survives a restart, and means a plugin that cannot reach the
-/// daemon is visibly absent rather than silently assumed present.
-pub fn reporters(state_dir: &Path, day: &str) -> Vec<Reporter> {
-    let path = journal_directory(state_dir).join(format!("{day}.jsonl"));
-    let Ok(body) = fs::read_to_string(path) else {
+/// Who has reported lately, most recently heard from first.
+///
+/// The day is reported rather than assumed. A plugin files each pulse under the
+/// date its own machine shows, so the journal is a day ahead of UTC between local
+/// midnight and UTC midnight — eight hours a day in UTC+8, and the eight most
+/// likely to be worked. Asking UTC for "today's" file finds an empty one and says
+/// nothing is being collected at the moment it is; and the offset cannot be
+/// recovered from a pulse, because whether a machine's day is ahead of UTC's
+/// depends on the hour, not only on the zone. So the journal is read a day either
+/// side of UTC's date and each editor is reported on the latest day it appears,
+/// which is a fact rather than a guess.
+///
+/// Reading this from the journal rather than from a running process means the
+/// answer survives a restart, and means a plugin that cannot reach the daemon is
+/// visibly absent rather than silently assumed present.
+pub fn reporters(state_dir: &Path, utc_today: &str) -> Vec<Reporter> {
+    let Some(utc) = github_personal_stats_core::date_to_ordinal(utc_today) else {
         return Vec::new();
     };
 
     let mut seen = BTreeMap::<String, Reporter>::new();
-    for line in body.lines() {
-        let Ok(entry) = serde_json::from_str::<Entry>(line) else {
+    for offset in [-1, 0, 1] {
+        let day = github_personal_stats_core::date_from_ordinal(utc + offset);
+        let path = journal_directory(state_dir).join(format!("{day}.jsonl"));
+        let Ok(body) = fs::read_to_string(path) else {
             continue;
         };
-        let reporter = seen.entry(entry.editor.clone()).or_insert(Reporter {
-            editor: entry.editor,
-            pulses: 0,
-            last_seen: 0,
-        });
-        reporter.pulses += 1;
-        reporter.last_seen = reporter.last_seen.max(entry.at);
+        for line in body.lines() {
+            let Ok(entry) = serde_json::from_str::<Entry>(line) else {
+                continue;
+            };
+            // Days are read in order, so a later one replaces what an earlier one
+            // said: the count belongs to the latest day the editor worked, not to
+            // the three days together.
+            let reporter = seen
+                .entry(entry.editor.clone())
+                .or_insert_with(|| Reporter {
+                    editor: entry.editor.clone(),
+                    day: day.clone(),
+                    pulses: 0,
+                    last_seen: 0,
+                });
+            if reporter.day != day {
+                reporter.day = day.clone();
+                reporter.pulses = 0;
+            }
+            reporter.pulses += 1;
+            reporter.last_seen = reporter.last_seen.max(entry.at);
+        }
     }
 
     let mut reporters = seen.into_values().collect::<Vec<_>>();

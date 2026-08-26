@@ -86,15 +86,16 @@ fn editors(reading: &Reading) -> Vec<String> {
             .find(|reporter| reporter.editor == announcement.editor)
         {
             Some(reporter) => lines.push(format!(
-                "editors     {named} — {} pulses today, last {} ago",
-                reporter.pulses,
+                "editors     {named} — {} on {}, last {} ago",
+                pulses(reporter.pulses),
+                reporter.day,
                 ago(reading.at - reporter.last_seen)
             )),
-            // Typing produces pulses; an agent writing files behind the editor's
-            // back does not. Saying so keeps a correct state from reading as a
-            // fault.
+            // A window being worked in produces pulses; one sitting in the
+            // background does not. Saying so keeps a correct state from reading
+            // as a fault.
             None => lines.push(format!(
-                "editors     {named} — loaded {} ago, nothing reported today",
+                "editors     {named} — loaded {} ago, nothing reported recently",
                 ago(reading.at - announcement.at)
             )),
         }
@@ -109,15 +110,24 @@ fn editors(reading: &Reading) -> Vec<String> {
             .any(|announcement| announcement.editor == reporter.editor)
         {
             lines.push(format!(
-                "editors     {} — {} pulses today, last {} ago",
+                "editors     {} — {} on {}, last {} ago",
                 reporter.editor,
-                reporter.pulses,
+                pulses(reporter.pulses),
+                reporter.day,
                 ago(reading.at - reporter.last_seen)
             ));
         }
     }
 
     lines
+}
+
+fn pulses(count: usize) -> String {
+    if count == 1 {
+        "1 pulse".to_owned()
+    } else {
+        format!("{count} pulses")
+    }
 }
 
 fn named(editor: &str, version: &str) -> String {

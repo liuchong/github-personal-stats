@@ -35,7 +35,7 @@
 <h1>Collecting it</h1>
 <p class="lede">The collector, the daemon, the editor extension, and where your record is kept.</p>
 <h2 id="collecting-activity">Collecting Activity<a class="permalink" href="#collecting-activity" aria-label="Link to this section">#</a></h2>
-<p>Two commands and one editor extension, none of which are needed by the cards above.</p>
+<p>Two commands and two editor plugins, none of which are needed by the cards above.</p>
 <p>The collector reads databases your editor keeps and the daemon listens on a socket, so neither is published to crates.io alongside the renderer; build them from the repository:</p>
 <pre data-language="sh"><code>git clone https://github.com/liuchong/github-personal-stats
 cd github-personal-stats
@@ -49,26 +49,39 @@ github-personal-stats-collect</code></pre>
 <pre><code>listening on http://127.0.0.1:7391
 panel http://127.0.0.1:7391/?token=…</code></pre>
 <p>The extension in <code>plugins/vscode</code> covers Cursor, VS Code and VSCodium from one build. It reports nothing but a timestamp, a date, and the kind of file open — no paths, no project names, no content — to the daemon on your own machine.</p>
+<h3 id="emacs">Emacs<a class="permalink" href="#emacs" aria-label="Link to this section">#</a></h3>
+<p>The mode in <code>plugins/emacs</code> reports the same three things, and needs no build:</p>
+<pre data-language="elisp"><code>(add-to-list &#x27;load-path &quot;/path/to/github-personal-stats/plugins/emacs&quot;)
+(require &#x27;github-personal-stats)
+(github-personal-stats-mode 1)</code></pre>
+<p>There is nothing else to configure, because it does not require the daemon to be running. If the daemon answers, pulses go to it and appear in its panel at once; if it does not, they are appended to the journal on disk that the collector reads anyway. <code>M-x github-personal-stats-status</code> says which of the two is happening, and the mode line shows <code> stats</code> while reporting, <code> stats~</code> when it last fell back to the journal, and <code> stats!</code> when pulses are piling up rather than going anywhere.</p>
+<p>That fallback is what makes Emacs on a machine with no daemon worth setting up — a server you ssh into, say. Nothing is lost and nothing has to be running; the pulses wait in the journal until the collector next runs there:</p>
+<pre data-language="sh"><code>github-personal-stats-collect --sink git --repo ~/.local/state/github-personal-stats/storage</code></pre>
+<p>You can also insist on one or the other with <code>github-personal-stats-sink</code>, which takes <code>auto</code> (the default), <code>daemon</code> or <code>journal</code>.</p>
+<p>What the mode deliberately does not do is work out hours, decide what a language is, or publish anything. A pulse is a moment. Moments become sessions, and sessions become a published record, once for every source rather than once per editor — which is why adding an editor cannot change what an hour means, and why an hour spent in Emacs while an agent worked in a terminal is still one hour rather than two.</p>
 <h3 id="telling-whether-it-is-working">Telling whether it is working<a class="permalink" href="#telling-whether-it-is-working" aria-label="Link to this section">#</a></h3>
 <p>An installed plugin and a working one look identical from the extensions list, so ask instead:</p>
 <pre data-language="sh"><code>github-personal-stats-daemon status</code></pre>
 <pre><code>daemon      listening on 127.0.0.1:7391
 token       /Users/you/.local/state/github-personal-stats/token
 publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode — 412 pulses today, last 30s ago
+editors     vscode 1.5.0 — 412 pulses on 2026-08-24, last 30s ago
+editors     emacs 1.5.0 — 96 pulses on 2026-08-24, last 2m ago
 collected   100 days, agent 146h 29m, editor 3h 12m</code></pre>
 <p>Each line is something that can be separately broken. <code>editors no plugin has loaded</code> means exactly that: reload the editor window. <code>token missing</code> means no plugin can report at all, because the shared secret it needs is not there yet.</p>
+<p>The day is named rather than called &quot;today&quot; because the two are not always the same thing. A plugin files its work under the date its own machine shows, so east of UTC the journal is already on tomorrow&#x27;s file for the first hours of the evening — and those are the hours most likely to be worked. Naming the day it found means the line cannot claim to be about now when it is about yesterday.</p>
 <p>A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:</p>
-<pre><code>editors     vscode 1.5.0 — loaded 12m ago, nothing reported today</code></pre>
+<pre><code>editors     vscode 1.5.0 — loaded 12m ago, nothing reported recently</code></pre>
 <p>That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.</p>
 <p>Your editor&#x27;s status bar says the same thing from the other side:</p>
 <ul><li><code>$(pulse) stats</code> — loaded and reporting.</li><li><code>$(pulse) stats 14</code> — loaded, but 14 pulses are queued because the daemon is not answering.</li><li><code>$(circle-slash) stats</code> — no token found, so nothing is being sent.</li></ul>
 <p>Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as <code>editor 0h 0m</code> until then.</p>
-<h3 id="what-the-plugin-measures">What the plugin measures<a class="permalink" href="#what-the-plugin-measures" aria-label="Link to this section">#</a></h3>
-<p>Time the editor window had focus. Not time you spent typing.</p>
-<p>The first version of the plugin measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.</p>
-<p>So the plugin sends a pulse when its window takes focus and every <code>pulseSeconds</code> while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.</p>
-<p>The one honest limitation: a window left focused while you walk away is counted until it loses focus. The daemon&#x27;s idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.</p>
+<h3 id="what-the-plugins-measure">What the plugins measure<a class="permalink" href="#what-the-plugins-measure" aria-label="Link to this section">#</a></h3>
+<p>Time at the editor. Not time you spent typing.</p>
+<p>The first version of the VS Code extension measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.</p>
+<p>So a pulse is sent when the window takes focus and every <code>pulseSeconds</code> while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.</p>
+<p>The one honest limitation: a window left focused while you walk away is counted until it loses focus. The idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.</p>
+<p>The Emacs mode adds a cutoff there, and this is the only place the two plugins differ. It stops counting after ten minutes without input, because Emacs is habitually left in front of you for days at a time and a focused frame alone would report sleep as work. Reading, scrolling and directing an agent all produce input, so the grace period costs nothing real; <code>github-personal-stats-idle-seconds</code> changes it.</p>
 <p>Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor&#x27;s own record of what it generated, which is read directly. This is why each day keeps <code>editor</code> and <code>agent</code> as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.</p>
 <p>The practical consequences:</p>
 <ul><li><strong>Working in the IDE, typing or directing an agent</strong> — the plugin reports it, and it becomes editor time.</li><li><strong>An agent writing files while you read a browser</strong> — the window does not have focus, so no editor time is claimed. The work lands as agent time.</li><li><strong>A terminal agent with no editor open</strong> — no plugin is running at all, and only agent time is recorded.</li></ul>

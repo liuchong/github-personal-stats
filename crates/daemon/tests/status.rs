@@ -14,6 +14,7 @@ fn announcement(editor: &str, version: &str, at: i64) -> Announcement {
 fn reporter(editor: &str, pulses: usize, last_seen: i64) -> Reporter {
     Reporter {
         editor: editor.to_owned(),
+        day: "2026-08-24".to_owned(),
         pulses,
         last_seen,
     }
@@ -54,7 +55,7 @@ fn a_loaded_plugin_with_nothing_to_report_is_not_shown_as_a_fault() {
 
     assert!(report.contains("vscode 1.4.0"), "{report}");
     assert!(report.contains("loaded 12m ago"), "{report}");
-    assert!(report.contains("nothing reported today"), "{report}");
+    assert!(report.contains("nothing reported recently"), "{report}");
     assert!(!report.contains("no plugin has loaded"), "{report}");
 }
 
@@ -65,7 +66,7 @@ fn a_plugin_that_is_reporting_shows_its_work_instead() {
 
     let report = status::report(&reading(&announced, &reporters, None));
 
-    assert!(report.contains("412 pulses today"), "{report}");
+    assert!(report.contains("412 pulses on 2026-08-24"), "{report}");
     assert!(report.contains("last 30s ago"), "{report}");
     assert!(!report.contains("nothing typed"), "{report}");
 }
@@ -77,7 +78,10 @@ fn an_editor_heard_from_without_an_announcement_still_counts() {
 
     let report = status::report(&reading(&[], &reporters, None));
 
-    assert!(report.contains("neovim — 12 pulses today"), "{report}");
+    assert!(
+        report.contains("neovim — 12 pulses on 2026-08-24"),
+        "{report}"
+    );
     assert!(!report.contains("no plugin has loaded"), "{report}");
 }
 
@@ -138,6 +142,15 @@ fn what_has_been_collected_is_reported_as_two_separate_numbers() {
     assert!(report.contains("100 days"), "{report}");
     assert!(report.contains("agent 146h 29m"), "{report}");
     assert!(report.contains("editor 3h 12m"), "{report}");
+}
+
+#[test]
+fn one_pulse_is_not_called_pulses() {
+    let reporters = [reporter("emacs", 1, NOW - 30)];
+
+    let report = status::report(&reading(&[], &reporters, None));
+
+    assert!(report.contains("1 pulse on"), "{report}");
 }
 
 #[test]

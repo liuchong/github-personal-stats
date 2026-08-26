@@ -185,6 +185,7 @@ Add `--min-repo-language-share 2` to ignore languages that make up less than 2% 
 - `crates/collect`: reads local coding activity and publishes a snapshot.
 - `crates/daemon`: the resident collector, its local panel, and the endpoint plugins report to.
 - `plugins/vscode`: the editor plugin, covering VS Code, Cursor, and VSCodium.
+- `plugins/emacs`: the Emacs mode, which reports with or without the daemon running.
 - `docs`: the guide, the illustrations, the brand marks, and the generated site.
 - `examples`: deterministic showcase data and generated SVG previews.
 - `.agents`: durable AI development memory and process files.

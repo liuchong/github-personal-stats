@@ -146,10 +146,8 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
     let token_shown = token_path.display().to_string();
     let publishing = sink_for(args, settings, prefs)?.describe();
 
-    // The journal is keyed by the local day the editor observed, which is what
-    // this timestamp's date is too.
     let now = clock::now();
-    let today = clock::utc_timestamp(now)[..10].to_owned();
+    let utc_today = clock::utc_timestamp(now)[..10].to_owned();
 
     // Read from where the sink publishes, not from the configured output path:
     // with a git sink those are different places, and the configured one holds
@@ -176,7 +174,7 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
             token: token_path.exists().then_some(token_shown.as_str()),
             publishing: &publishing,
             announced: &presence::read(&settings.state_dir),
-            reporters: &pulse::reporters(&settings.state_dir, &today),
+            reporters: &pulse::reporters(&settings.state_dir, &utc_today),
             at: now,
             collected,
         })

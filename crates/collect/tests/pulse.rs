@@ -216,7 +216,7 @@ fn several_editors_are_listed_by_who_was_heard_from_last() {
 }
 
 #[test]
-fn reporting_on_one_day_says_nothing_about_another() {
+fn work_older_than_a_day_either_side_is_not_reported_as_lately() {
     let root = scratch("reporters-by-day");
     pulse::append(
         &root,
@@ -227,8 +227,12 @@ fn reporting_on_one_day_says_nothing_about_another() {
     )
     .unwrap();
 
+    // A day either side of UTC's covers every timezone's idea of now. Two days
+    // out is not now under any of them, and reporting it would present last
+    // week's work as current.
     assert_eq!(pulse::reporters(&root, "2026-08-23").len(), 1);
-    assert!(pulse::reporters(&root, "2026-08-24").is_empty());
+    assert_eq!(pulse::reporters(&root, "2026-08-24").len(), 1);
+    assert!(pulse::reporters(&root, "2026-08-25").is_empty());
 }
 
 #[test]
@@ -250,4 +254,86 @@ fn a_damaged_journal_line_does_not_hide_the_rest() {
     std::fs::write(&path, body).unwrap();
 
     assert_eq!(pulse::reporters(&root, "2026-08-24").len(), 1);
+}
+
+/// The journal is named by the local day the editor saw, and for part of every
+/// day that is not UTC's day. A reader that trusts UTC looks in the wrong file.
+mod which_day_it_is {
+    use super::*;
+
+    fn journal(root: &std::path::Path, editor: &str, day: &str, at: i64) {
+        pulse::append(
+            root,
+            &PulseBatch {
+                editor: editor.to_owned(),
+                pulses: vec![pulse(day, at, "el")],
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_journal_a_day_ahead_of_utc_is_still_found() {
+        let root = scratch("day-ahead");
+        // 03:58 in UTC+8 is still the 26th in UTC, and the plugin has already
+        // filed its work under the 27th.
+        journal(&root, "emacs", "2026-08-27", NOON);
+
+        let found = pulse::reporters(&root, "2026-08-26");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].day, "2026-08-27");
+        assert_eq!(found[0].pulses, 1);
+    }
+
+    #[test]
+    fn a_journal_a_day_behind_utc_is_still_found() {
+        let root = scratch("day-behind");
+        // 17:00 in UTC-8 is already the 27th in UTC, and the day being worked
+        // is the 26th.
+        journal(&root, "emacs", "2026-08-26", NOON);
+
+        let found = pulse::reporters(&root, "2026-08-27");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].day, "2026-08-26");
+    }
+
+    #[test]
+    fn the_count_belongs_to_the_latest_day_worked() {
+        let root = scratch("latest-day");
+        journal(&root, "emacs", "2026-08-26", NOON);
+        journal(&root, "emacs", "2026-08-26", NOON + 60);
+        journal(&root, "emacs", "2026-08-27", NOON + 86_400);
+
+        let found = pulse::reporters(&root, "2026-08-27");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].day, "2026-08-27");
+        // Not three: yesterday's work is yesterday's, and a count spanning both
+        // days would describe neither.
+        assert_eq!(found[0].pulses, 1);
+    }
+
+    #[test]
+    fn a_day_no_timezone_could_explain_is_not_read() {
+        let root = scratch("far-future");
+        // A journal carried over from another machine, or a clock that was
+        // wrong, is not evidence about what is being collected here.
+        journal(&root, "emacs", "2027-01-01", NOON);
+
+        assert!(pulse::reporters(&root, "2026-08-26").is_empty());
+    }
+
+    #[test]
+    fn each_editor_is_reported_on_its_own_latest_day() {
+        let root = scratch("two-editors");
+        journal(&root, "vscode", "2026-08-26", NOON);
+        journal(&root, "emacs", "2026-08-27", NOON + 86_400);
+
+        let found = pulse::reporters(&root, "2026-08-27");
+        assert_eq!(found.len(), 2);
+        // Most recently heard from first.
+        assert_eq!(found[0].editor, "emacs");
+        assert_eq!(found[0].day, "2026-08-27");
+        assert_eq!(found[1].editor, "vscode");
+        assert_eq!(found[1].day, "2026-08-26");
+    }
 }
