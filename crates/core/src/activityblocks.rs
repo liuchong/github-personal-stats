@@ -12,8 +12,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact, LineShare, Lines,
-    language_label,
+    ActivityComparison, ActivityWindow, Author, Figure, GithubStatsError, LineFact, LineShare,
+    Lines, language_label,
     renderer::{format_duration_aligned, format_number as thousands},
     textchart::{ChartBlock, ChartRow, ChartSummary},
 };
@@ -315,7 +315,14 @@ fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock 
         None => block,
     };
     let (rows, total) = (fold.rows, fold.total);
-    let [from, to] = comparison.covering();
+    // Dated by what this block counts rather than by the record's outer edges. A
+    // source can keep durations far longer than it keeps line counts, so the
+    // period behind a block of lines is not the period behind a block of hours.
+    let [from, to] = comparison.covering(match spec.value {
+        ChartValue::Time => Figure::Time,
+        ChartValue::Lines => Figure::Lines,
+        ChartValue::Tokens => Figure::Tokens,
+    });
     // A bar is only ever divided by authorship at present, so that is what its
     // parts are called. The words live here rather than in the layout because the
     // layout has no way of knowing what a bar was divided by.

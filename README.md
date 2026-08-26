@@ -76,11 +76,11 @@ The same record reads as text for a README made of words, and the card is the on
 ```txt
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %
-Markdown      +28,014   ####################-----   23.26 %
-Go            +22,547   ################---------   18.72 %
+Rust          +35,995   #########################   30.00 %
+Markdown      +28,134   ####################-----   23.44 %
+Go            +21,941   ###############----------   18.28 %
 ```
 
 Nothing leaves your machine unless you send it: the record holds counts and durations, never a path, a project, or a line of code. See [Coding Activity](docs/user-guide.md#coding-activity) for what each figure means and [Collecting Activity](docs/user-guide.md#collecting-activity) for the collector, the daemon, and the editor plugin.

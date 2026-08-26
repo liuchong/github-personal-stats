@@ -427,3 +427,74 @@ fn card_data_dashboard_reuses_shared_aggregations() {
         _ => panic!("expected dashboard card data"),
     }
 }
+
+/// The day a fold treats as the present, when nobody named one.
+///
+/// The record labels a day where the work happened, so east of Greenwich it
+/// starts a new day hours before UTC does. These check that such a day is folded
+/// rather than dropped as though it were in the future, and that a date beyond
+/// any real offset still is.
+mod the_present {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use github_personal_stats_core::{
+        ActivityMeasure, ActivitySpan, DayBucket, MEASURE_AGENT, compare_activity,
+        date_from_ordinal,
+    };
+
+    fn utc_today() -> i32 {
+        let seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs() as i64)
+            .unwrap_or_default();
+        (seconds / 86_400) as i32
+    }
+
+    fn folded(days: Vec<DayBucket>) -> u64 {
+        compare_activity(
+            &days,
+            ActivityMeasure::new(MEASURE_AGENT),
+            [ActivitySpan::Days(1), ActivitySpan::All],
+            None,
+            12,
+            &[],
+        )
+        .recent
+        .seconds
+    }
+
+    fn worked(date: String, seconds: u64) -> DayBucket {
+        let mut day = DayBucket::new(&date);
+        day.measure_mut(MEASURE_AGENT).seconds = seconds;
+        day
+    }
+
+    #[test]
+    fn a_day_that_has_turned_locally_is_the_present() {
+        let tomorrow = date_from_ordinal(utc_today() + 1);
+
+        // A one day window is today only, so counting these hours at all means
+        // the local day was taken as the present rather than as the future.
+        assert_eq!(folded(vec![worked(tomorrow, 3_600)]), 3_600);
+    }
+
+    #[test]
+    fn a_date_no_offset_could_explain_is_not() {
+        let later = date_from_ordinal(utc_today() + 2);
+
+        // No zone is a whole day ahead of UTC, so this is a clock gone wrong, and
+        // trusting it would move the recent window off the record's real days.
+        assert_eq!(folded(vec![worked(later, 3_600)]), 0);
+    }
+
+    #[test]
+    fn yesterday_stays_yesterday() {
+        let today = date_from_ordinal(utc_today());
+        let yesterday = date_from_ordinal(utc_today() - 1);
+
+        assert_eq!(
+            folded(vec![worked(yesterday, 7_200), worked(today, 3_600)]),
+            3_600
+        );
+    }
+}

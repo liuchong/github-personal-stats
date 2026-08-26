@@ -25,9 +25,10 @@ pub use activityblocks::{
 };
 pub use aggregation::{
     ActivityComparison, ActivityLanguage, ActivityMeasure, ActivitySpan, ActivityWindow,
-    AggregatedStats, CardData, CodingActivityEntry, CodingActivitySummary, LanguageShare,
-    StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity, aggregate_languages,
-    aggregate_stats, calculate_streak, compare_activity,
+    AggregatedStats, CardData, CodingActivityEntry, CodingActivitySummary, Dated, Figure,
+    LanguageShare, StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity,
+    aggregate_languages, aggregate_stats, calculate_streak, compare_activity, date_from_ordinal,
+    date_to_ordinal,
 };
 pub use client::{GithubClient, GithubGraphqlRequest, MockGithubClient};
 pub use color::{HEAT_RAMP_STEPS, HeatRamp, named_ramps};

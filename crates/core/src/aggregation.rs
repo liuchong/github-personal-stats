@@ -172,12 +172,46 @@ impl ActivitySpan {
 /// window holding thirty days of work is not a quiet quarter; it is usually a
 /// record that only reaches back thirty days. Showing both lets a reader tell
 /// those apart instead of reading a short history as an idle one.
+/// What a figure is counted from, which is the same question as which source
+/// knows about it. Kept as its own vocabulary rather than the chart's, because a
+/// record holds these whether or not anybody draws them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Figure {
+    Time,
+    Lines,
+    Tokens,
+}
+
+/// The first and last day a span holds each kind of evidence on.
+///
+/// One pair per kind because they do not begin together, and a period stated for
+/// the wrong one misdescribes the figures under it. A source can keep durations
+/// for months and line counts for weeks: hours reaching back to April above
+/// lines whose earliest day is July would put four months under a total that had
+/// only ever seen six weeks.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Dated {
+    pub time: Option<[String; 2]>,
+    pub lines: Option<[String; 2]>,
+    pub tokens: Option<[String; 2]>,
+}
+
+impl Dated {
+    pub fn of(&self, figure: Figure) -> Option<&[String; 2]> {
+        match figure {
+            Figure::Time => self.time.as_ref(),
+            Figure::Lines => self.lines.as_ref(),
+            Figure::Tokens => self.tokens.as_ref(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActivityWindow {
     pub span: ActivitySpan,
-    /// First and last day holding work in this span. Empty when none does.
-    pub start: String,
-    pub end: String,
+    /// The days at either end of the evidence this span holds, kept apart by kind
+    /// of evidence.
+    pub dated: Dated,
     pub active_days: u32,
     pub seconds: u64,
     pub sessions: u32,
@@ -272,8 +306,7 @@ impl ActivityComparison {
     pub fn empty(measure: ActivityMeasure, spans: [ActivitySpan; 2]) -> Self {
         let blank = |span| ActivityWindow {
             span,
-            start: String::new(),
-            end: String::new(),
+            dated: Dated::default(),
             active_days: 0,
             seconds: 0,
             sessions: 0,
@@ -338,17 +371,20 @@ impl ActivityComparison {
         self.recent.seconds.saturating_sub(placed)
     }
 
-    /// The first and last day either window holds work on, as `YYYY-MM-DD`, or
-    /// two empty strings when neither holds any.
+    /// The first and last day either window holds a kind of evidence on, as
+    /// `YYYY-MM-DD`, or two empty strings when neither holds any.
     ///
     /// Both windows rather than the longer one, because which is longer depends
     /// on the spans asked for, and a window is empty until the record reaches
     /// back far enough to fill it.
-    pub fn covering(&self) -> [&str; 2] {
-        fn days(window: &ActivityWindow) -> Option<[&str; 2]> {
-            (!window.start.is_empty()).then_some([window.start.as_str(), window.end.as_str()])
+    pub fn covering(&self, figure: Figure) -> [&str; 2] {
+        fn days(window: &ActivityWindow, figure: Figure) -> Option<[&str; 2]> {
+            window
+                .dated
+                .of(figure)
+                .map(|[from, to]| [from.as_str(), to.as_str()])
         }
-        match (days(&self.recent), days(&self.baseline)) {
+        match (days(&self.recent, figure), days(&self.baseline, figure)) {
             (Some([from, to]), Some([earlier, later])) => [from.min(earlier), to.max(later)],
             (Some(only), None) | (None, Some(only)) => only,
             (None, None) => ["", ""],
@@ -593,7 +629,7 @@ pub fn compare_activity(
 ) -> ActivityComparison {
     let end = as_of
         .and_then(date_to_ordinal)
-        .unwrap_or_else(today_ordinal);
+        .unwrap_or_else(|| current_ordinal(days));
     let recent = window(days, &measure, spans[0], end, ignored_languages);
     let baseline = window(days, &measure, spans[1], end, ignored_languages);
 
@@ -602,6 +638,26 @@ pub fn compare_activity(
         languages: join_languages(&recent.1, &baseline.1, limit),
         recent: recent.0,
         baseline: baseline.0,
+    }
+}
+
+/// The days at either end of one kind of evidence, gathered as the days go past.
+#[derive(Default)]
+struct Edges<'a> {
+    first: Option<&'a str>,
+    last: Option<&'a str>,
+}
+
+impl<'a> Edges<'a> {
+    fn saw(&mut self, day: &'a str) {
+        if self.first.is_none() {
+            self.first = Some(day);
+        }
+        self.last = Some(day);
+    }
+
+    fn dated(self) -> Option<[String; 2]> {
+        Some([self.first?.to_owned(), self.last?.to_owned()])
     }
 }
 
@@ -635,8 +691,9 @@ fn window(
     let mut seconds = 0u64;
     let mut sessions = 0u32;
     let mut active_days = 0u32;
-    let mut first = None::<&str>;
-    let mut last = None::<&str>;
+    let mut dated_time = Edges::default();
+    let mut dated_lines = Edges::default();
+    let mut dated_tokens = Edges::default();
     let mut commits = LineCounts::default();
     let mut lines = LineTotals::default();
     let mut time = TimeTotals::default();
@@ -657,10 +714,17 @@ fn window(
             // The span's own edges are what a reader wants dated, not the edges of
             // the arithmetic: an all-time window reaching back to the epoch should
             // report the first day that holds work.
-            if first.is_none() {
-                first = Some(&day.date);
-            }
-            last = Some(&day.date);
+            dated_time.saw(&day.date);
+        }
+        if day
+            .lines
+            .iter()
+            .any(|fact| !ignored(&fact.language) && fact.added > 0)
+        {
+            dated_lines.saw(&day.date);
+        }
+        if !day.tokens.is_empty() {
+            dated_tokens.saw(&day.date);
         }
         seconds += bucket.seconds;
         sessions = sessions.saturating_add(bucket.sessions);
@@ -713,8 +777,11 @@ fn window(
 
     let window = ActivityWindow {
         span,
-        start: first.unwrap_or_default().to_owned(),
-        end: last.unwrap_or_default().to_owned(),
+        dated: Dated {
+            time: dated_time.dated(),
+            lines: dated_lines.dated(),
+            tokens: dated_tokens.dated(),
+        },
         active_days,
         seconds,
         sessions,
@@ -926,7 +993,9 @@ fn mask_seconds(seconds: u64) -> u64 {
     seconds / 3600 * 3600
 }
 
-fn date_to_ordinal(date: &str) -> Option<i32> {
+/// A day as days since the epoch, which is how spans are measured. `None` for
+/// anything that is not a `YYYY-MM-DD` day.
+pub fn date_to_ordinal(date: &str) -> Option<i32> {
     let mut parts = date.split('-');
     let year = parts.next()?.parse::<i32>().ok()?;
     let month = parts.next()?.parse::<u32>().ok()?;
@@ -956,7 +1025,8 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i32> {
     Some(era * 146_097 + day_of_era - 719_468)
 }
 
-fn date_from_ordinal(ordinal: i32) -> String {
+/// The inverse: days since the epoch written as a `YYYY-MM-DD` day.
+pub fn date_from_ordinal(ordinal: i32) -> String {
     let days = ordinal + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days - era * 146_097;
@@ -977,4 +1047,27 @@ fn today_ordinal() -> i32 {
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0);
     (seconds / 86_400) as i32
+}
+
+/// Which day a window ends on when nobody said: today, in the calendar the days
+/// were labelled in rather than in UTC.
+///
+/// A day is labelled where the work happened, so east of Greenwich the record
+/// starts a new day hours before UTC does. Anchored on the UTC day, the first
+/// hours of every local morning were dropped as though they were in the future,
+/// and the recent window silently became the thirty days ending yesterday.
+///
+/// The clock cannot say which calendar that was — nothing in the standard
+/// library knows the machine's offset, and the machine reading the record need
+/// not be the machine that wrote it. The record can: a day labelled tomorrow by
+/// UTC's reckoning is a collector whose calendar has already turned. One day is
+/// also the whole of the correction, since no offset reaches a full day, so a
+/// date beyond that is a clock gone wrong and stays excluded.
+fn current_ordinal(days: &[DayBucket]) -> i32 {
+    let utc = today_ordinal();
+    let turned = days
+        .iter()
+        .filter_map(|day| date_to_ordinal(&day.date))
+        .any(|ordinal| ordinal == utc + 1);
+    utc + i32::from(turned)
 }

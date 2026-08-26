@@ -142,6 +142,9 @@ Activity options:
   --activity-windows <recent,baseline>
                           Two spans to compare, each a day count or all
                           (default: 30,all)
+  --activity-as-of <YYYY-MM-DD>
+                          The day both spans end on, for reporting a period
+                          other than the one ending today (default: today)
   --activity-blocks <spec>
                           Text chart blocks, semicolon separated, each written
                           value/dimension with optional settings. Values are
@@ -423,6 +426,10 @@ fn activity_comparisons(
         Some(value) => parse_windows(&value)?,
         None => DEFAULT_ACTIVITY_WINDOWS,
     };
+    let as_of = match option_value(args, "--activity-as-of") {
+        Some(value) => Some(parse_day(&value)?),
+        None => None,
+    };
     let hidden = option_values(args, "--hide-language");
 
     // The fold keeps far more languages than any block will draw, so a block's
@@ -431,8 +438,36 @@ fn activity_comparisons(
     // lines ever saw it.
     Ok(measures
         .into_iter()
-        .map(|measure| compare_activity(&days, measure, windows, None, FOLD_LANGUAGES, &hidden))
+        .map(|measure| {
+            compare_activity(
+                &days,
+                measure,
+                windows,
+                as_of.as_deref(),
+                FOLD_LANGUAGES,
+                &hidden,
+            )
+        })
         .collect())
+}
+
+/// A day the caller named, refused unless it is one.
+///
+/// Checked here rather than left to the fold, which treats a date it cannot read
+/// as no date at all: a mistyped day would then quietly report the present and
+/// look like a record that had nothing in the period asked about.
+fn parse_day(value: &str) -> Result<String, Box<dyn Error>> {
+    let day = value.trim();
+    let parts = day.split('-').collect::<Vec<_>>();
+    let shaped = matches!(parts.as_slice(), [year, month, date]
+        if year.len() == 4
+            && month.len() == 2
+            && date.len() == 2
+            && day.chars().filter(char::is_ascii_digit).count() == 8);
+    if !shaped {
+        return Err(format!("--activity-as-of {day:?} must be a day, such as 2026-06-30").into());
+    }
+    Ok(day.to_owned())
 }
 
 fn parse_windows(value: &str) -> Result<[ActivitySpan; 2], Box<dyn Error>> {

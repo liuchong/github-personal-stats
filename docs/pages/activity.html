@@ -43,14 +43,14 @@
 <p>And a chart, for a README that is mostly words:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %
-Markdown      +28,014   ####################-----   23.26 %
-Go            +22,547   ################---------   18.72 %
-TypeScript    +13,048   #########----------------   10.83 %
-Python         +9,276   ######-------------------    7.70 %
-Zig            +6,863   #####--------------------    5.70 %</code></pre>
+Rust          +35,995   #########################   30.00 %
+Markdown      +28,134   ####################-----   23.44 %
+Go            +21,941   ###############----------   18.28 %
+TypeScript    +13,046   #########----------------   10.87 %
+Python         +9,025   ######-------------------    7.52 %
+Zig            +6,926   #####--------------------    5.77 %</code></pre>
 <p>Both read the same collected record through the same fold, so they can sit on one page without disagreeing. Nothing here is fetched: the card is the only one in this project that renders with no token, no saved profile and no network at all.</p>
 <p>Every figure on this page comes from a sample record rather than anybody&#x27;s real one, the same way the other cards are drawn from <code>examples/showcase.json</code>. Rebuild all of it with <code>python3 scripts/render-activity-samples.py</code>.</p>
 <h3 id="the-card">The card<a class="permalink" href="#the-card" aria-label="Link to this section">#</a></h3>
@@ -60,7 +60,7 @@ Zig            +6,863   #####--------------------    5.70 %</code></pre>
   --output profile/activity.svg</code></pre>
 <p>Two spans are named on the left, the recent one leading. Under each is how much of that span recorded anything at all, which is not decoration: a span reaching further back than your record does would otherwise read as an idle stretch rather than an unobserved one.</p>
 <p>On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see <a href="activity.html#how-time-is-measured">How time is measured</a>.</p>
-<p>The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because <code>612 hrs 58 mins</code> needs a quarter more room than <code>9 hrs 2 mins</code>:</p>
+<p>The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because <code>619 hrs 25 mins</code> needs a quarter more room than <code>9 hrs 2 mins</code>:</p>
 <div class="comparison"><figure><figcaption><code>--width 900 --theme light</code></figcaption><div class="shot"><img src="../images/activity/card-light.svg" alt="Activity card, light" width="280" /></div><p>A row of a dashboard</p></figure><figure><figcaption><code>--width 900 --theme dark</code></figcaption><div class="shot"><img src="../images/activity/card-dark.svg" alt="Activity card, dark" width="280" /></div><p>The same card on a dark surface</p></figure><figure><figcaption><code>--width 275</code></figcaption><div class="shot"><img src="../images/activity/card-tile.svg" alt="Activity card at tile width" width="150" /></div><p>Spans stacked, names measured to fit</p></figure></div>
 <h3 id="the-chart">The chart<a class="permalink" href="#the-chart" aria-label="Link to this section">#</a></h3>
 <p>Update a marked README section:</p>
@@ -70,44 +70,47 @@ Zig            +6,863   #####--------------------    5.70 %</code></pre>
 <p>Print the same chart to a terminal instead, which is the quickest way to try a configuration:</p>
 <pre data-language="sh"><code>github-personal-stats chart --activity-record &lt;your record&gt;</code></pre>
 <p>With nothing configured you get the period covered, then what was written, who wrote it, and what wrote it:</p>
-<pre data-language="txt"><code>From: 24 May 2026 - To: 26 August 2026
+<pre data-language="txt"><code>From: 24 May 2026 - To: 27 August 2026
 
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %
-Markdown      +28,014   ####################-----   23.26 %
-Go            +22,547   ################---------   18.72 %
-TypeScript    +13,048   #########----------------   10.83 %
-Python         +9,276   ######-------------------    7.70 %
-Zig            +6,863   #####--------------------    5.70 %
+Rust          +35,995   #########################   30.00 %
+Markdown      +28,134   ####################-----   23.44 %
+Go            +21,941   ###############----------   18.28 %
+TypeScript    +13,046   #########----------------   10.87 %
+Python         +9,025   ######-------------------    7.52 %
+Zig            +6,926   #####--------------------    5.77 %
 
 LINES BY AUTHOR
 
-Total          +120,398   lines, last 30 days
+Total          +119,979   lines, last 30 days
 
-agent          +120,335   #########################   99.94 %
-unattributed        +63   -------------------------    0.05 %
+agent          +119,917   #########################   99.94 %
+unattributed        +62   -------------------------    0.05 %
 
 LINES BY MODEL
 
-Total           +120,335   lines, 99.94% by an agent
+Total           +119,917   lines, 99.94% by an agent
 
-claude-opus-5    +38,917   #########################   32.34 %
-gpt-5.6-sol      +32,385   #####################----   26.91 %
-gpt-5.5          +25,168   ################---------   20.91 %
-grok-4.6         +15,544   ##########---------------   12.91 %
-unnamed           +8,321   #####--------------------    6.91 %
+claude-opus-5    +38,780   #########################   32.33 %
+gpt-5.6-sol      +32,270   #####################----   26.91 %
+gpt-5.5          +25,082   ################---------   20.91 %
+grok-4.6         +15,492   ##########---------------   12.91 %
+unnamed           +8,293   #####--------------------    6.91 %
 
 # agent    = unattributed    - rest</code></pre>
-<p>The first line is the first and last day your record holds work on, which is the one thing none of the figures below can tell you. A month is a month, but a month out of nine years of history and a month out of a fortnight&#x27;s mean different things, and a total that says <code>all time</code> means whatever your record happens to reach back to. Where a chart holds several measures the line covers all of them, so a chart pairing hours collected here with hours imported from a tracker you used for years opens at the earliest day either of them knows about. Turn it off with <code>--activity-dates off</code>.</p>
-<p>The remaining samples in this chapter are single blocks, shown without that line.</p>
+<p>The first line is the period your record actually holds evidence for, which is the one thing none of the figures below can tell you. A month is a month, but a month out of nine years of history and a month out of a fortnight&#x27;s mean different things, and a total that says <code>all time</code> means whatever your record happens to reach back to.</p>
+<p>The dates follow what is being counted, not the record&#x27;s outer edge. Sources keep the three figures for different lengths of time — durations come from transcripts that survive for months, line counts from an editor database that holds a few weeks — so a block of lines opens at the first day with lines rather than at the first day with anything. Where a chart holds several blocks the line covers all of them, which is why a chart pairing hours collected here with hours imported from a tracker you used for years opens at the earliest day any of them knows about. Turn it off with <code>--activity-dates off</code>.</p>
+<p>Both spans end today by default. To report a period that has already closed, name the day they end on:</p>
+<pre data-language="sh"><code>--activity-as-of 2026-06-30 --activity-windows 30,90</code></pre>
+<p>The remaining samples in this chapter are single blocks, shown without the dates line.</p>
 <h3 id="what-the-figures-mean">What the figures mean<a class="permalink" href="#what-the-figures-mean" aria-label="Link to this section">#</a></h3>
 <p>Three different things can be counted, they are measured by different means, and they are not interchangeable. Which one a chart leads with is worth choosing deliberately.</p>
 <div class="table-scroll"><table><thead><tr><th>Value</th><th>What it counts</th><th>Knows the language</th><th>Knows who wrote it</th></tr></thead><tbody><tr><td><code>lines</code></td><td>Lines the editor watched appear</td><td>Yes</td><td>Yes</td></tr><tr><td><code>time</code></td><td>Wall clock while an agent was working</td><td>Partly</td><td>Yes</td></tr><tr><td><code>tokens</code></td><td>Tokens the agents were billed for</td><td>No</td><td>No</td></tr></tbody></table></div>
 <p><code>lines</code> is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.</p>
-<p>It is also why the figures are additions only, written <code>+120,398</code> with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin&#x27;s job.</p>
+<p>It is also why the figures are additions only, written <code>+119,979</code> with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin&#x27;s job.</p>
 <p><code>unattributed</code> means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.</p>
 <p>For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On one real record the distinction was not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.</p>
 <h3 id="how-time-is-measured">How time is measured<a class="permalink" href="#how-time-is-measured" aria-label="Link to this section">#</a></h3>
@@ -122,23 +125,23 @@ unnamed           +8,321   #####--------------------    6.91 %
 <p>The remaining limitation is that most of those hours cannot be attributed to a language. The terminal agents report when they were working without reporting what they were working on; roughly one in eight of their moments names a file at all, and a file named at one instant says nothing about the minutes around it. So a block of hours by language ranks only the hours it can place, and says how many it could not:</p>
 <pre data-language="txt"><code>TIME BY LANGUAGE
 
-Total        73 hrs 47 mins   last 30 days, 120 hrs 23 mins not placed to a language
+Total        73 hrs 32 mins   last 30 days, 119 hrs 58 mins not placed to a language
 
-Rust         21 hrs 50 mins   #########################   29.59 %
-Markdown     17 hrs 10 mins   ####################-----   23.27 %
-Go           13 hrs 48 mins   ################---------   18.72 %
-TypeScript    8 hrs  0 mins   #########----------------   10.85 %
-Python        5 hrs 41 mins   #######------------------    7.71 %
-Zig           4 hrs 12 mins   #####--------------------    5.70 %</code></pre>
+Rust         22 hrs  1 mins   #########################   29.95 %
+Markdown     17 hrs 15 mins   ####################-----   23.45 %
+Go           13 hrs 26 mins   ###############----------   18.28 %
+TypeScript    8 hrs  0 mins   #########----------------   10.88 %
+Python        5 hrs 32 mins   ######-------------------    7.53 %
+Zig           4 hrs 14 mins   #####--------------------    5.77 %</code></pre>
 <p>That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with <code>time=on</code>:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %   21 hrs 50 mins
-Markdown      +28,014   ####################-----   23.26 %   17 hrs 10 mins
-Go            +22,547   ################---------   18.72 %   13 hrs 48 mins
-TypeScript    +13,048   #########----------------   10.83 %    8 hrs  0 mins</code></pre>
+Rust          +35,995   #########################   30.00 %   22 hrs  1 mins
+Markdown      +28,134   ####################-----   23.44 %   17 hrs 15 mins
+Go            +21,941   ###############----------   18.28 %   13 hrs 26 mins
+TypeScript    +13,046   #########----------------   10.87 %    8 hrs  0 mins</code></pre>
 <h3 id="choosing-what-the-chart-says">Choosing what the chart says<a class="permalink" href="#choosing-what-the-chart-says" aria-label="Link to this section">#</a></h3>
 <p>A chart is a list of blocks separated by semicolons. Each block is written <code>value/dimension</code> with optional <code>,setting=value</code> pairs:</p>
 <pre data-language="sh"><code>--activity-blocks &#x27;lines/languages,limit=8,time=on;lines/authors;tokens/models&#x27;</code></pre>
@@ -147,14 +150,14 @@ TypeScript    +13,048   #########----------------   10.83 %    8 hrs  0 mins</co
 <p>Every bar is already divided by author, so its shape says how much of a language an agent wrote. <code>authors=on</code> writes the number beside it, for when the difference between rows is too small to read off twenty-five characters of glyph:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %    99.93% agent
-Markdown      +28,014   ####################-----   23.26 %    99.92% agent
-Go            +22,547   ################---------   18.72 %    99.91% agent
-TypeScript    +13,048   #########----------------   10.83 %   100.00% agent
-Python         +9,276   ######-------------------    7.70 %   100.00% agent
-Zig            +6,863   #####--------------------    5.70 %   100.00% agent
+Rust          +35,995   #########################   30.00 %    99.93% agent
+Markdown      +28,134   ####################-----   23.44 %    99.92% agent
+Go            +21,941   ###############----------   18.28 %    99.91% agent
+TypeScript    +13,046   #########----------------   10.87 %   100.00% agent
+Python         +9,025   ######-------------------    7.52 %   100.00% agent
+Zig            +6,926   #####--------------------    5.77 %   100.00% agent
 
 # agent    = unattributed    - rest</code></pre>
 <p>On a block of hours the same setting writes <code>99.89% agent lines</code>, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.</p>
@@ -162,10 +165,10 @@ Zig            +6,863   #####--------------------    5.70 %   100.00% agent
 <pre data-language="sh"><code>--activity-blocks &#x27;time/windows;time/windows,measure=imported&#x27;</code></pre>
 <pre data-language="txt"><code>TIME BY SPAN
 
-Longest        612 hrs 58 mins   spans overlap; each reads as a share of this
+Longest        619 hrs 25 mins   spans overlap; each reads as a share of this
 
-Last 30 days   194 hrs 11 mins   ########-----------------    31.67 %
-All time       612 hrs 58 mins   #########################   100.00 %
+Last 30 days   193 hrs 30 mins   ########-----------------    31.24 %
+All time       619 hrs 25 mins   #########################   100.00 %
 
 IMPORTED TIME BY SPAN
 
@@ -173,9 +176,10 @@ Longest        266 hrs 21 mins   spans overlap; each reads as a share of this
 
 Last 30 days     0 hrs  0 mins   -------------------------     0.00 %
 All time       266 hrs 21 mins   #########################   100.00 %</code></pre>
-<p>The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 879 hours of a period that only holds 613.</p>
+<p>The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 886 hours of a period that only holds 619.</p>
 <p>Two spans are compared, and both are configurable — a day count or <code>all</code>:</p>
 <pre data-language="sh"><code>--activity-windows 30,90</code></pre>
+<p>A span is counted back from today, where today is the day your record is labelling, not the day it is in UTC. Days are labelled where the work happened, so east of Greenwich a record starts a new day hours before UTC does; anchored on the UTC day, the first hours of every local morning would be dropped as if they were in the future. <code>--activity-as-of 2026-06-30</code> moves the anchor to any day you name, which is how a chart reports last quarter rather than the last thirty days.</p>
 <h3 id="choosing-how-it-looks">Choosing how it looks<a class="permalink" href="#choosing-how-it-looks" aria-label="Link to this section">#</a></h3>
 <pre data-language="sh"><code>--activity-columns name,value,bar,share,aside
 --activity-bar &#x27;#=-&#x27;

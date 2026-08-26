@@ -547,6 +547,44 @@ fn a_chart_opens_with_the_days_it_covers() {
 }
 
 #[test]
+fn a_block_is_dated_by_what_it_counts() {
+    // Durations reach back four months and line counts six weeks, which is what a
+    // source that keeps one longer than the other looks like. Dating both blocks
+    // by the record's outer edge would put four months under a total of lines
+    // that had only ever seen six weeks of them.
+    let mut early = DayBucket::new("2026-04-23");
+    early.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    let mut late = DayBucket::new("2026-07-26");
+    late.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    late.add_lines("Rust", Author::Agent, "a-model", 400, 0);
+
+    let folds = [compare_activity(
+        &[early, late],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(365), ActivitySpan::All],
+        Some("2026-08-26"),
+        12,
+        &[],
+    )];
+    let dated = |value| {
+        let text = render_text_chart(
+            &build_blocks(&folds, &[BlockSpec::new(value, ChartRows::Languages)]),
+            &ChartStyle::default(),
+        );
+        text.lines().next().unwrap_or_default().to_owned()
+    };
+
+    assert_eq!(
+        dated(ChartValue::Time),
+        "From: 23 April 2026 - To: 26 July 2026"
+    );
+    assert_eq!(
+        dated(ChartValue::Lines),
+        "From: 26 July 2026 - To: 26 July 2026"
+    );
+}
+
+#[test]
 fn a_chart_of_two_measures_covers_the_earliest_and_the_latest() {
     let mut old = DayBucket::new("2017-09-26");
     old.measure_mut(MEASURE_IMPORTED).seconds = 3_600;

@@ -132,6 +132,46 @@ fn the_chart_dates_itself_unless_told_not_to() {
 }
 
 #[test]
+fn a_chart_can_report_a_period_that_has_already_ended() {
+    let record = a_record_with_one_day();
+    let chart = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args(["chart", "--activity-record"])
+            .arg(&record)
+            .args(args)
+            .output()
+            .unwrap();
+        (
+            output.status.success(),
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+
+    // The record holds one day, in August. Asked about the thirty days to the end
+    // of June, the chart has to report an empty period rather than August's work.
+    let (ok, june, _) = chart(&["--activity-as-of", "2026-06-30"]);
+    assert!(ok);
+    assert!(!june.contains("From:"), "{june}");
+    assert!(june.contains("nothing recorded"), "{june}");
+
+    let (ok, august, _) = chart(&["--activity-as-of", "2026-08-20"]);
+    assert!(ok);
+    assert!(
+        august.starts_with("From: 20 August 2026 - To: 20 August 2026"),
+        "{august}"
+    );
+
+    // A day that is not a day is refused, because reading it as no day at all
+    // would answer about the present and look like a period with nothing in it.
+    let (ok, _, complaint) = chart(&["--activity-as-of", "last June"]);
+    assert!(!ok);
+    assert!(complaint.contains("must be a day"), "{complaint}");
+
+    let _ = fs::remove_dir_all(&record);
+}
+
+#[test]
 fn cli_defaults_to_workspace_info() {
     let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .output()

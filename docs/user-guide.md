@@ -631,14 +631,14 @@ And a chart, for a README that is mostly words:
 ```txt
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %
-Markdown      +28,014   ####################-----   23.26 %
-Go            +22,547   ################---------   18.72 %
-TypeScript    +13,048   #########----------------   10.83 %
-Python         +9,276   ######-------------------    7.70 %
-Zig            +6,863   #####--------------------    5.70 %
+Rust          +35,995   #########################   30.00 %
+Markdown      +28,134   ####################-----   23.44 %
+Go            +21,941   ###############----------   18.28 %
+TypeScript    +13,046   #########----------------   10.87 %
+Python         +9,025   ######-------------------    7.52 %
+Zig            +6,926   #####--------------------    5.77 %
 ```
 
 Both read the same collected record through the same fold, so they can sit on one page without disagreeing. Nothing here is fetched: the card is the only one in this project that renders with no token, no saved profile and no network at all.
@@ -658,7 +658,7 @@ Two spans are named on the left, the recent one leading. Under each is how much 
 
 On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see [How time is measured](#how-time-is-measured).
 
-The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `612 hrs 58 mins` needs a quarter more room than `9 hrs 2 mins`:
+The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `619 hrs 25 mins` needs a quarter more room than `9 hrs 2 mins`:
 
 | `--width 900 --theme light` | `--width 900 --theme dark` | `--width 275` |
 | --- | --- | --- |
@@ -687,42 +687,50 @@ github-personal-stats chart --activity-record <your record>
 With nothing configured you get the period covered, then what was written, who wrote it, and what wrote it:
 
 ```txt
-From: 24 May 2026 - To: 26 August 2026
+From: 24 May 2026 - To: 27 August 2026
 
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %
-Markdown      +28,014   ####################-----   23.26 %
-Go            +22,547   ################---------   18.72 %
-TypeScript    +13,048   #########----------------   10.83 %
-Python         +9,276   ######-------------------    7.70 %
-Zig            +6,863   #####--------------------    5.70 %
+Rust          +35,995   #########################   30.00 %
+Markdown      +28,134   ####################-----   23.44 %
+Go            +21,941   ###############----------   18.28 %
+TypeScript    +13,046   #########----------------   10.87 %
+Python         +9,025   ######-------------------    7.52 %
+Zig            +6,926   #####--------------------    5.77 %
 
 LINES BY AUTHOR
 
-Total          +120,398   lines, last 30 days
+Total          +119,979   lines, last 30 days
 
-agent          +120,335   #########################   99.94 %
-unattributed        +63   -------------------------    0.05 %
+agent          +119,917   #########################   99.94 %
+unattributed        +62   -------------------------    0.05 %
 
 LINES BY MODEL
 
-Total           +120,335   lines, 99.94% by an agent
+Total           +119,917   lines, 99.94% by an agent
 
-claude-opus-5    +38,917   #########################   32.34 %
-gpt-5.6-sol      +32,385   #####################----   26.91 %
-gpt-5.5          +25,168   ################---------   20.91 %
-grok-4.6         +15,544   ##########---------------   12.91 %
-unnamed           +8,321   #####--------------------    6.91 %
+claude-opus-5    +38,780   #########################   32.33 %
+gpt-5.6-sol      +32,270   #####################----   26.91 %
+gpt-5.5          +25,082   ################---------   20.91 %
+grok-4.6         +15,492   ##########---------------   12.91 %
+unnamed           +8,293   #####--------------------    6.91 %
 
 # agent    = unattributed    - rest
 ```
 
-The first line is the first and last day your record holds work on, which is the one thing none of the figures below can tell you. A month is a month, but a month out of nine years of history and a month out of a fortnight's mean different things, and a total that says `all time` means whatever your record happens to reach back to. Where a chart holds several measures the line covers all of them, so a chart pairing hours collected here with hours imported from a tracker you used for years opens at the earliest day either of them knows about. Turn it off with `--activity-dates off`.
+The first line is the period your record actually holds evidence for, which is the one thing none of the figures below can tell you. A month is a month, but a month out of nine years of history and a month out of a fortnight's mean different things, and a total that says `all time` means whatever your record happens to reach back to.
 
-The remaining samples in this chapter are single blocks, shown without that line.
+The dates follow what is being counted, not the record's outer edge. Sources keep the three figures for different lengths of time — durations come from transcripts that survive for months, line counts from an editor database that holds a few weeks — so a block of lines opens at the first day with lines rather than at the first day with anything. Where a chart holds several blocks the line covers all of them, which is why a chart pairing hours collected here with hours imported from a tracker you used for years opens at the earliest day any of them knows about. Turn it off with `--activity-dates off`.
+
+Both spans end today by default. To report a period that has already closed, name the day they end on:
+
+```sh
+--activity-as-of 2026-06-30 --activity-windows 30,90
+```
+
+The remaining samples in this chapter are single blocks, shown without the dates line.
 
 ### What the figures mean
 
@@ -736,7 +744,7 @@ Three different things can be counted, they are measured by different means, and
 
 `lines` is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.
 
-It is also why the figures are additions only, written `+120,398` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
+It is also why the figures are additions only, written `+119,979` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
 
 `unattributed` means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.
 
@@ -773,14 +781,14 @@ The remaining limitation is that most of those hours cannot be attributed to a l
 ```txt
 TIME BY LANGUAGE
 
-Total        73 hrs 47 mins   last 30 days, 120 hrs 23 mins not placed to a language
+Total        73 hrs 32 mins   last 30 days, 119 hrs 58 mins not placed to a language
 
-Rust         21 hrs 50 mins   #########################   29.59 %
-Markdown     17 hrs 10 mins   ####################-----   23.27 %
-Go           13 hrs 48 mins   ################---------   18.72 %
-TypeScript    8 hrs  0 mins   #########----------------   10.85 %
-Python        5 hrs 41 mins   #######------------------    7.71 %
-Zig           4 hrs 12 mins   #####--------------------    5.70 %
+Rust         22 hrs  1 mins   #########################   29.95 %
+Markdown     17 hrs 15 mins   ####################-----   23.45 %
+Go           13 hrs 26 mins   ###############----------   18.28 %
+TypeScript    8 hrs  0 mins   #########----------------   10.88 %
+Python        5 hrs 32 mins   ######-------------------    7.53 %
+Zig           4 hrs 14 mins   #####--------------------    5.77 %
 ```
 
 That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with `time=on`:
@@ -788,12 +796,12 @@ That is also why hours are an option on a block rather than the thing a chart le
 ```txt
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %   21 hrs 50 mins
-Markdown      +28,014   ####################-----   23.26 %   17 hrs 10 mins
-Go            +22,547   ################---------   18.72 %   13 hrs 48 mins
-TypeScript    +13,048   #########----------------   10.83 %    8 hrs  0 mins
+Rust          +35,995   #########################   30.00 %   22 hrs  1 mins
+Markdown      +28,134   ####################-----   23.44 %   17 hrs 15 mins
+Go            +21,941   ###############----------   18.28 %   13 hrs 26 mins
+TypeScript    +13,046   #########----------------   10.87 %    8 hrs  0 mins
 ```
 
 ### Choosing what the chart says
@@ -820,14 +828,14 @@ Every bar is already divided by author, so its shape says how much of a language
 ```txt
 LINES BY LANGUAGE
 
-Total        +120,398   lines, 99.94% by an agent
+Total        +119,979   lines, 99.94% by an agent
 
-Rust          +35,677   #########################   29.63 %    99.93% agent
-Markdown      +28,014   ####################-----   23.26 %    99.92% agent
-Go            +22,547   ################---------   18.72 %    99.91% agent
-TypeScript    +13,048   #########----------------   10.83 %   100.00% agent
-Python         +9,276   ######-------------------    7.70 %   100.00% agent
-Zig            +6,863   #####--------------------    5.70 %   100.00% agent
+Rust          +35,995   #########################   30.00 %    99.93% agent
+Markdown      +28,134   ####################-----   23.44 %    99.92% agent
+Go            +21,941   ###############----------   18.28 %    99.91% agent
+TypeScript    +13,046   #########----------------   10.87 %   100.00% agent
+Python         +9,025   ######-------------------    7.52 %   100.00% agent
+Zig            +6,926   #####--------------------    5.77 %   100.00% agent
 
 # agent    = unattributed    - rest
 ```
@@ -843,10 +851,10 @@ A measure belongs to a block rather than to the whole chart, because the interes
 ```txt
 TIME BY SPAN
 
-Longest        612 hrs 58 mins   spans overlap; each reads as a share of this
+Longest        619 hrs 25 mins   spans overlap; each reads as a share of this
 
-Last 30 days   194 hrs 11 mins   ########-----------------    31.67 %
-All time       612 hrs 58 mins   #########################   100.00 %
+Last 30 days   193 hrs 30 mins   ########-----------------    31.24 %
+All time       619 hrs 25 mins   #########################   100.00 %
 
 IMPORTED TIME BY SPAN
 
@@ -856,13 +864,15 @@ Last 30 days     0 hrs  0 mins   -------------------------     0.00 %
 All time       266 hrs 21 mins   #########################   100.00 %
 ```
 
-The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 879 hours of a period that only holds 613.
+The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 886 hours of a period that only holds 619.
 
 Two spans are compared, and both are configurable — a day count or `all`:
 
 ```sh
 --activity-windows 30,90
 ```
+
+A span is counted back from today, where today is the day your record is labelling, not the day it is in UTC. Days are labelled where the work happened, so east of Greenwich a record starts a new day hours before UTC does; anchored on the UTC day, the first hours of every local morning would be dropped as if they were in the future. `--activity-as-of 2026-06-30` moves the anchor to any day you name, which is how a chart reports last quarter rather than the last thirty days.
 
 ### Choosing how it looks
 
