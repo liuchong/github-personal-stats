@@ -1,4 +1,7 @@
-use crate::{GithubStatsError, HeatRamp, OutputKind, parse_output_kind};
+use crate::{
+    ActivityMeasure, ActivitySpan, GithubStatsError, HeatRamp, MEASURE_AGENT, MEASURE_EDITOR,
+    MEASURE_IMPORTED, OutputKind, parse_output_kind,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageSize {
@@ -306,6 +309,15 @@ pub const DEFAULT_LANGUAGE_ROWS: usize = 6;
 /// than that, and a taller list would not fit the dashboard column anyway.
 pub const MAX_LANGUAGE_ROWS: usize = 8;
 
+/// A recent month against everything on record. The two answer the questions
+/// worth asking of a record — what is being worked on now, and what has been
+/// worked on — and neither is a good stand-in for the other.
+pub const DEFAULT_ACTIVITY_WINDOWS: [ActivitySpan; 2] = [ActivitySpan::Days(30), ActivitySpan::All];
+
+/// Ten years. A span longer than a record can plausibly cover reads as a
+/// lifetime total, which the card is not for.
+pub const MAX_ACTIVITY_WINDOW: u32 = 3_653;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct GithubStatsConfig {
@@ -335,6 +347,10 @@ pub struct GithubStatsConfig {
     /// the size it is displayed at. The drawing is vector, so this only changes
     /// how large everything appears at a given display width.
     pub scale_basis_points: u32,
+    /// The two spans the activity card compares, shorter first.
+    pub activity_windows: [ActivitySpan; 2],
+    /// Which of the day's two measures of time the activity card reads.
+    pub activity_measure: ActivityMeasure,
 }
 
 impl GithubStatsConfig {
@@ -378,7 +394,70 @@ impl GithubStatsConfig {
             padding: None,
             auto_height: false,
             scale_basis_points: 10_000,
+            activity_windows: DEFAULT_ACTIVITY_WINDOWS,
+            activity_measure: ActivityMeasure::default(),
         })
+    }
+
+    /// Reads the two spans the activity card compares, as `30,all` or `30,90`.
+    ///
+    /// The shorter span goes first because that is the one the card leads with;
+    /// giving them the other way round is a mistake worth reporting rather than
+    /// quietly sorting, since it changes which figure the card treats as the
+    /// baseline.
+    pub fn with_activity_windows(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let complain = |message: String| GithubStatsError::InvalidConfig {
+            field: "activity-windows",
+            message,
+        };
+        let (recent, baseline) = value
+            .split_once(',')
+            .ok_or_else(|| complain(format!("expected two spans such as 30,all, got {value}")))?;
+        let parse = |text: &str| {
+            ActivitySpan::parse(text).ok_or_else(|| {
+                complain(format!(
+                    "{} is not a span of 1 to {MAX_ACTIVITY_WINDOW} days, or all",
+                    text.trim()
+                ))
+            })
+        };
+        let recent = parse(recent)?;
+        let baseline = parse(baseline)?;
+        if recent.reach() >= baseline.reach() {
+            return Err(complain(format!(
+                "the shorter span goes first, so {} cannot come before {}",
+                recent.as_string(),
+                baseline.as_string(),
+            )));
+        }
+
+        self.activity_windows = [recent, baseline];
+        Ok(self)
+    }
+
+    /// Chooses which measure of time the activity card reads.
+    ///
+    /// Any name is allowed, not only the ones this project collects, because the
+    /// record is open to measures that arrive from elsewhere. A name nothing
+    /// recorded simply reads as no time, which is the same thing a card shows for
+    /// a measure that recorded nothing.
+    pub fn with_activity_measure(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        let name = value.trim();
+        let usable = !name.is_empty()
+            && name.chars().all(|character| {
+                character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+            });
+        if !usable {
+            return Err(GithubStatsError::InvalidConfig {
+                field: "activity-measure",
+                message: format!(
+                    "measure name {name:?} must be lowercase letters, digits, and dashes; \
+                     the ones collected here are {MEASURE_AGENT}, {MEASURE_EDITOR}, and {MEASURE_IMPORTED}"
+                ),
+            });
+        }
+        self.activity_measure = ActivityMeasure::new(name);
+        Ok(self)
     }
 
     pub fn with_scale(mut self, value: &str) -> Result<Self, GithubStatsError> {

@@ -409,9 +409,13 @@ fn cli_help_documents_every_option_it_parses() {
         .unwrap();
     let help = String::from_utf8(help.stdout).unwrap();
 
+    // A message that begins with the flag it is about, which is the kind users
+    // want, still names only one flag: everything after the first word is prose.
     let mut parsed = source
         .split('"')
-        .filter(|token| token.starts_with("--") && token.len() > 2)
+        .filter(|token| token.starts_with("--"))
+        .filter_map(|token| token.split_whitespace().next())
+        .filter(|option| option.len() > 2)
         .collect::<Vec<_>>();
     parsed.sort_unstable();
     parsed.dedup();

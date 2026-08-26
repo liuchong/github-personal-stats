@@ -14,6 +14,7 @@ use github_personal_stats_collect::{
     cursor::{commit_day, database_path, read},
     error::CollectError,
 };
+use github_personal_stats_core::{Author, DayBucket};
 use rusqlite::Connection;
 
 fn scratch(name: &str) -> PathBuf {
@@ -82,6 +83,15 @@ fn at(offset: i64) -> i64 {
     1_787_529_600 + offset
 }
 
+/// Sums the lines one author wrote with one model, across languages.
+fn written(day: &DayBucket, author: Author, model: &str) -> u64 {
+    day.lines
+        .iter()
+        .filter(|fact| fact.author == author && fact.model == model)
+        .map(|fact| fact.total())
+        .sum()
+}
+
 #[test]
 fn a_database_that_is_not_there_is_reported_as_missing_rather_than_as_empty() {
     let root = scratch("absent");
@@ -104,13 +114,13 @@ fn committed_lines_are_split_by_who_wrote_them() {
     let days = read(&path, 300).expect("a readable database");
     let day = days.get("2026-08-24").expect("the commit's day");
 
-    assert_eq!(day.committed.agent_added, 40);
-    assert_eq!(day.committed.tab_added, 10);
-    assert_eq!(day.committed.human_added, 20);
-    assert_eq!(day.committed.blank_added, 5);
+    assert_eq!(day.commits.agent_added, 40);
+    assert_eq!(day.commits.tab_added, 10);
+    assert_eq!(day.commits.human_added, 20);
+    assert_eq!(day.commits.blank_added, 5);
     // Whatever the total does not account for is not quietly assigned to anyone.
-    assert_eq!(day.committed.unattributed_added, 25);
-    assert_eq!(day.committed.unattributed_deleted, 3);
+    assert_eq!(day.commits.unattributed_added, 25);
+    assert_eq!(day.commits.unattributed_deleted, 3);
 }
 
 #[test]
@@ -125,7 +135,7 @@ fn a_commit_counted_twice_is_only_counted_once() {
 
     let days = read(&path, 300).unwrap();
 
-    assert_eq!(days["2026-08-24"].committed.agent_added, 30);
+    assert_eq!(days["2026-08-24"].commits.agent_added, 30);
 }
 
 #[test]
@@ -138,8 +148,8 @@ fn a_total_smaller_than_its_parts_does_not_wrap_around() {
 
     let days = read(&path, 300).unwrap();
 
-    assert_eq!(days["2026-08-24"].committed.unattributed_added, 0);
-    assert_eq!(days["2026-08-24"].committed.agent_added, 90);
+    assert_eq!(days["2026-08-24"].commits.unattributed_added, 0);
+    assert_eq!(days["2026-08-24"].commits.agent_added, 90);
 }
 
 #[test]
@@ -150,8 +160,8 @@ fn negative_counts_are_not_believed() {
 
     let days = read(&path, 300).unwrap();
 
-    assert_eq!(days["2026-08-24"].committed.agent_added, 0);
-    assert_eq!(days["2026-08-24"].committed.human_added, 7);
+    assert_eq!(days["2026-08-24"].commits.agent_added, 0);
+    assert_eq!(days["2026-08-24"].commits.human_added, 7);
 }
 
 #[test]
@@ -171,7 +181,7 @@ fn a_commit_with_no_date_is_skipped_rather_than_dated_today() {
     let days = read(&path, 300).unwrap();
 
     assert_eq!(days.len(), 1, "only the dated commit should land");
-    assert_eq!(days["2026-08-24"].committed.agent_added, 5);
+    assert_eq!(days["2026-08-24"].commits.agent_added, 5);
 }
 
 #[test]
@@ -189,11 +199,11 @@ fn generated_lines_are_counted_per_model_and_humans_kept_apart() {
     }
 
     let days = read(&path, 300).unwrap();
-    let generated = &days.values().next().expect("a day").generated;
+    let day = days.values().next().expect("a day");
 
-    assert_eq!(generated.by_model.get("claude-opus"), Some(&7));
-    assert_eq!(generated.by_model.get("gpt-5"), Some(&3));
-    assert_eq!(generated.human, 2);
+    assert_eq!(written(day, Author::Agent, "claude-opus"), 7);
+    assert_eq!(written(day, Author::Agent, "gpt-5"), 3);
+    assert_eq!(written(day, Author::Human, ""), 2);
 }
 
 #[test]
@@ -203,9 +213,11 @@ fn a_model_that_did_not_name_itself_is_recorded_as_unknown() {
     hash(&path, at(0), "composer", "", "rs", "r1");
 
     let days = read(&path, 300).unwrap();
-    let generated = &days.values().next().unwrap().generated;
+    let day = days.values().next().unwrap();
 
-    assert_eq!(generated.by_model.get("unknown"), Some(&1));
+    // A model that did not name itself leaves the model empty rather than
+    // inventing a name, so the lines are still counted as an agent's.
+    assert_eq!(written(day, Author::Agent, ""), 1);
 }
 
 #[test]
@@ -223,10 +235,14 @@ fn work_close_together_is_one_sitting_and_a_gap_starts_another() {
     let days = read(&path, 300).unwrap();
     let day = days.values().next().unwrap();
 
-    assert_eq!(day.agent.sessions, 2, "a twenty minute gap ends a sitting");
+    assert_eq!(
+        day.measure("agent").sessions,
+        2,
+        "a twenty minute gap ends a sitting"
+    );
     // Each sitting is measured from its first moment to its last, so the gap
     // itself is not counted: three minutes plus one.
-    assert_eq!(day.agent.seconds, 240);
+    assert_eq!(day.measure("agent").seconds, 240);
 }
 
 #[test]
@@ -240,8 +256,8 @@ fn a_longer_idle_timeout_joins_what_a_shorter_one_separates() {
     let tight = read(&path, 300).unwrap();
     let loose = read(&path, 1_200).unwrap();
 
-    assert_eq!(tight.values().next().unwrap().agent.sessions, 2);
-    assert_eq!(loose.values().next().unwrap().agent.sessions, 1);
+    assert_eq!(tight.values().next().unwrap().measure("agent").sessions, 2);
+    assert_eq!(loose.values().next().unwrap().measure("agent").sessions, 1);
 }
 
 #[test]
@@ -259,7 +275,7 @@ fn time_is_attributed_to_the_language_being_worked_on_at_the_time() {
     }
 
     let days = read(&path, 300).unwrap();
-    let languages = &days.values().next().unwrap().agent.languages;
+    let languages = &days.values().next().unwrap().measure("agent").languages;
 
     assert_eq!(languages.get("Rust"), Some(&120), "{languages:?}");
     assert_eq!(languages.get("Markdown"), Some(&60), "{languages:?}");
@@ -276,7 +292,7 @@ fn the_moment_that_closes_a_sitting_does_not_claim_time_of_its_own() {
     hash(&path, at(120), "composer", "m", "md", "r1");
 
     let days = read(&path, 300).unwrap();
-    let languages = &days.values().next().unwrap().agent.languages;
+    let languages = &days.values().next().unwrap().measure("agent").languages;
 
     assert_eq!(languages.get("Rust"), Some(&120), "{languages:?}");
     assert_eq!(languages.get("Markdown"), None, "{languages:?}");
@@ -292,7 +308,10 @@ fn a_file_with_no_extension_does_not_lose_the_time_spent_on_it() {
     let days = read(&path, 300).unwrap();
     let day = days.values().next().unwrap();
 
-    assert!(day.agent.seconds > 0, "the time was still worked");
+    assert!(
+        day.measure("agent").seconds > 0,
+        "the time was still worked"
+    );
 }
 
 #[test]

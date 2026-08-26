@@ -14,13 +14,15 @@ use github_personal_stats_core::{
 
 fn worked(date: &str, editor: u64, agent: u64) -> DayBucket {
     let mut day = DayBucket::new(date);
-    day.editor.seconds = editor;
-    day.editor.sessions = 1;
-    day.editor.languages.insert("Rust".to_owned(), editor);
-    day.agent.seconds = agent;
-    day.agent.sessions = 1;
+    day.measure_mut("editor").seconds = editor;
+    day.measure_mut("editor").sessions = 1;
+    day.measure_mut("editor")
+        .languages
+        .insert("Rust".to_owned(), editor);
+    day.measure_mut("agent").seconds = agent;
+    day.measure_mut("agent").sessions = 1;
     day.requests = 3;
-    day.committed = LineCounts {
+    day.commits = LineCounts {
         agent_added: 10,
         human_added: 5,
         ..LineCounts::default()
@@ -87,12 +89,12 @@ fn a_rollup_spans_the_days_and_sums_them() {
     assert_eq!(rollup.last_day, "2026-08-24");
     // The quiet day sits inside the span but is not active work.
     assert_eq!(rollup.active_days, 2);
-    assert_eq!(rollup.editor.seconds, 5_400);
-    assert_eq!(rollup.agent.seconds, 2_700);
-    assert_eq!(rollup.editor.languages.get("Rust"), Some(&5_400));
+    assert_eq!(rollup.measure("editor").seconds, 5_400);
+    assert_eq!(rollup.measure("agent").seconds, 2_700);
+    assert_eq!(rollup.measure("editor").languages.get("Rust"), Some(&5_400));
     assert_eq!(rollup.requests, 6);
-    assert_eq!(rollup.committed.agent_added, 20);
-    assert_eq!(rollup.committed.human_added, 10);
+    assert_eq!(rollup.commits.agent_added, 20);
+    assert_eq!(rollup.commits.human_added, 10);
 }
 
 #[test]
@@ -114,7 +116,7 @@ fn a_manifest_indexes_its_days_and_carries_their_sum() {
 
     assert_eq!(manifest.days, vec!["2026-08-20", "2026-08-24"]);
     let rollup = manifest.rollup.as_ref().expect("a rollup");
-    assert_eq!(rollup.editor.seconds, 5_400);
+    assert_eq!(rollup.measure("editor").seconds, 5_400);
 }
 
 #[test]
@@ -187,9 +189,9 @@ fn a_day_the_source_has_forgotten_keeps_what_it_was_published_with() {
     let held = keep_fuller_days(&published, &fresh);
 
     assert_eq!(held.len(), 1);
-    assert_eq!(held[0].editor.seconds, 7_200);
-    assert_eq!(held[0].agent.seconds, 3_600);
-    assert_eq!(held[0].committed.agent_added, 10);
+    assert_eq!(held[0].measure("editor").seconds, 7_200);
+    assert_eq!(held[0].measure("agent").seconds, 3_600);
+    assert_eq!(held[0].commits.agent_added, 10);
 }
 
 #[test]
@@ -199,10 +201,13 @@ fn a_day_still_being_worked_on_takes_the_larger_reading() {
 
     let held = keep_fuller_days(&published, &fresh);
 
-    assert_eq!(held[0].editor.seconds, 7_200);
-    assert_eq!(held[0].agent.seconds, 5_400);
+    assert_eq!(held[0].measure("editor").seconds, 7_200);
+    assert_eq!(held[0].measure("agent").seconds, 5_400);
     // Per language too, not just the total.
-    assert_eq!(held[0].editor.languages.get("Rust"), Some(&7_200));
+    assert_eq!(
+        held[0].measure("editor").languages.get("Rust"),
+        Some(&7_200)
+    );
 }
 
 #[test]
@@ -214,8 +219,8 @@ fn reading_a_day_twice_does_not_double_it() {
     let twice = keep_fuller_days(&once, &once);
     let thrice = keep_fuller_days(&twice, &once);
 
-    assert_eq!(thrice[0].editor.seconds, 3_600);
-    assert_eq!(thrice[0].committed.agent_added, 10);
+    assert_eq!(thrice[0].measure("editor").seconds, 3_600);
+    assert_eq!(thrice[0].commits.agent_added, 10);
     assert_eq!(thrice[0].requests, 3);
 }
 
@@ -249,6 +254,6 @@ fn a_lifetime_total_survives_the_source_forgetting() {
     let rollup = roll_up(&keep_fuller_days(&published, &fresh)).expect("two days roll up");
 
     assert_eq!(rollup.first_day, "2026-05-12");
-    assert_eq!(rollup.editor.seconds, 10_800);
+    assert_eq!(rollup.measure("editor").seconds, 10_800);
     assert_eq!(rollup.active_days, 2);
 }

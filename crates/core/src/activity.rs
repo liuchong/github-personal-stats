@@ -4,10 +4,123 @@ use serde::{Deserialize, Serialize};
 
 use crate::{CodingActivityEntry, GithubStatsError};
 
-pub const ACTIVITY_SCHEMA: u32 = 1;
+pub const ACTIVITY_SCHEMA: u32 = 2;
 
 const DATE_LENGTH: usize = 10;
 const TIMESTAMP_LENGTH: usize = 20;
+
+/// Time an agent spent changing code, derived from the editor's own record of
+/// what it generated.
+pub const MEASURE_AGENT: &str = "agent";
+
+/// Time the editor was being worked in, reported by editor plugins.
+pub const MEASURE_EDITOR: &str = "editor";
+
+/// A total carried in from another tracker. Named separately because such a total
+/// generally counts agent work too, so it overlaps `agent` rather than
+/// complementing it.
+pub const MEASURE_IMPORTED: &str = "imported";
+
+/// Stands in for a language the source did not name.
+pub const UNKNOWN_LANGUAGE: &str = "";
+
+/// Who wrote a line.
+///
+/// This is the only split in the record that is exact. Two measures of time can
+/// cover the same minute, so time cannot be divided between an agent and a
+/// person; a line has one author and can.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Author {
+    Agent,
+    Human,
+}
+
+impl Author {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Agent => "agent",
+            Self::Human => "human",
+        }
+    }
+}
+
+/// One fact about lines written: in what language, by whom, and with which model.
+///
+/// The record keeps lines at this grain rather than pre-summed by language or by
+/// model, because which of those a reader wants is not knowable when collecting.
+/// Every breakdown the cards draw — by language, by model, by author, or by any
+/// pair of those — is a fold over these, so a new breakdown needs no new field
+/// and no new collection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LineFact {
+    /// Empty when the source counted lines without saying what they were.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub language: String,
+    pub author: Author,
+    /// Empty for a person's lines, and for an agent whose model went unrecorded.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub model: String,
+    #[serde(default)]
+    pub added: u64,
+    #[serde(default)]
+    pub deleted: u64,
+}
+
+impl LineFact {
+    pub fn new(language: impl Into<String>, author: Author, model: impl Into<String>) -> Self {
+        Self {
+            language: language.into(),
+            author,
+            model: model.into(),
+            added: 0,
+            deleted: 0,
+        }
+    }
+
+    /// What makes two facts the same fact. Folding and merging both key on this.
+    fn key(&self) -> (&str, Author, &str) {
+        (&self.language, self.author, &self.model)
+    }
+
+    pub fn total(&self) -> u64 {
+        self.added + self.deleted
+    }
+}
+
+/// Tokens spent on one model. Collected where a source reports them; agents that
+/// do not report tokens simply have none.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TokenUsage {
+    pub input: u64,
+    pub output: u64,
+    pub cached: u64,
+}
+
+impl TokenUsage {
+    pub fn total(&self) -> u64 {
+        self.input + self.output + self.cached
+    }
+
+    /// Tokens that were paid for, which is everything the cache did not serve.
+    pub fn billed(&self) -> u64 {
+        self.input + self.output
+    }
+
+    pub(crate) fn absorb(&mut self, other: &Self) {
+        self.input += other.input;
+        self.output += other.output;
+        self.cached += other.cached;
+    }
+
+    pub(crate) fn keep_fuller(&mut self, other: &Self) {
+        self.input = self.input.max(other.input);
+        self.output = self.output.max(other.output);
+        self.cached = self.cached.max(other.cached);
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -102,20 +215,23 @@ impl LineCounts {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Lines in one language, split by who wrote them.
+///
+/// This is a narrower question than `LineCounts` answers. That one describes what
+/// landed in a commit and can say "nobody is sure who wrote this"; this one
+/// describes what the editor watched being typed or generated, where the author
+/// is known by construction. Keeping them apart means a card can show a split it
+/// is confident about without borrowing the commit record's uncertainty.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct GeneratedLines {
-    pub by_model: BTreeMap<String, u64>,
+pub struct LanguageLines {
+    pub agent: u64,
     pub human: u64,
 }
 
-impl GeneratedLines {
-    pub fn by_agent(&self) -> u64 {
-        self.by_model.values().sum()
-    }
-
+impl LanguageLines {
     pub fn total(&self) -> u64 {
-        self.by_agent() + self.human
+        self.agent + self.human
     }
 
     pub fn ai_share_basis_points(&self) -> u32 {
@@ -123,23 +239,122 @@ impl GeneratedLines {
         if total == 0 {
             return 0;
         }
-        u32::try_from(self.by_agent().saturating_mul(10_000) / total).unwrap_or(10_000)
+        u32::try_from(self.agent.saturating_mul(10_000) / total).unwrap_or(10_000)
     }
+}
 
-    pub(crate) fn absorb(&mut self, other: &Self) {
-        self.human += other.human;
-        for (model, lines) in &other.by_model {
-            *self.by_model.entry(model.clone()).or_default() += lines;
+/// Line facts folded up, every field a different fold over the same entries.
+///
+/// This is a result rather than a stored shape. Nothing writes it to a file; it
+/// exists so a caller can ask one question of a span of days without walking the
+/// facts itself, and so that adding a new question means adding a field here
+/// rather than a field to every day on record.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LineTotals {
+    pub by_model: BTreeMap<String, u64>,
+    pub by_language: BTreeMap<String, LanguageLines>,
+    pub agent: u64,
+    pub human: u64,
+    pub added: u64,
+    pub deleted: u64,
+}
+
+impl LineTotals {
+    /// Folds the facts of one day in.
+    pub fn absorb_facts(&mut self, facts: &[LineFact]) {
+        for fact in facts {
+            let total = fact.total();
+            self.added += fact.added;
+            self.deleted += fact.deleted;
+            let language = self.by_language.entry(fact.language.clone()).or_default();
+            match fact.author {
+                Author::Agent => {
+                    self.agent += total;
+                    language.agent += total;
+                    if !fact.model.is_empty() {
+                        *self.by_model.entry(fact.model.clone()).or_default() += total;
+                    }
+                }
+                Author::Human => {
+                    self.human += total;
+                    language.human += total;
+                }
+            }
         }
     }
 
-    /// Keeps whichever reading saw more of the day.
-    pub(crate) fn keep_fuller(&mut self, other: &Self) {
-        self.human = self.human.max(other.human);
-        for (model, lines) in &other.by_model {
-            let held = self.by_model.entry(model.clone()).or_default();
-            *held = (*held).max(*lines);
+    pub fn total(&self) -> u64 {
+        self.agent + self.human
+    }
+
+    pub fn ai_share_basis_points(&self) -> u32 {
+        let total = self.total();
+        if total == 0 {
+            return 0;
         }
+        u32::try_from(self.agent.saturating_mul(10_000) / total).unwrap_or(10_000)
+    }
+
+    /// Models that wrote anything, largest first.
+    pub fn models(&self) -> Vec<(&str, u64)> {
+        rank(
+            self.by_model
+                .iter()
+                .map(|(model, lines)| (model.as_str(), *lines))
+                .collect(),
+        )
+    }
+}
+
+/// A day as the first schema wrote it, read only so it can be brought forward.
+///
+/// The record accumulates over years and outlives the shape it was first written
+/// in, so an old day file has to keep meaning something. This is that promise
+/// kept: the fields the first schema had, and the one conversion into the fields
+/// the current one has.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LegacyDay {
+    pub date: String,
+    pub editor: TimeBucket,
+    pub agent: TimeBucket,
+    pub committed: LineCounts,
+    pub generated: LegacyGenerated,
+    pub requests: u32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LegacyGenerated {
+    pub by_model: BTreeMap<String, u64>,
+    pub human: u64,
+}
+
+impl LegacyDay {
+    /// Brings a first-schema day forward.
+    ///
+    /// The old shape counted an agent's lines per model and a person's lines as
+    /// one number, neither of them by language, so the facts this produces carry
+    /// no language. That is the truth about those days rather than a shortcoming
+    /// of the conversion: the language was never recorded, and guessing one would
+    /// put a figure in the record that nothing measured.
+    pub fn bring_forward(self) -> DayBucket {
+        let mut day = DayBucket::new(self.date);
+        if self.editor != TimeBucket::default() {
+            *day.measure_mut(MEASURE_EDITOR) = self.editor;
+        }
+        if self.agent != TimeBucket::default() {
+            *day.measure_mut(MEASURE_AGENT) = self.agent;
+        }
+        day.commits = self.committed;
+        day.requests = self.requests;
+        for (model, lines) in self.generated.by_model {
+            day.add_lines(UNKNOWN_LANGUAGE, Author::Agent, &model, lines, 0);
+        }
+        if self.generated.human > 0 {
+            day.add_lines(UNKNOWN_LANGUAGE, Author::Human, "", self.generated.human, 0);
+        }
+        day
     }
 }
 
@@ -178,17 +393,24 @@ impl TimeBucket {
 #[serde(rename_all = "camelCase")]
 pub struct DayBucket {
     pub date: String,
-    /// Time the editor was being worked in, reported by editor plugins.
+    /// Measures of time, by name. Kept as a map rather than as fields because
+    /// which measures exist depends on what is installed where the work happened,
+    /// and because two of them can cover the same minute — an agent changing code
+    /// while its operator watches is both agent time and editor time. Nothing
+    /// sums across this map.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub time: BTreeMap<String, TimeBucket>,
+    /// Lines written, one entry per language, author, and model. Kept sorted with
+    /// one entry per distinct triple.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<LineFact>,
+    /// What landed in commits, which unlike `lines` can be honest about not
+    /// knowing who wrote something.
     #[serde(default)]
-    pub editor: TimeBucket,
-    /// Time in which an agent was changing code, derived from the editor's own
-    /// record of what it generated.
-    #[serde(default)]
-    pub agent: TimeBucket,
-    #[serde(default)]
-    pub committed: LineCounts,
-    #[serde(default)]
-    pub generated: GeneratedLines,
+    pub commits: LineCounts,
+    /// Tokens by model, where a source reports them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tokens: BTreeMap<String, TokenUsage>,
     #[serde(default)]
     pub requests: u32,
 }
@@ -202,18 +424,69 @@ impl DayBucket {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.editor.seconds == 0
-            && self.agent.seconds == 0
-            && self.committed.changed() == 0
-            && self.generated.total() == 0
+        self.time.values().all(|bucket| bucket.seconds == 0)
+            && self.lines.is_empty()
+            && self.commits.changed() == 0
+            && self.tokens.is_empty()
+    }
+
+    /// The named measure, or an empty one. Reading a measure a machine never
+    /// collected is an ordinary thing to do, not a mistake.
+    pub fn measure(&self, name: &str) -> TimeBucket {
+        self.time.get(name).cloned().unwrap_or_default()
+    }
+
+    pub fn measure_mut(&mut self, name: &str) -> &mut TimeBucket {
+        self.time.entry(name.to_owned()).or_default()
+    }
+
+    /// Adds to the fact for this language, author, and model, creating it if this
+    /// is the first time the triple has been seen.
+    pub fn add_lines(
+        &mut self,
+        language: &str,
+        author: Author,
+        model: &str,
+        added: u64,
+        deleted: u64,
+    ) {
+        let key = (language, author, model);
+        match self.lines.binary_search_by(|fact| fact.key().cmp(&key)) {
+            Ok(index) => {
+                self.lines[index].added += added;
+                self.lines[index].deleted += deleted;
+            }
+            Err(index) => self.lines.insert(
+                index,
+                LineFact {
+                    language: language.to_owned(),
+                    author,
+                    model: model.to_owned(),
+                    added,
+                    deleted,
+                },
+            ),
+        }
     }
 
     pub(crate) fn absorb(&mut self, other: &Self) {
-        self.editor.absorb(&other.editor);
-        self.agent.absorb(&other.agent);
+        for (name, bucket) in &other.time {
+            self.measure_mut(name).absorb(bucket);
+        }
         self.requests += other.requests;
-        self.committed.absorb(&other.committed);
-        self.generated.absorb(&other.generated);
+        self.commits.absorb(&other.commits);
+        for (model, usage) in &other.tokens {
+            self.tokens.entry(model.clone()).or_default().absorb(usage);
+        }
+        for fact in &other.lines {
+            self.add_lines(
+                &fact.language,
+                fact.author,
+                &fact.model,
+                fact.added,
+                fact.deleted,
+            );
+        }
     }
 
     /// Combines two readings of the same day, keeping the fuller one field by
@@ -237,11 +510,27 @@ impl DayBucket {
     /// old larger figure outranks it. Such a change needs the day files deleted
     /// rather than rewritten.
     pub fn keep_fuller(&mut self, other: &Self) {
-        self.editor.keep_fuller(&other.editor);
-        self.agent.keep_fuller(&other.agent);
+        for (name, bucket) in &other.time {
+            self.measure_mut(name).keep_fuller(bucket);
+        }
         self.requests = self.requests.max(other.requests);
-        self.committed.keep_fuller(&other.committed);
-        self.generated.keep_fuller(&other.generated);
+        self.commits.keep_fuller(&other.commits);
+        for (model, usage) in &other.tokens {
+            self.tokens
+                .entry(model.clone())
+                .or_default()
+                .keep_fuller(usage);
+        }
+        for fact in &other.lines {
+            let key = fact.key();
+            match self.lines.binary_search_by(|held| held.key().cmp(&key)) {
+                Ok(index) => {
+                    self.lines[index].added = self.lines[index].added.max(fact.added);
+                    self.lines[index].deleted = self.lines[index].deleted.max(fact.deleted);
+                }
+                Err(index) => self.lines.insert(index, fact.clone()),
+            }
+        }
     }
 }
 
@@ -362,18 +651,56 @@ pub struct ActivityTotals {
     pub first_day: Option<String>,
     pub last_day: Option<String>,
     pub active_days: u32,
-    pub editor: MeasureTotals,
-    pub agent: MeasureTotals,
-    pub committed: LineCounts,
-    pub generated: GeneratedLines,
-    pub models: Vec<ModelUsage>,
+    /// Every measure the days carried, by name. A reader shows the ones it finds
+    /// rather than the ones it was built expecting.
+    pub time: BTreeMap<String, MeasureTotals>,
+    pub commits: LineCounts,
+    pub lines: LineTotals,
+    pub tokens: BTreeMap<String, TokenUsage>,
     pub requests: u32,
 }
 
+impl ActivityTotals {
+    pub fn measure(&self, name: &str) -> MeasureTotals {
+        self.time.get(name).cloned().unwrap_or_default()
+    }
+
+    /// Measures that recorded anything, longest first.
+    pub fn measures(&self) -> Vec<(&str, &MeasureTotals)> {
+        let mut ranked = self
+            .time
+            .iter()
+            .filter(|(_, totals)| totals.seconds > 0)
+            .map(|(name, totals)| (name.as_str(), totals))
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| {
+            right
+                .1
+                .seconds
+                .cmp(&left.1.seconds)
+                .then_with(|| left.0.cmp(right.0))
+        });
+        ranked
+    }
+
+    pub fn models(&self) -> Vec<ModelUsage> {
+        self.lines
+            .models()
+            .into_iter()
+            .map(|(name, lines)| ModelUsage {
+                name: name.to_owned(),
+                lines,
+            })
+            .collect()
+    }
+
+    pub fn tokens_billed(&self) -> u64 {
+        self.tokens.values().map(TokenUsage::billed).sum()
+    }
+}
+
 pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
-    let mut editor_languages = BTreeMap::<&str, u64>::new();
-    let mut agent_languages = BTreeMap::<&str, u64>::new();
-    let mut models = BTreeMap::<&str, u64>::new();
+    let mut languages = BTreeMap::<String, BTreeMap<String, u64>>::new();
     let mut totals = ActivityTotals::default();
 
     for day in days {
@@ -381,65 +708,53 @@ pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
             totals.active_days += 1;
         }
         totals.requests += day.requests;
-        totals.committed.absorb(&day.committed);
-        totals.generated.absorb(&day.generated);
-        gather(
-            &day.editor,
-            &day.date,
-            &mut totals.editor,
-            &mut editor_languages,
-        );
-        gather(
-            &day.agent,
-            &day.date,
-            &mut totals.agent,
-            &mut agent_languages,
-        );
-        for (model, lines) in &day.generated.by_model {
-            *models.entry(model.as_str()).or_default() += lines;
+        totals.commits.absorb(&day.commits);
+        totals.lines.absorb_facts(&day.lines);
+        for (model, usage) in &day.tokens {
+            totals
+                .tokens
+                .entry(model.clone())
+                .or_default()
+                .absorb(usage);
+        }
+        for (name, bucket) in &day.time {
+            let measure = totals.time.entry(name.clone()).or_default();
+            measure.seconds += bucket.seconds;
+            measure.sessions += bucket.sessions;
+            measure
+                .daily_seconds
+                .push((day.date.clone(), bucket.seconds));
+            let held = languages.entry(name.clone()).or_default();
+            for (language, seconds) in &bucket.languages {
+                *held.entry(language.clone()).or_default() += seconds;
+            }
         }
     }
 
     totals.first_day = days.first().map(|day| day.date.clone());
     totals.last_day = days.last().map(|day| day.date.clone());
-    totals.editor.languages = entries(editor_languages);
-    totals.agent.languages = entries(agent_languages);
-    totals.models = rank(models)
-        .into_iter()
-        .map(|(name, lines)| ModelUsage {
-            name: name.to_string(),
-            lines,
-        })
-        .collect();
+    for (name, counts) in languages {
+        if let Some(measure) = totals.time.get_mut(&name) {
+            measure.languages = rank(
+                counts
+                    .iter()
+                    .map(|(language, seconds)| (language.as_str(), *seconds))
+                    .collect(),
+            )
+            .into_iter()
+            .map(|(language, seconds)| CodingActivityEntry {
+                language: language.to_owned(),
+                seconds,
+            })
+            .collect();
+        }
+    }
     totals
 }
 
-fn gather<'day>(
-    bucket: &'day TimeBucket,
-    date: &str,
-    totals: &mut MeasureTotals,
-    languages: &mut BTreeMap<&'day str, u64>,
-) {
-    totals.seconds += bucket.seconds;
-    totals.sessions += bucket.sessions;
-    totals.daily_seconds.push((date.to_owned(), bucket.seconds));
-    for (language, seconds) in &bucket.languages {
-        *languages.entry(language.as_str()).or_default() += seconds;
-    }
-}
-
-fn entries(counts: BTreeMap<&str, u64>) -> Vec<CodingActivityEntry> {
-    rank(counts)
-        .into_iter()
-        .map(|(language, seconds)| CodingActivityEntry {
-            language: language.to_string(),
-            seconds,
-        })
-        .collect()
-}
-
-fn rank(counts: BTreeMap<&str, u64>) -> Vec<(&str, u64)> {
-    let mut ranked = counts.into_iter().collect::<Vec<_>>();
+/// Largest first, ties broken by name so the order is the same on every run.
+fn rank(counts: Vec<(&str, u64)>) -> Vec<(&str, u64)> {
+    let mut ranked = counts;
     ranked.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
     ranked
 }

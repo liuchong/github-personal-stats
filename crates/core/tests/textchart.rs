@@ -1,0 +1,370 @@
+//! Laying out a chart in characters.
+//!
+//! These tests are mostly about alignment, which is the one thing a text chart
+//! cannot be approximately right about: it will be read in a monospace font, and
+//! a column that is a character short in one row makes the whole block look
+//! broken. So they check column positions rather than just the presence of words.
+
+use github_personal_stats_core::{
+    ActivityMeasure, ActivitySpan, Author, BarGlyphs, ChartBlock, ChartRow, ChartRows, ChartStyle,
+    ChartSummary, ChartValue, Column, DayBucket, MEASURE_AGENT, build_blocks, compare_activity,
+    default_blocks, parse_blocks, render_text_chart,
+};
+
+fn block() -> ChartBlock {
+    ChartBlock::new("TIME  BY LANGUAGE")
+        .with_summary(ChartSummary::new("Total", "91 hrs 46 mins", "last 30 days"))
+        .with_rows(
+            vec![
+                ChartRow::new("Markdown", "45 hrs 23 mins", 163_380),
+                ChartRow::new("Go", "41 hrs 13 mins", 148_380),
+                ChartRow::new("TypeScript", "5 hrs 10 mins", 18_600),
+            ],
+            330_360,
+        )
+}
+
+/// The column positions of every non-space run in a line, which is what a reader
+/// actually perceives as alignment.
+fn columns(line: &str) -> Vec<usize> {
+    let mut starts = Vec::new();
+    let mut inside = false;
+    for (index, character) in line.chars().enumerate() {
+        if character == ' ' {
+            inside = false;
+        } else if !inside {
+            starts.push(index);
+            inside = true;
+        }
+    }
+    starts
+}
+
+#[test]
+fn every_row_puts_its_columns_in_the_same_place() {
+    let text = render_text_chart(&[block()], &ChartStyle::default());
+    let rows = text
+        .lines()
+        .filter(|line| {
+            line.starts_with("Markdown") || line.starts_with("Go") || line.starts_with("TypeScript")
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(rows.len(), 3, "{text}");
+
+    // The bar and the share start at the same offset in all three rows, which is
+    // only true if the name and value columns were padded to their widest cell.
+    let first = columns(rows[0]);
+    for row in &rows[1..] {
+        let held = columns(row);
+        assert_eq!(
+            held.last(),
+            first.last(),
+            "the share column moved between rows\n{text}"
+        );
+    }
+}
+
+#[test]
+fn a_long_name_widens_the_column_for_every_row() {
+    let narrow = render_text_chart(&[block()], &ChartStyle::default());
+    let mut wider = block();
+    wider.rows[0].name = "ProtocolBuffersDefinition".to_owned();
+    let wide = render_text_chart(&[wider], &ChartStyle::default());
+
+    let narrow_go = narrow.lines().find(|line| line.starts_with("Go")).unwrap();
+    let wide_go = wide.lines().find(|line| line.starts_with("Go")).unwrap();
+
+    assert!(
+        wide_go.len() > narrow_go.len(),
+        "a longer name in one row has to push every row's later columns right\n{wide}"
+    );
+}
+
+#[test]
+fn values_line_up_on_their_last_digit() {
+    let text = render_text_chart(&[block()], &ChartStyle::default());
+    let lines = text
+        .lines()
+        .filter(|line| line.contains("hrs"))
+        .collect::<Vec<_>>();
+
+    let ends = lines
+        .iter()
+        .map(|line| line.find("hrs").unwrap() + 3)
+        .collect::<Vec<_>>();
+
+    assert!(
+        ends.windows(2).all(|pair| pair[0] == pair[1]),
+        "durations must be right aligned so the hours sit above each other\n{text}"
+    );
+}
+
+#[test]
+fn a_bar_is_as_long_as_the_row_is_large() {
+    let style = ChartStyle {
+        bar_cells: 10,
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[block()], &style);
+    let leader = text.lines().find(|line| line.contains("Markdown")).unwrap();
+    let smallest = text
+        .lines()
+        .find(|line| line.contains("TypeScript"))
+        .unwrap();
+
+    assert_eq!(
+        leader.matches('#').count(),
+        10,
+        "the largest row fills the bar\n{text}"
+    );
+    assert!(
+        smallest.matches('#').count() <= 2,
+        "a row an eighth the size of the leader gets about an eighth of the bar\n{text}"
+    );
+}
+
+#[test]
+fn a_divided_row_shows_the_split_inside_its_bar() {
+    let divided = ChartBlock::new("LINES  BY LANGUAGE").with_rows(
+        vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
+        1_000,
+    );
+    let style = ChartStyle {
+        bar_cells: 20,
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[divided], &style);
+
+    assert!(text.contains("###############====="), "{text}");
+    // The legend only appears when something was actually divided, so a chart of
+    // durations is not annotated with a split it does not have.
+    assert!(text.contains("# agent"), "{text}");
+    assert!(!render_text_chart(&[block()], &style).contains("# agent"));
+}
+
+#[test]
+fn the_bar_characters_are_a_choice() {
+    let style = ChartStyle {
+        glyphs: BarGlyphs::parse(">~-").unwrap(),
+        bar_cells: 8,
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[block()], &style);
+
+    assert!(text.contains(">>>>>>>>"), "{text}");
+    assert!(!text.contains('#'), "{text}");
+}
+
+#[test]
+fn two_characters_are_accepted_for_a_chart_with_nothing_to_divide() {
+    let glyphs = BarGlyphs::parse("*.").unwrap();
+
+    assert_eq!(glyphs.primary, '*');
+    assert_eq!(glyphs.secondary, '*');
+    assert_eq!(glyphs.empty, '.');
+}
+
+#[test]
+fn one_character_is_not_enough_to_draw_a_bar_with() {
+    assert!(BarGlyphs::parse("#").is_err());
+}
+
+#[test]
+fn columns_can_be_dropped_and_reordered() {
+    let style = ChartStyle {
+        columns: vec![Column::Bar, Column::Name],
+        bar_cells: 5,
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[block()], &style);
+    let leader = text.lines().find(|line| line.contains("Markdown")).unwrap();
+
+    assert!(leader.starts_with("#####"), "{text}");
+    assert!(
+        !text.contains('%'),
+        "a dropped column leaves nothing behind\n{text}"
+    );
+    assert!(!text.contains("hrs"), "{text}");
+}
+
+#[test]
+fn a_block_with_no_rows_says_so_rather_than_drawing_nothing() {
+    let text = render_text_chart(
+        &[ChartBlock::new("TOKENS  BY MODEL")],
+        &ChartStyle::default(),
+    );
+
+    assert!(text.contains("TOKENS  BY MODEL"), "{text}");
+    assert!(text.contains("nothing recorded"), "{text}");
+}
+
+#[test]
+fn a_spec_reads_as_a_value_a_dimension_and_its_settings() {
+    let blocks = parse_blocks("time/languages,limit=3;lines/models,title=Models").unwrap();
+
+    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks[0].value, ChartValue::Time);
+    assert_eq!(blocks[0].rows, ChartRows::Languages);
+    assert_eq!(blocks[0].limit, 3);
+    assert_eq!(blocks[1].title, "Models");
+}
+
+#[test]
+fn a_spec_that_names_nothing_real_is_refused_rather_than_ignored() {
+    assert!(parse_blocks("time").is_err(), "a spec needs a dimension");
+    assert!(parse_blocks("hours/languages").is_err(), "unknown value");
+    assert!(parse_blocks("time/files").is_err(), "unknown dimension");
+    assert!(parse_blocks("time/languages,limit=lots").is_err());
+    assert!(parse_blocks("time/languages,depth=2").is_err());
+}
+
+#[test]
+fn the_blocks_a_record_can_fill_are_folded_from_its_facts() {
+    let mut day = DayBucket::new("2026-08-25");
+    {
+        let bucket = day.measure_mut(MEASURE_AGENT);
+        bucket.seconds = 7_200;
+        bucket.sessions = 2;
+        bucket.languages.insert("Rust".to_owned(), 5_400);
+        bucket.languages.insert("Markdown".to_owned(), 1_800);
+    }
+    day.add_lines("Rust", Author::Agent, "gpt-5.6", 800, 0);
+    day.add_lines("Rust", Author::Human, "", 200, 0);
+    day.add_lines("Markdown", Author::Agent, "claude-opus-5", 300, 0);
+
+    let comparison = compare_activity(
+        &[day],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-08-25"),
+        10,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(&comparison, &default_blocks()),
+        &ChartStyle::default(),
+    );
+
+    assert!(text.contains("TIME  BY LANGUAGE"), "{text}");
+    assert!(text.contains("2 hrs 0 mins"), "{text}");
+    assert!(text.contains("LINES  BY AUTHOR"), "{text}");
+    // Eleven hundred agent lines against two hundred of mine.
+    assert!(text.contains("1,100"), "{text}");
+    assert!(text.contains("LINES  BY MODEL"), "{text}");
+    assert!(text.contains("gpt-5.6"), "{text}");
+}
+
+#[test]
+fn a_language_block_of_lines_divides_each_bar_by_author() {
+    let mut day = DayBucket::new("2026-08-25");
+    day.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    day.add_lines("Rust", Author::Agent, "gpt-5.6", 600, 0);
+    day.add_lines("Rust", Author::Human, "", 400, 0);
+
+    let comparison = compare_activity(
+        &[day],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-08-25"),
+        10,
+        &[],
+    );
+    let blocks = parse_blocks("lines/languages").unwrap();
+    let text = render_text_chart(&build_blocks(&comparison, &blocks), &ChartStyle::default());
+
+    // Sixty percent of a full bar in the primary glyph, the rest in the second.
+    assert!(text.contains("###############=========="), "{text}");
+}
+
+#[test]
+fn a_block_whose_data_was_never_recorded_stays_empty_rather_than_guessing() {
+    let mut day = DayBucket::new("2026-08-25");
+    day.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    day.add_lines("Rust", Author::Agent, "gpt-5.6", 600, 0);
+
+    let comparison = compare_activity(
+        &[day],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-08-25"),
+        10,
+        &[],
+    );
+    let blocks = parse_blocks("tokens/models").unwrap();
+    let text = render_text_chart(&build_blocks(&comparison, &blocks), &ChartStyle::default());
+
+    assert!(text.contains("nothing recorded"), "{text}");
+}
+
+#[test]
+fn the_total_lines_up_with_the_figures_it_totals() {
+    let text = render_text_chart(&[block()], &ChartStyle::default());
+    let total = text.lines().find(|line| line.starts_with("Total")).unwrap();
+    let row = text
+        .lines()
+        .find(|line| line.starts_with("Markdown"))
+        .unwrap();
+
+    assert_eq!(
+        total.find("hrs").map(|at| at + 3),
+        row.find("hrs").map(|at| at + 3),
+        "the total's duration must sit above the rows' durations\n{text}"
+    );
+}
+
+#[test]
+fn a_long_note_on_the_total_does_not_move_the_percentages() {
+    let tight = render_text_chart(&[block()], &ChartStyle::default());
+    let mut wordy = block();
+    wordy.summary = Some(ChartSummary::new(
+        "Total",
+        "91 hrs 46 mins",
+        "last 30 days, 30 of 30 days, on two machines",
+    ));
+    let loose = render_text_chart(&[wordy], &ChartStyle::default());
+
+    let percent_at = |text: &str| {
+        text.lines()
+            .find(|line| line.starts_with("Markdown"))
+            .and_then(|line| line.find('%'))
+    };
+
+    assert_eq!(
+        percent_at(&tight),
+        percent_at(&loose),
+        "a sentence on the total line is not part of the table\n{loose}"
+    );
+}
+
+#[test]
+fn a_blocks_total_is_the_total_of_what_it_shows() {
+    let mut day = DayBucket::new("2026-08-25");
+    day.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    day.add_lines("Rust", Author::Agent, "gpt-5.6", 900, 0);
+    day.add_lines("Rust", Author::Human, "", 100, 0);
+
+    let comparison = compare_activity(
+        &[day],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-08-25"),
+        10,
+        &[],
+    );
+    let by_author = render_text_chart(
+        &build_blocks(&comparison, &parse_blocks("lines/authors").unwrap()),
+        &ChartStyle::default(),
+    );
+    let by_model = render_text_chart(
+        &build_blocks(&comparison, &parse_blocks("lines/models").unwrap()),
+        &ChartStyle::default(),
+    );
+
+    // Everyone wrote a thousand lines; the models wrote nine hundred of them. A
+    // block that totalled the wrong one would make its own percentages read wrong.
+    assert!(by_author.contains("Total   1,000"), "{by_author}");
+    assert!(by_model.contains("Total"), "{by_model}");
+    assert!(by_model.contains("900"), "{by_model}");
+    assert!(!by_model.contains("1,000"), "{by_model}");
+}

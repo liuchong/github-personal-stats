@@ -9,7 +9,7 @@ use github_personal_stats_collect::{
     presence, pulse, records,
     sink::{self, Sink},
 };
-use github_personal_stats_core::summarise_activity;
+use github_personal_stats_core::{MEASURE_AGENT, MEASURE_EDITOR, summarise_activity};
 use github_personal_stats_daemon::{
     DEFAULT_ADDRESS, DEFAULT_INTERVAL_MINUTES, Daemon, service, status, token,
 };
@@ -163,8 +163,8 @@ fn status(args: &[String], settings: &Settings, prefs: &Preferences) -> Result<(
             let totals = summarise_activity(&days);
             status::Collected {
                 days: days.len(),
-                agent_seconds: totals.agent.seconds,
-                editor_seconds: totals.editor.seconds,
+                agent_seconds: totals.measure(MEASURE_AGENT).seconds,
+                editor_seconds: totals.measure(MEASURE_EDITOR).seconds,
             }
         });
 

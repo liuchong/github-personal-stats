@@ -1,5 +1,5 @@
 use github_personal_stats_core::{
-    ACTIVITY_SCHEMA, ActivitySnapshot, DayBucket, LineCounts, merge_snapshots,
+    ACTIVITY_SCHEMA, ActivitySnapshot, Author, DayBucket, LineCounts, merge_snapshots,
     parse_activity_snapshot, summarise_activity, write_activity_snapshot,
 };
 
@@ -7,7 +7,7 @@ use github_personal_stats_core::{
 /// tell us. Editor time arrives separately, from the plugins.
 fn day(date: &str, seconds: u64) -> DayBucket {
     let mut bucket = DayBucket::new(date);
-    bucket.agent.seconds = seconds;
+    bucket.measure_mut("agent").seconds = seconds;
     bucket
 }
 
@@ -15,6 +15,24 @@ fn snapshot(machine: &str, collected_at: &str, days: Vec<DayBucket>) -> Activity
     let mut snapshot = ActivitySnapshot::new(machine, collected_at);
     snapshot.days = days;
     snapshot
+}
+
+/// Sums a day's facts for one model, whatever languages they fell in.
+fn lines_by_model(day: &DayBucket, model: &str) -> u64 {
+    day.lines
+        .iter()
+        .filter(|fact| fact.model == model)
+        .map(|fact| fact.total())
+        .sum()
+}
+
+/// Sums a day's facts for one author.
+fn lines_by_author(day: &DayBucket, author: Author) -> u64 {
+    day.lines
+        .iter()
+        .filter(|fact| fact.author == author)
+        .map(|fact| fact.total())
+        .sum()
 }
 
 #[test]
@@ -33,7 +51,7 @@ fn two_machines_working_the_same_day_add_up() {
     let merged = merge_snapshots(&[laptop, desktop]);
 
     assert_eq!(merged.len(), 1);
-    assert_eq!(merged[0].agent.seconds, 5400);
+    assert_eq!(merged[0].measure("agent").seconds, 5400);
 }
 
 #[test]
@@ -52,7 +70,7 @@ fn collecting_twice_on_one_machine_still_counts_the_day_once() {
     let merged = merge_snapshots(&[first, second]);
 
     assert_eq!(merged.len(), 1);
-    assert_eq!(merged[0].agent.seconds, 5400);
+    assert_eq!(merged[0].measure("agent").seconds, 5400);
 }
 
 #[test]
@@ -71,8 +89,8 @@ fn a_stale_copy_of_a_machine_loses_to_the_fresher_one_whichever_order_it_arrives
     let forwards = merge_snapshots(&[stale.clone(), fresh.clone()]);
     let backwards = merge_snapshots(&[fresh, stale]);
 
-    assert_eq!(forwards[0].agent.seconds, 7200);
-    assert_eq!(backwards[0].agent.seconds, 7200);
+    assert_eq!(forwards[0].measure("agent").seconds, 7200);
+    assert_eq!(backwards[0].measure("agent").seconds, 7200);
 }
 
 #[test]
@@ -100,62 +118,65 @@ fn merged_days_come_back_in_date_order() {
 #[test]
 fn languages_models_and_lines_all_add_up_across_machines() {
     let mut morning = day("2026-08-24", 600);
-    morning.agent.languages.insert("Rust".to_string(), 600);
     morning
-        .generated
-        .by_model
-        .insert("composer-2.5".to_string(), 40);
-    morning.committed.agent_added = 40;
+        .measure_mut("agent")
+        .languages
+        .insert("Rust".to_string(), 600);
+    morning.add_lines("", Author::Agent, "composer-2.5", 40, 0);
+    morning.commits.agent_added = 40;
 
     let mut evening = day("2026-08-24", 300);
-    evening.agent.languages.insert("Rust".to_string(), 100);
-    evening.agent.languages.insert("Markdown".to_string(), 200);
     evening
-        .generated
-        .by_model
-        .insert("composer-2.5".to_string(), 10);
-    evening.generated.human = 5;
-    evening.committed.human_added = 5;
+        .measure_mut("agent")
+        .languages
+        .insert("Rust".to_string(), 100);
+    evening
+        .measure_mut("agent")
+        .languages
+        .insert("Markdown".to_string(), 200);
+    evening.add_lines("", Author::Agent, "composer-2.5", 10, 0);
+    evening.add_lines("", Author::Human, "", 5, 0);
+    evening.commits.human_added = 5;
 
     let merged = merge_snapshots(&[
         snapshot("m-laptop", "2026-08-24T19:00:00Z", vec![morning]),
         snapshot("m-desktop", "2026-08-24T19:00:00Z", vec![evening]),
     ]);
 
-    assert_eq!(merged[0].agent.languages["Rust"], 700);
-    assert_eq!(merged[0].agent.languages["Markdown"], 200);
-    assert_eq!(merged[0].generated.by_model["composer-2.5"], 50);
-    assert_eq!(merged[0].generated.human, 5);
-    assert_eq!(merged[0].committed.agent_added, 40);
-    assert_eq!(merged[0].committed.human_added, 5);
+    assert_eq!(merged[0].measure("agent").languages["Rust"], 700);
+    assert_eq!(merged[0].measure("agent").languages["Markdown"], 200);
+    assert_eq!(lines_by_model(&merged[0], "composer-2.5"), 50);
+    assert_eq!(lines_by_author(&merged[0], Author::Human), 5);
+    assert_eq!(merged[0].commits.agent_added, 40);
+    assert_eq!(merged[0].commits.human_added, 5);
 }
 
 #[test]
-fn committed_lines_and_generated_lines_stay_separate_measures() {
+fn committed_lines_and_written_lines_stay_separate_measures() {
     let mut bucket = day("2026-08-24", 0);
-    bucket.committed.agent_added = 23;
-    bucket.committed.human_added = 0;
-    bucket.generated.by_model.insert("gpt-5.5".to_string(), 900);
-    bucket.generated.human = 100;
+    bucket.commits.agent_added = 23;
+    bucket.commits.human_added = 0;
+    bucket.add_lines("", Author::Agent, "gpt-5.5", 900, 0);
+    bucket.add_lines("", Author::Human, "", 100, 0);
 
     let totals = summarise_activity(&[bucket]);
 
-    assert_eq!(totals.committed.added(), 23);
-    assert_eq!(totals.generated.total(), 1000);
-    assert_eq!(totals.generated.ai_share_basis_points(), 9000);
-    assert_eq!(totals.committed.ai_share_basis_points(), 10_000);
+    assert_eq!(totals.commits.added(), 23);
+    assert_eq!(totals.lines.total(), 1000);
+    assert_eq!(totals.lines.ai_share_basis_points(), 9000);
+    assert_eq!(totals.commits.ai_share_basis_points(), 10_000);
 }
 
 #[test]
 fn a_snapshot_reads_back_as_what_was_written() {
     let mut bucket = day("2026-08-24", 5400);
-    bucket.agent.languages.insert("Rust".to_string(), 5000);
     bucket
-        .generated
-        .by_model
-        .insert("claude-opus-5".to_string(), 812);
-    bucket.generated.human = 8;
-    bucket.committed = LineCounts {
+        .measure_mut("agent")
+        .languages
+        .insert("Rust".to_string(), 5000);
+    bucket.add_lines("", Author::Agent, "claude-opus-5", 812, 0);
+    bucket.add_lines("", Author::Human, "", 8, 0);
+    bucket.commits = LineCounts {
         agent_added: 812,
         agent_deleted: 91,
         human_added: 8,
@@ -164,7 +185,7 @@ fn a_snapshot_reads_back_as_what_was_written() {
         unattributed_added: 120,
         ..LineCounts::default()
     };
-    bucket.agent.sessions = 3;
+    bucket.measure_mut("agent").sessions = 3;
     bucket.requests = 24;
 
     let mut original = snapshot("m-8f3a", "2026-08-24T19:00:00Z", vec![bucket]);
@@ -213,30 +234,33 @@ fn a_timestamp_without_a_zone_is_refused_because_merging_orders_by_it() {
 #[test]
 fn totals_rank_languages_and_models_by_size() {
     let mut first = day("2026-08-23", 1200);
-    first.agent.languages.insert("Rust".to_string(), 900);
-    first.agent.languages.insert("Shell".to_string(), 300);
     first
-        .generated
-        .by_model
-        .insert("composer-2.5".to_string(), 100);
+        .measure_mut("agent")
+        .languages
+        .insert("Rust".to_string(), 900);
+    first
+        .measure_mut("agent")
+        .languages
+        .insert("Shell".to_string(), 300);
+    first.add_lines("", Author::Agent, "composer-2.5", 100, 0);
 
     let mut second = day("2026-08-24", 600);
-    second.agent.languages.insert("Markdown".to_string(), 600);
     second
-        .generated
-        .by_model
-        .insert("claude-opus-5".to_string(), 400);
+        .measure_mut("agent")
+        .languages
+        .insert("Markdown".to_string(), 600);
+    second.add_lines("", Author::Agent, "claude-opus-5", 400, 0);
 
     let totals = summarise_activity(&[first, second]);
 
-    assert_eq!(totals.agent.seconds, 1800);
+    assert_eq!(totals.measure("agent").seconds, 1800);
     assert_eq!(totals.active_days, 2);
     assert_eq!(totals.first_day.as_deref(), Some("2026-08-23"));
     assert_eq!(totals.last_day.as_deref(), Some("2026-08-24"));
-    assert_eq!(totals.agent.languages[0].language, "Rust");
-    assert_eq!(totals.agent.languages[0].seconds, 900);
-    assert_eq!(totals.agent.languages[1].language, "Markdown");
-    assert_eq!(totals.models[0].name, "claude-opus-5");
+    assert_eq!(totals.measure("agent").languages[0].language, "Rust");
+    assert_eq!(totals.measure("agent").languages[0].seconds, 900);
+    assert_eq!(totals.measure("agent").languages[1].language, "Markdown");
+    assert_eq!(totals.models()[0].name, "claude-opus-5");
 }
 
 #[test]
@@ -277,34 +301,37 @@ fn a_day_nobody_worked_reports_no_share_instead_of_dividing_by_zero() {
 #[test]
 fn editor_time_and_agent_time_are_kept_apart_because_they_measure_different_things() {
     let mut bucket = DayBucket::new("2026-08-24");
-    bucket.editor.seconds = 20 * 3600;
-    bucket.editor.sessions = 4;
+    bucket.measure_mut("editor").seconds = 20 * 3600;
+    bucket.measure_mut("editor").sessions = 4;
     bucket
-        .editor
+        .measure_mut("editor")
         .languages
         .insert("Markdown".to_string(), 20 * 3600);
-    bucket.agent.seconds = 3 * 3600;
-    bucket.agent.sessions = 9;
-    bucket.agent.languages.insert("Rust".to_string(), 3 * 3600);
+    bucket.measure_mut("agent").seconds = 3 * 3600;
+    bucket.measure_mut("agent").sessions = 9;
+    bucket
+        .measure_mut("agent")
+        .languages
+        .insert("Rust".to_string(), 3 * 3600);
 
     let merged = merge_snapshots(&[snapshot("m-laptop", "2026-08-24T19:00:00Z", vec![bucket])]);
     let totals = summarise_activity(&merged);
 
-    assert_eq!(totals.editor.seconds, 20 * 3600);
-    assert_eq!(totals.agent.seconds, 3 * 3600);
-    assert_eq!(totals.editor.sessions, 4);
-    assert_eq!(totals.agent.sessions, 9);
-    assert_eq!(totals.editor.languages[0].language, "Markdown");
-    assert_eq!(totals.agent.languages[0].language, "Rust");
+    assert_eq!(totals.measure("editor").seconds, 20 * 3600);
+    assert_eq!(totals.measure("agent").seconds, 3 * 3600);
+    assert_eq!(totals.measure("editor").sessions, 4);
+    assert_eq!(totals.measure("agent").sessions, 9);
+    assert_eq!(totals.measure("editor").languages[0].language, "Markdown");
+    assert_eq!(totals.measure("agent").languages[0].language, "Rust");
 }
 
 #[test]
 fn a_day_with_only_editor_time_still_counts_as_worked() {
     let mut bucket = DayBucket::new("2026-08-24");
-    bucket.editor.seconds = 1800;
+    bucket.measure_mut("editor").seconds = 1800;
 
     let totals = summarise_activity(&[bucket]);
 
     assert_eq!(totals.active_days, 1);
-    assert_eq!(totals.agent.seconds, 0);
+    assert_eq!(totals.measure("agent").seconds, 0);
 }

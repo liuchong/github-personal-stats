@@ -3,7 +3,7 @@
 //! and does not hand a filename to the browser as markup.
 
 use github_personal_stats_core::{
-    ActivitySnapshot, DayBucket, GeneratedLines, LineCounts, TimeBucket, summarise_activity,
+    ActivitySnapshot, Author, DayBucket, TimeBucket, summarise_activity,
 };
 use github_personal_stats_daemon::panel::{page, summary_json};
 
@@ -19,14 +19,10 @@ fn timing(seconds: u64, sessions: u32, languages: &[(&str, u64)]) -> TimeBucket 
 }
 
 fn day(date: &str, agent: TimeBucket, editor: TimeBucket) -> DayBucket {
-    DayBucket {
-        date: date.to_owned(),
-        agent,
-        editor,
-        committed: LineCounts::default(),
-        generated: GeneratedLines::default(),
-        requests: 0,
-    }
+    let mut day = DayBucket::new(date);
+    *day.measure_mut("agent") = agent;
+    *day.measure_mut("editor") = editor;
+    day
 }
 
 fn snapshot(machine: &str, days: Vec<DayBucket>) -> ActivitySnapshot {
@@ -158,18 +154,13 @@ fn a_language_with_time_is_never_drawn_as_nothing_at_all() {
 #[test]
 fn lines_are_split_into_what_was_committed_and_what_the_editor_generated() {
     let mut bucket = day("2026-08-24", timing(3_600, 1, &[]), timing(0, 0, &[]));
-    bucket.committed = LineCounts {
-        agent_added: 400,
-        tab_added: 50,
-        human_added: 100,
-        blank_added: 20,
-        unattributed_added: 30,
-        ..LineCounts::default()
-    };
-    bucket.generated = GeneratedLines {
-        human: 200,
-        by_model: [("claude-opus".to_owned(), 900)].into_iter().collect(),
-    };
+    bucket.commits.agent_added = 400;
+    bucket.commits.tab_added = 50;
+    bucket.commits.human_added = 100;
+    bucket.commits.blank_added = 20;
+    bucket.commits.unattributed_added = 30;
+    bucket.add_lines("", Author::Agent, "claude-opus", 900, 0);
+    bucket.add_lines("", Author::Human, "", 200, 0);
 
     let html = rendered(&snapshot("m-1234abcd", vec![bucket]));
 

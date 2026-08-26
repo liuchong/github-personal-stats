@@ -3,7 +3,7 @@ use std::{env, error::Error, path::PathBuf, process};
 use github_personal_stats_collect::{
     DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, preferences::Preferences, sink,
 };
-use github_personal_stats_core::summarise_activity;
+use github_personal_stats_core::{MEASURE_AGENT, MEASURE_EDITOR, summarise_activity};
 
 /// Named relative to the state directory, not to whoever is calling. The record
 /// is data the app manages, like the token and the pulse journal, and a default
@@ -72,28 +72,28 @@ fn run() -> Result<(), Box<dyn Error>> {
     );
     println!(
         "{} hrs {} mins of code changing by agents, across {} sessions",
-        totals.agent.seconds / 3_600,
-        (totals.agent.seconds % 3_600) / 60,
-        totals.agent.sessions
+        totals.measure(MEASURE_AGENT).seconds / 3_600,
+        (totals.measure(MEASURE_AGENT).seconds % 3_600) / 60,
+        totals.measure(MEASURE_AGENT).sessions
     );
-    if totals.editor.seconds > 0 {
+    if totals.measure(MEASURE_EDITOR).seconds > 0 {
         println!(
             "{} hrs {} mins in the editor, across {} sessions",
-            totals.editor.seconds / 3_600,
-            (totals.editor.seconds % 3_600) / 60,
-            totals.editor.sessions
+            totals.measure(MEASURE_EDITOR).seconds / 3_600,
+            (totals.measure(MEASURE_EDITOR).seconds % 3_600) / 60,
+            totals.measure(MEASURE_EDITOR).sessions
         );
     }
     println!(
         "{} lines committed, {} of them attributable, {}% of those written by AI",
-        totals.committed.added(),
-        totals.committed.attributed_added(),
-        totals.committed.ai_share_basis_points() / 100
+        totals.commits.added(),
+        totals.commits.attributed_added(),
+        totals.commits.ai_share_basis_points() / 100
     );
     println!(
         "{} lines generated in the editor, {}% of them by AI",
-        totals.generated.total(),
-        totals.generated.ai_share_basis_points() / 100
+        totals.lines.total(),
+        totals.lines.ai_share_basis_points() / 100
     );
 
     Ok(())

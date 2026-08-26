@@ -1,9 +1,25 @@
 use github_personal_stats_core::{
-    AggregatedStats, CardData, CodingActivityEntry, GithubClient, GithubStatsConfig,
-    GithubStatsError, HeatRing, LanguageShare, MockGithubClient, OutputKind, StreakMode,
-    StreakSummary, aggregate_card_data, aggregate_coding_activity, render_card,
-    render_readme_section,
+    ActivityMeasure, ActivitySpan, AggregatedStats, Author, CardData, CodingActivityEntry,
+    DayBucket, GithubClient, GithubStatsConfig, GithubStatsError, HeatRing, LanguageShare,
+    MEASURE_AGENT, MockGithubClient, OutputKind, StreakMode, StreakSummary, aggregate_card_data,
+    aggregate_coding_activity, compare_activity, render_card, render_readme_section,
 };
+
+/// A day of agent time spread over the given languages, with lines to match so
+/// the card has both a duration and an authorship to draw.
+fn worked_day(date: &str, languages: &[(&str, u64)]) -> DayBucket {
+    let mut day = DayBucket::new(date);
+    let bucket = day.measure_mut(MEASURE_AGENT);
+    for (language, seconds) in languages {
+        bucket.seconds += seconds;
+        bucket.languages.insert((*language).to_owned(), *seconds);
+    }
+    bucket.sessions = 1;
+    for (language, seconds) in languages {
+        day.add_lines(language, Author::Agent, "composer-2.5", seconds / 10, 0);
+    }
+    day
+}
 
 const FIXTURE: &str = include_str!("fixtures/github_user_data.json");
 const DASHBOARD_SNAPSHOT: &str = include_str!("snapshots/dashboard.svg");
@@ -119,21 +135,17 @@ fn renderer_outputs_streak_activity_and_status_cards() {
         window_start: Some("2026-05-22".to_owned()),
         window_end: Some("2026-05-24".to_owned()),
     });
-    let activity = CardData::Activity(aggregate_coding_activity(
-        vec![
-            CodingActivityEntry {
-                language: "Rust".to_owned(),
-                seconds: 3660,
-            },
-            CodingActivityEntry {
-                language: "TypeScript".to_owned(),
-                seconds: 7200,
-            },
-        ],
+    let activity = CardData::Activity(Box::new(compare_activity(
+        &[worked_day(
+            "2026-05-24",
+            &[("Rust", 3660), ("TypeScript", 7200)],
+        )],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-05-24"),
         5,
         &[],
-        false,
-    ));
+    )));
     let status = CardData::Status { state: "ready" };
 
     let streak_svg = render_card(&streak, &config);
@@ -145,7 +157,11 @@ fn renderer_outputs_streak_activity_and_status_cards() {
     assert!(streak_svg.contains("1,234"));
     assert!(activity_svg.contains("CODING ACTIVITY"));
     assert!(activity_svg.contains(">TypeScript<"));
-    assert!(activity_svg.contains(">2 hrs 0 mins<"));
+    // The card names the measure it is reporting, because a day holds several and
+    // they overlap.
+    assert!(activity_svg.contains("AGENT TIME"));
+    assert!(activity_svg.contains(">3 hrs 1 mins<"));
+    assert!(activity_svg.contains(">1 of 30 days<"));
     assert!(status_svg.contains("Service health"));
     assert!(status_svg.contains(">ready<"));
 }

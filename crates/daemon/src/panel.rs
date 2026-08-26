@@ -4,7 +4,9 @@
 //! browser never needs to hold the token and there is no second endpoint to keep
 //! in step with the first.
 
-use github_personal_stats_core::{ActivitySnapshot, ActivityTotals, CodingActivityEntry};
+use github_personal_stats_core::{
+    ActivitySnapshot, ActivityTotals, CodingActivityEntry, MEASURE_AGENT, MEASURE_EDITOR,
+};
 
 use crate::http::quote;
 
@@ -17,13 +19,13 @@ pub fn page(snapshot: &ActivitySnapshot, totals: &ActivityTotals) -> String {
     // each to its own largest entry would draw two minutes of editor time as long
     // a bar as forty hours of agent time.
     let widest = totals
-        .agent
+        .measure(MEASURE_AGENT)
         .languages
         .first()
         .map_or(0, |entry| entry.seconds)
         .max(
             totals
-                .editor
+                .measure(MEASURE_EDITOR)
                 .languages
                 .first()
                 .map_or(0, |entry| entry.seconds),
@@ -51,8 +53,8 @@ measure different things and a day can be long in one and short in the other.</p
         collected = escape(&snapshot.collected_at),
         style = STYLE,
         measures = measures(totals),
-        agent_languages = languages(&totals.agent.languages, widest),
-        editor_languages = languages(&totals.editor.languages, widest),
+        agent_languages = languages(&totals.measure(MEASURE_AGENT).languages, widest),
+        editor_languages = languages(&totals.measure(MEASURE_EDITOR).languages, widest),
         committed = committed(totals),
         generated = generated(totals),
         models = models(totals),
@@ -89,19 +91,19 @@ pub fn summary_json(snapshot: &ActivitySnapshot, totals: &ActivityTotals) -> Str
         totals.last_day.as_deref().map_or("null".to_owned(), quote),
         totals.active_days,
         totals.requests,
-        totals.editor.seconds,
-        totals.editor.sessions,
-        language_list(&totals.editor.languages),
-        totals.agent.seconds,
-        totals.agent.sessions,
-        language_list(&totals.agent.languages),
-        totals.committed.added(),
-        totals.committed.attributed_added(),
-        totals.committed.ai_share_basis_points(),
-        totals.generated.total(),
-        totals.generated.ai_share_basis_points(),
+        totals.measure(MEASURE_EDITOR).seconds,
+        totals.measure(MEASURE_EDITOR).sessions,
+        language_list(&totals.measure(MEASURE_EDITOR).languages),
+        totals.measure(MEASURE_AGENT).seconds,
+        totals.measure(MEASURE_AGENT).sessions,
+        language_list(&totals.measure(MEASURE_AGENT).languages),
+        totals.commits.added(),
+        totals.commits.attributed_added(),
+        totals.commits.ai_share_basis_points(),
+        totals.lines.total(),
+        totals.lines.ai_share_basis_points(),
         totals
-            .models
+            .models()
             .iter()
             .map(|model| format!(
                 "{{\"name\":{},\"lines\":{}}}",
@@ -118,13 +120,13 @@ fn measures(totals: &ActivityTotals) -> String {
         "{}{}{}",
         card(
             "Editor time",
-            &clock(totals.editor.seconds),
-            &format!("{} sessions", totals.editor.sessions),
+            &clock(totals.measure(MEASURE_EDITOR).seconds),
+            &format!("{} sessions", totals.measure(MEASURE_EDITOR).sessions),
         ),
         card(
             "Agent time",
-            &clock(totals.agent.seconds),
-            &format!("{} sessions", totals.agent.sessions),
+            &clock(totals.measure(MEASURE_AGENT).seconds),
+            &format!("{} sessions", totals.measure(MEASURE_AGENT).sessions),
         ),
         card(
             "Requests",
@@ -163,7 +165,7 @@ fn languages(entries: &[CodingActivityEntry], largest: u64) -> String {
 }
 
 fn committed(totals: &ActivityTotals) -> String {
-    let counts = &totals.committed;
+    let counts = &totals.commits;
     rows(&[
         ("Added", counts.added().to_string()),
         ("Attributable", counts.attributed_added().to_string()),
@@ -179,22 +181,26 @@ fn committed(totals: &ActivityTotals) -> String {
 }
 
 fn generated(totals: &ActivityTotals) -> String {
-    let lines = &totals.generated;
+    let lines = &totals.lines;
     rows(&[
         ("Lines", lines.total().to_string()),
-        ("By an agent", lines.by_agent().to_string()),
+        ("By an agent", lines.agent.to_string()),
         ("By hand", lines.human.to_string()),
         ("AI share", percentage(lines.ai_share_basis_points())),
     ])
 }
 
 fn models(totals: &ActivityTotals) -> String {
-    if totals.models.is_empty() {
+    if totals.models().is_empty() {
         return "<p class=\"empty\">Nothing recorded.</p>".to_owned();
     }
-    let largest = totals.models.first().map_or(1, |model| model.lines).max(1);
+    let largest = totals
+        .models()
+        .first()
+        .map_or(1, |model| model.lines)
+        .max(1);
     let rows = totals
-        .models
+        .models()
         .iter()
         .take(10)
         .map(|model| {

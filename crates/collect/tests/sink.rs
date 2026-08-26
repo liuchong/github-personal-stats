@@ -17,7 +17,7 @@ fn scratch(name: &str) -> PathBuf {
 fn snapshot(collected_at: &str, seconds: u64) -> ActivitySnapshot {
     let mut snapshot = ActivitySnapshot::new("m-1234abcd", collected_at);
     let mut day = DayBucket::new("2026-08-24");
-    day.agent.seconds = seconds;
+    day.measure_mut("agent").seconds = seconds;
     snapshot.days = vec![day];
     snapshot
 }

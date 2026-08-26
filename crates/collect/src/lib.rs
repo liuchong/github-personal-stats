@@ -13,7 +13,7 @@ pub mod sink;
 
 use std::{collections::BTreeMap, path::PathBuf};
 
-use github_personal_stats_core::{ActivitySnapshot, DayBucket};
+use github_personal_stats_core::{ActivitySnapshot, DayBucket, MEASURE_EDITOR};
 
 pub use error::CollectError;
 
@@ -50,12 +50,15 @@ pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
 
     // The two sources measure different things and neither can fill in for the
     // other: Cursor's store knows what an agent changed, and the editor plugins
-    // know when someone was present. So each owns its own side of the day.
+    // know when someone was present. So each owns a measure of its own, and the
+    // two are never added — an agent working while its operator watches is time
+    // in both, and summing them would make a day longer than a day.
     let mut days: BTreeMap<String, DayBucket> = fresh.into_iter().collect();
     for (date, editor) in worked {
-        days.entry(date.clone())
+        *days
+            .entry(date.clone())
             .or_insert_with(|| DayBucket::new(&date))
-            .editor = editor;
+            .measure_mut(MEASURE_EDITOR) = editor;
     }
 
     let mut snapshot = ActivitySnapshot::new(machine, clock::utc_timestamp(clock::now()));

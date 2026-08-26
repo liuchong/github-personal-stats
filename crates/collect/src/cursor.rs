@@ -4,11 +4,12 @@ use std::{
     time::Duration,
 };
 
-use github_personal_stats_core::DayBucket;
+use github_personal_stats_core::{Author, DayBucket, MEASURE_AGENT};
 use rusqlite::{Connection, OpenFlags};
 
 use crate::{
     error::CollectError,
+    language,
     sessions::{self, Event},
 };
 
@@ -26,9 +27,17 @@ const COMMITTED_QUERY: &str = "SELECT commitDate, \
      linesAdded, linesDeleted \
      FROM scored_commits GROUP BY commitHash";
 
+/// Lines grouped as finely as the source allows: by day, by who wrote them, by
+/// which model, and by what file they landed in.
+///
+/// Grouping by all four at once rather than by one at a time is what lets the
+/// record answer questions nobody asked while collecting — lines a given model
+/// wrote in a given language, say. The row count stays small because the grouping
+/// keys are few in practice: a handful of models across a few dozen extensions.
 const GENERATED_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
-     source, COALESCE(NULLIF(model, ''), 'unknown') AS model, COUNT(*) AS lines \
-     FROM ai_code_hashes GROUP BY day, source, model";
+     source, COALESCE(NULLIF(model, ''), '') AS model, \
+     COALESCE(fileExtension, '') AS extension, COUNT(*) AS lines \
+     FROM ai_code_hashes GROUP BY day, source, model, extension";
 
 const EVENT_QUERY: &str = "SELECT createdAt / 1000 AS second, \
      date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
@@ -124,16 +133,16 @@ fn read_committed(
         let bucket = days
             .entry(date.clone())
             .or_insert_with(|| DayBucket::new(date));
-        bucket.committed.tab_added += tab_added;
-        bucket.committed.tab_deleted += tab_deleted;
-        bucket.committed.agent_added += agent_added;
-        bucket.committed.agent_deleted += agent_deleted;
-        bucket.committed.human_added += human_added;
-        bucket.committed.human_deleted += human_deleted;
-        bucket.committed.blank_added += blank_added;
-        bucket.committed.blank_deleted += blank_deleted;
-        bucket.committed.unattributed_added += positive(counts[8]).saturating_sub(named_added);
-        bucket.committed.unattributed_deleted += positive(counts[9]).saturating_sub(named_deleted);
+        bucket.commits.tab_added += tab_added;
+        bucket.commits.tab_deleted += tab_deleted;
+        bucket.commits.agent_added += agent_added;
+        bucket.commits.agent_deleted += agent_deleted;
+        bucket.commits.human_added += human_added;
+        bucket.commits.human_deleted += human_deleted;
+        bucket.commits.blank_added += blank_added;
+        bucket.commits.blank_deleted += blank_deleted;
+        bucket.commits.unattributed_added += positive(counts[8]).saturating_sub(named_added);
+        bucket.commits.unattributed_deleted += positive(counts[9]).saturating_sub(named_deleted);
     }
 
     Ok(())
@@ -153,26 +162,36 @@ fn read_generated(
                 row.get::<_, Option<String>>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
             ))
         })
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
     for row in rows {
-        let (day, source, model, lines) = row.map_err(|error| schema_error(CODE_HASHES, error))?;
+        let (day, source, model, extension, lines) =
+            row.map_err(|error| schema_error(CODE_HASHES, error))?;
         let Some(date) = day else {
             continue;
         };
-        let lines = positive(lines);
         let bucket = days
             .entry(date.clone())
             .or_insert_with(|| DayBucket::new(date));
 
-        if source == "human" {
-            bucket.generated.human += lines;
+        // A person's lines carry no model, so the model column is dropped for
+        // them rather than recorded as belonging to whatever was loaded.
+        let (author, model) = if source == "human" {
+            (Author::Human, String::new())
         } else {
-            *bucket.generated.by_model.entry(model).or_default() += lines;
-        }
+            (Author::Agent, model)
+        };
+        bucket.add_lines(
+            language::from_extension(&extension),
+            author,
+            &model,
+            positive(lines),
+            0,
+        );
     }
 
     Ok(())
@@ -186,9 +205,10 @@ fn read_worked_time(
     let moments = read_moments(connection)?;
 
     for (date, bucket) in sessions::accumulate(&moments, idle_timeout_seconds) {
-        days.entry(date.clone())
+        *days
+            .entry(date.clone())
             .or_insert_with(|| DayBucket::new(date))
-            .agent = bucket;
+            .measure_mut(MEASURE_AGENT) = bucket;
     }
 
     Ok(())

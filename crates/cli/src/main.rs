@@ -1,8 +1,11 @@
 use github_personal_stats_core::{
-    CodingActivityEntry, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData,
-    GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING, MockGithubClient,
-    OutputKind, aggregate_card_data, aggregate_coding_activity, json::write_github_fixture,
-    parse_output_kind, render_card, render_readme_section, workspace_info,
+    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, ChartStyle, CodingActivityEntry,
+    Column, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS, DEFAULT_HEAT_THRESHOLD,
+    DEFAULT_LANGUAGE_ROWS, GithubData, GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS,
+    MAX_PADDING, MockGithubClient, OutputKind, aggregate_card_data, aggregate_coding_activity,
+    build_blocks, compare_activity, default_blocks, json::write_github_fixture, parse_blocks,
+    parse_output_kind, render_card, render_readme_section, render_text_chart, store::read_record,
+    workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
@@ -29,6 +32,11 @@ const AUTO_HEIGHT_CARDS: [OutputKind; 5] = [
 ];
 const DEFAULT_STREAK_SIDES: &str = "total,longest";
 
+/// How many languages the fold keeps. Generous on purpose: a chart block trims to
+/// its own limit, and trimming earlier would decide the ranking for every block
+/// by whichever one the fold happened to sort by.
+const FOLD_LANGUAGES: usize = 200;
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     let command = if args.is_empty() {
@@ -46,6 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "info" => println!("{}", workspace_info().to_json()),
         "fetch" => fetch(args)?,
         "generate" => generate(args)?,
+        "chart" => chart(args)?,
         "update-readme" => update_readme(args)?,
         command => {
             return Err(format!("unsupported command: {command}\n\n{}", usage()).into());
@@ -66,6 +75,7 @@ fn usage() -> String {
 Commands:
   fetch                   Read a profile once and save it for later renders
   generate                Render a card to an SVG file
+  chart                   Render collected activity as an aligned text chart
   update-readme           Rewrite a marked section of a README
   info                    Print workspace information as JSON
   help, --help, -h        Print this message
@@ -122,6 +132,32 @@ Heat ring options:
                           (default: heat-orange)
   --heat-label <template> Ring centre text over {{X}} active days, {{Y}} window
                           days, and {{Z}} the streak in full
+
+Activity options:
+  --activity-record <dir> Directory of collected activity, one subdirectory per
+                          machine holding dated day files
+  --activity-measure <name>
+                          Which measure of time to report: agent, editor,
+                          imported, or any name in the record (default: agent)
+  --activity-windows <recent,baseline>
+                          Two spans to compare, each a day count or all
+                          (default: 30,all)
+  --activity-blocks <spec>
+                          Text chart blocks, semicolon separated, each written
+                          value/dimension with optional settings. Values are
+                          time, lines, tokens; dimensions are languages, models,
+                          authors, windows; settings are limit, split, title
+                          (default: time/languages;lines/authors;lines/models)
+  --activity-columns <list>
+                          Columns in order from name, value, bar, share
+                          (default: name,value,bar,share)
+  --activity-bar <chars>  Two or three characters for agent fill, my fill, and
+                          empty (default: #=-)
+  --activity-bar-width <cells>
+                          Bar width in characters (default: {DEFAULT_BAR_CELLS})
+  --activity-bar-basis <largest|total>
+                          Whether a bar's length is measured against the biggest
+                          row or the block total (default: largest)
 
 Update-readme options:
   --target <path>         README to rewrite (default: {DEFAULT_TARGET})
@@ -274,6 +310,16 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Renders the collected activity as text.
+fn chart(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    let text = activity_chart(&args)?;
+    match option_value(&args, "--output") {
+        Some(path) => write_output(PathBuf::from(path), text)?,
+        None => println!("{}", text.trim_end()),
+    }
+    Ok(())
+}
+
 fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let target =
         PathBuf::from(option_value(&args, "--target").unwrap_or_else(|| DEFAULT_TARGET.to_owned()));
@@ -281,12 +327,112 @@ fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let start = format!("<!--START_SECTION:{section}-->");
     let end = format!("<!--END_SECTION:{section}-->");
     let source = fs::read_to_string(&target)?;
-    let summary = aggregate_coding_activity(sample_coding_activity(), 8, &[], true);
-    let replacement = render_readme_section(&summary, "Coding Activity");
+
+    // A record turns into the chart it describes. Without one there is nothing to
+    // say, and the sample that used to stand in here only ever looked like data.
+    let replacement = if args.iter().any(|arg| arg == "--activity-record") {
+        format!("```txt\n{}\n```", activity_chart(&args)?.trim_end())
+    } else {
+        let summary = aggregate_coding_activity(sample_coding_activity(), 8, &[], true);
+        render_readme_section(&summary, "Coding Activity")
+    };
     let updated = replace_section(&source, &start, &end, &replacement)?;
 
     fs::write(target, updated)?;
     Ok(())
+}
+
+/// Reads the record, folds it, and lays out the chart described by the arguments.
+fn activity_chart(args: &[String]) -> Result<String, Box<dyn Error>> {
+    let comparison = activity_comparison(args)?;
+    let blocks = match option_value(args, "--activity-blocks") {
+        Some(spec) => parse_blocks(&spec)?,
+        None => default_blocks(),
+    };
+    Ok(render_text_chart(
+        &build_blocks(&comparison, &blocks),
+        &chart_style(args)?,
+    ))
+}
+
+fn activity_comparison(args: &[String]) -> Result<ActivityComparison, Box<dyn Error>> {
+    let root = option_value(args, "--activity-record")
+        .ok_or("--activity-record is needed to say where the collected activity lives")?;
+    let days = read_record(&PathBuf::from(root))?;
+
+    let measure = match option_value(args, "--activity-measure") {
+        Some(name) => ActivityMeasure::new(name.trim()),
+        None => ActivityMeasure::default(),
+    };
+    let windows = match option_value(args, "--activity-windows") {
+        Some(value) => parse_windows(&value)?,
+        None => DEFAULT_ACTIVITY_WINDOWS,
+    };
+    let hidden = option_values(args, "--hide-language");
+
+    // The fold keeps far more languages than any block will draw, so a block's
+    // own limit is what trims the chart. Trimming here instead would let a
+    // language be dropped for being short on time before a block that ranks by
+    // lines ever saw it.
+    Ok(compare_activity(
+        &days,
+        measure,
+        windows,
+        None,
+        FOLD_LANGUAGES,
+        &hidden,
+    ))
+}
+
+fn parse_windows(value: &str) -> Result<[ActivitySpan; 2], Box<dyn Error>> {
+    let written = value.split(',').map(str::trim).collect::<Vec<_>>();
+    let [recent, baseline] = written.as_slice() else {
+        return Err(format!(
+            "--activity-windows takes two spans separated by a comma, such as 30,all; got {value:?}"
+        )
+        .into());
+    };
+    let read = |span: &str| {
+        ActivitySpan::parse(span)
+            .ok_or_else(|| format!("--activity-windows span {span:?} must be a day count or all"))
+    };
+    Ok([read(recent)?, read(baseline)?])
+}
+
+fn chart_style(args: &[String]) -> Result<ChartStyle, Box<dyn Error>> {
+    let mut style = ChartStyle::default();
+    if let Some(value) = option_value(args, "--activity-columns") {
+        style.columns = value
+            .split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(Column::parse)
+            .collect::<Result<Vec<_>, _>>()?;
+        if style.columns.is_empty() {
+            return Err("--activity-columns needs at least one column".into());
+        }
+    }
+    if let Some(value) = option_value(args, "--activity-bar") {
+        style.glyphs = BarGlyphs::parse(&value)?;
+    }
+    if let Some(value) = option_value(args, "--activity-bar-width") {
+        style.bar_cells = value
+            .trim()
+            .parse()
+            .map_err(|_| format!("--activity-bar-width {value:?} must be a whole number"))?;
+    }
+    if let Some(value) = option_value(args, "--activity-bar-basis") {
+        style.relative_to_largest = match value.trim() {
+            "largest" => true,
+            "total" => false,
+            other => {
+                return Err(
+                    format!("--activity-bar-basis {other:?} must be largest or total").into(),
+                );
+            }
+        };
+    }
+    Ok(style)
 }
 
 fn github_data(

@@ -13,19 +13,19 @@ use std::{
 
 use github_personal_stats_collect::records::{publish, read_days};
 use github_personal_stats_core::{
-    ActivitySnapshot, DayBucket,
+    ActivitySnapshot, Author, DayBucket,
     store::{MANIFEST, parse_manifest},
 };
 
 fn worked(date: &str, agent_seconds: u64) -> DayBucket {
     let mut day = DayBucket::new(date);
-    day.agent.seconds = agent_seconds;
-    day.agent.sessions = 2;
-    day.agent
+    day.measure_mut("agent").seconds = agent_seconds;
+    day.measure_mut("agent").sessions = 2;
+    day.measure_mut("agent")
         .languages
         .insert("Rust".to_owned(), agent_seconds / 2);
-    day.committed.agent_added = agent_seconds / 10;
-    day.generated.by_model.insert("a-model".to_owned(), 500);
+    day.commits.agent_added = agent_seconds / 10;
+    day.add_lines("", Author::Agent, "a-model", 500, 0);
     day.requests = 7;
     day
 }
@@ -91,7 +91,11 @@ fn the_day_the_source_forgot_is_still_in_the_record() {
     let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
     let dates = held.iter().map(|day| day.date.as_str()).collect::<Vec<_>>();
     assert_eq!(dates, ["2026-05-12", "2026-08-26"]);
-    assert_eq!(held[0].agent.seconds, 7_200, "the old day kept its hours");
+    assert_eq!(
+        held[0].measure("agent").seconds,
+        7_200,
+        "the old day kept its hours"
+    );
 }
 
 #[test]
@@ -112,8 +116,8 @@ fn a_thinner_reading_of_a_published_day_does_not_shrink_it() {
     .expect("a later publication should work");
 
     let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
-    assert_eq!(held[0].agent.seconds, 7_200);
-    assert_eq!(held[0].agent.languages.get("Rust"), Some(&3_600));
+    assert_eq!(held[0].measure("agent").seconds, 7_200);
+    assert_eq!(held[0].measure("agent").languages.get("Rust"), Some(&3_600));
 }
 
 #[test]
@@ -132,7 +136,7 @@ fn more_work_on_a_day_already_recorded_is_taken() {
     .expect("a later publication should work");
 
     let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
-    assert_eq!(held[0].agent.seconds, 7_200);
+    assert_eq!(held[0].measure("agent").seconds, 7_200);
     assert!(
         written
             .changed
@@ -220,7 +224,11 @@ fn the_manifest_totals_the_days_that_survived() {
     let rollup = manifest.rollup.expect("two days should roll up");
     assert_eq!(rollup.first_day, "2026-05-12");
     assert_eq!(rollup.last_day, "2026-08-26");
-    assert_eq!(rollup.agent.seconds, 9_000, "the lifetime total spans both");
+    assert_eq!(
+        rollup.measure("agent").seconds,
+        9_000,
+        "the lifetime total spans both"
+    );
     assert_eq!(rollup.active_days, 2);
 }
 
@@ -239,8 +247,8 @@ fn two_machines_do_not_touch_each_others_days() {
 
     let laptop = read_days(place.as_path(), "m-laptop").expect("the laptop record should read");
     let other = read_days(place.as_path(), "m-desktop").expect("the desktop record should read");
-    assert_eq!(laptop[0].agent.seconds, 3_600);
-    assert_eq!(other[0].agent.seconds, 1_800);
+    assert_eq!(laptop[0].measure("agent").seconds, 3_600);
+    assert_eq!(other[0].measure("agent").seconds, 1_800);
 }
 
 #[test]
@@ -268,7 +276,7 @@ fn the_single_file_record_is_taken_in_rather_than_left_behind() {
     let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
     let dates = held.iter().map(|day| day.date.as_str()).collect::<Vec<_>>();
     assert_eq!(dates, ["2026-05-12", "2026-08-24", "2026-08-26"]);
-    assert_eq!(held[0].agent.seconds, 7_200);
+    assert_eq!(held[0].measure("agent").seconds, 7_200);
 
     assert!(
         !place.as_path().join("m-laptop.json").exists(),

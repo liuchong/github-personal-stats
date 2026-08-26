@@ -1,5 +1,9 @@
-use crate::{ContributionDay, GithubData, HeatRing, HeatWindow, OutputKind, RepositoryLanguage};
-use std::collections::BTreeMap;
+use crate::{
+    Author, ContributionDay, DEFAULT_ACTIVITY_WINDOWS, DayBucket, GithubData, HeatRing, HeatWindow,
+    LanguageLines, LineCounts, LineTotals, MAX_ACTIVITY_WINDOW, MEASURE_AGENT, MEASURE_EDITOR,
+    MEASURE_IMPORTED, OutputKind, RepositoryLanguage, TimeBucket, TokenUsage,
+};
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +61,235 @@ pub struct CodingActivitySummary {
     pub masked_total_seconds: Option<u64>,
 }
 
+/// A measure of time, named rather than chosen from a fixed list.
+///
+/// The record holds measures by name because which ones exist depends on what was
+/// installed where the work happened, and because they overlap: an agent changing
+/// code while its operator watches is both agent time and editor time. A card
+/// therefore names the one measure it is reporting. It never adds two, which
+/// would produce a figure larger than the day.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityMeasure(String);
+
+impl Default for ActivityMeasure {
+    fn default() -> Self {
+        Self(MEASURE_AGENT.to_owned())
+    }
+}
+
+impl ActivityMeasure {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// What the card calls this measure. The measures the project collects itself
+    /// get a phrase that says what they mean; anything else is shown under the
+    /// name it was recorded with, since only whoever recorded it knows.
+    pub fn label(&self) -> String {
+        match self.0.as_str() {
+            MEASURE_AGENT => "Agent time".to_owned(),
+            MEASURE_EDITOR => "Editor time".to_owned(),
+            MEASURE_IMPORTED => "Imported time".to_owned(),
+            other => format!("{} time", capitalise(other)),
+        }
+    }
+
+    fn bucket(&self, day: &DayBucket) -> TimeBucket {
+        day.measure(&self.0)
+    }
+}
+
+fn days_word(count: u32) -> &'static str {
+    if count == 1 { "day" } else { "days" }
+}
+
+fn capitalise(value: &str) -> String {
+    let mut characters = value.chars();
+    match characters.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + characters.as_str(),
+        None => String::new(),
+    }
+}
+
+/// How far back a window reaches.
+///
+/// `All` exists because the two questions worth asking of a record are "what am I
+/// doing now" and "what have I done", and the second has no day count. Expressing
+/// it as a very large number of days would work arithmetically and then lie in
+/// the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivitySpan {
+    Days(u32),
+    All,
+}
+
+impl ActivitySpan {
+    /// Reads `30` or `all`.
+    pub fn parse(value: &str) -> Option<Self> {
+        let text = value.trim();
+        if text.eq_ignore_ascii_case("all") {
+            return Some(Self::All);
+        }
+        text.parse::<u32>()
+            .ok()
+            .filter(|days| (1..=MAX_ACTIVITY_WINDOW).contains(days))
+            .map(Self::Days)
+    }
+
+    pub fn as_string(self) -> String {
+        match self {
+            Self::Days(days) => days.to_string(),
+            Self::All => "all".to_owned(),
+        }
+    }
+
+    /// What the card calls this span.
+    pub fn label(self) -> String {
+        match self {
+            Self::Days(days) => format!("Last {days} days"),
+            Self::All => "All time".to_owned(),
+        }
+    }
+
+    /// Days back the span reaches, for ordering one span against another.
+    pub(crate) fn reach(self) -> u32 {
+        match self {
+            Self::Days(days) => days,
+            Self::All => u32::MAX,
+        }
+    }
+}
+
+/// A span of days ending on one date, summed.
+///
+/// `active_days` is carried beside the span because the two are rarely equal and
+/// the difference is the only thing that makes the totals honest. A ninety day
+/// window holding thirty days of work is not a quiet quarter; it is usually a
+/// record that only reaches back thirty days. Showing both lets a reader tell
+/// those apart instead of reading a short history as an idle one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityWindow {
+    pub span: ActivitySpan,
+    /// First and last day holding work in this span. Empty when none does.
+    pub start: String,
+    pub end: String,
+    pub active_days: u32,
+    pub seconds: u64,
+    pub sessions: u32,
+    pub commits: LineCounts,
+    pub lines: LineTotals,
+    pub tokens: BTreeMap<String, TokenUsage>,
+    pub requests: u32,
+}
+
+impl ActivityWindow {
+    /// How much of the span recorded work, phrased for the line under the figure.
+    ///
+    /// A fixed span says how much of itself it covers, because that is what makes
+    /// a short record legible. All time has nothing to be a fraction of, so it
+    /// just counts its days.
+    pub fn coverage(&self) -> String {
+        match self.span {
+            ActivitySpan::Days(days) => format!("{} of {days} days", self.active_days),
+            ActivitySpan::All => format!("{} {}", self.active_days, days_word(self.active_days)),
+        }
+    }
+
+    /// The model that wrote the most lines in the span, if any did.
+    pub fn leading_model(&self) -> Option<(&str, u64)> {
+        self.lines.models().into_iter().next()
+    }
+
+    /// Models that wrote anything, largest first.
+    pub fn models(&self) -> Vec<(&str, u64)> {
+        self.lines.models()
+    }
+
+    /// Tokens by model, most spent first.
+    pub fn token_spend(&self) -> Vec<(&str, u64)> {
+        let mut ranked = self
+            .tokens
+            .iter()
+            .map(|(model, usage)| (model.as_str(), usage.billed()))
+            .filter(|(_, billed)| *billed > 0)
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+        ranked
+    }
+}
+
+/// One language's standing in both windows, so a card can draw the recent share
+/// against the longer one rather than showing two lists to be compared by eye.
+///
+/// `lines` is the same language's authorship split. It comes from a different
+/// reading than the seconds do — time is measured in sittings, lines are counted
+/// as they land — so a language can have time without lines on days collected
+/// before the split was recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityLanguage {
+    pub name: String,
+    pub recent_seconds: u64,
+    pub recent_basis_points: u32,
+    pub baseline_seconds: u64,
+    pub baseline_basis_points: u32,
+    /// Authorship of this language's lines in the recent span.
+    pub lines: LanguageLines,
+}
+
+/// Two windows over the same record, with the languages joined across them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityComparison {
+    pub measure: ActivityMeasure,
+    pub recent: ActivityWindow,
+    pub baseline: ActivityWindow,
+    pub languages: Vec<ActivityLanguage>,
+}
+
+impl ActivityComparison {
+    /// Two empty windows, for a card asked for without a record behind it. The
+    /// card draws the spans it was asked about and says the record is empty,
+    /// rather than drawing zeroes that look like a quiet quarter.
+    pub fn empty(measure: ActivityMeasure, spans: [ActivitySpan; 2]) -> Self {
+        let blank = |span| ActivityWindow {
+            span,
+            start: String::new(),
+            end: String::new(),
+            active_days: 0,
+            seconds: 0,
+            sessions: 0,
+            commits: LineCounts::default(),
+            lines: LineTotals::default(),
+            tokens: BTreeMap::new(),
+            requests: 0,
+        };
+        Self {
+            measure,
+            recent: blank(spans[0]),
+            baseline: blank(spans[1]),
+            languages: Vec::new(),
+        }
+    }
+
+    /// Whether the record holds any time at all under the measure being read. A
+    /// card that would otherwise draw a row of zeroes says so instead.
+    pub fn is_empty(&self) -> bool {
+        self.recent.seconds == 0 && self.baseline.seconds == 0
+    }
+
+    /// Whether any language in the recent span knows who wrote its lines. Days
+    /// collected before the split was recorded have time but no authorship, and a
+    /// card drawing a split bar over those would be inventing one.
+    pub fn knows_authorship(&self) -> bool {
+        self.languages
+            .iter()
+            .any(|language| language.lines.total() > 0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CardData {
     Dashboard {
@@ -76,7 +309,12 @@ pub enum CardData {
         stats: AggregatedStats,
         streak: StreakSummary,
     },
-    Activity(CodingActivitySummary),
+    /// Two spans of the local activity record, compared. Unlike every other
+    /// card, this one is not drawn from what GitHub reports: the record is
+    /// collected on the machines the work happened on, so it arrives separately.
+    /// Boxed because it is much the largest thing a card can carry, and an enum
+    /// is as big as its widest arm: every other card would pay for this one.
+    Activity(Box<ActivityComparison>),
     Status {
         state: &'static str,
     },
@@ -107,9 +345,12 @@ pub fn aggregate_card_data(data: &GithubData, output: OutputKind, ring: &HeatRin
             stats: aggregate_stats(data),
             streak: calculate_streak(&data.contributions, StreakMode::Daily, &[], ring),
         },
-        OutputKind::Activity | OutputKind::ActivityReadme => {
-            CardData::Activity(aggregate_coding_activity(Vec::new(), 8, &[], false))
-        }
+        // The activity card reads the local record rather than the profile, and
+        // nothing here has one. A caller with a record builds the card from
+        // `compare_activity` instead; this is the honest empty case.
+        OutputKind::Activity | OutputKind::ActivityReadme => CardData::Activity(Box::new(
+            ActivityComparison::empty(ActivityMeasure::default(), DEFAULT_ACTIVITY_WINDOWS),
+        )),
         _ => CardData::Status { state: "ready" },
     }
 }
@@ -268,6 +509,176 @@ pub fn aggregate_coding_activity(
         total_seconds,
         masked_total_seconds: show_masked_time.then_some(mask_seconds(total_seconds)),
     }
+}
+
+/// Reads a record twice over two spans ending on the same day, and joins the
+/// languages so the shorter span can be drawn against the longer one.
+///
+/// The spans are inclusive of `as_of`, so thirty days means today and the
+/// twenty-nine before it. Days outside every span cost nothing but a comparison,
+/// which keeps this linear in the record rather than in the spans.
+pub fn compare_activity(
+    days: &[DayBucket],
+    measure: ActivityMeasure,
+    spans: [ActivitySpan; 2],
+    as_of: Option<&str>,
+    limit: usize,
+    ignored_languages: &[String],
+) -> ActivityComparison {
+    let end = as_of
+        .and_then(date_to_ordinal)
+        .unwrap_or_else(today_ordinal);
+    let recent = window(days, &measure, spans[0], end, ignored_languages);
+    let baseline = window(days, &measure, spans[1], end, ignored_languages);
+
+    ActivityComparison {
+        measure,
+        languages: join_languages(&recent.1, &baseline.1, limit),
+        recent: recent.0,
+        baseline: baseline.0,
+    }
+}
+
+/// Per-language totals for one window: time under the measure being read, and the
+/// authorship of the lines written in that language.
+#[derive(Default)]
+struct LanguageTotals {
+    seconds: BTreeMap<String, u64>,
+    lines: BTreeMap<String, LanguageLines>,
+}
+
+/// Sums one span, returning the window and its per-language totals.
+fn window(
+    days: &[DayBucket],
+    measure: &ActivityMeasure,
+    span: ActivitySpan,
+    end: i32,
+    ignored_languages: &[String],
+) -> (ActivityWindow, LanguageTotals) {
+    let start = match span {
+        // Inclusive of the last day, so thirty days means today and the
+        // twenty-nine before it.
+        ActivitySpan::Days(days) => end.saturating_sub(i32::try_from(days).unwrap_or(i32::MAX) - 1),
+        ActivitySpan::All => i32::MIN,
+    };
+
+    let ignored = |language: &String| ignored_languages.iter().any(|item| item == language);
+
+    let mut seconds = 0u64;
+    let mut sessions = 0u32;
+    let mut active_days = 0u32;
+    let mut first = None::<&str>;
+    let mut last = None::<&str>;
+    let mut commits = LineCounts::default();
+    let mut lines = LineTotals::default();
+    let mut tokens = BTreeMap::<String, TokenUsage>::new();
+    let mut requests = 0u32;
+    let mut totals = LanguageTotals::default();
+
+    for day in days {
+        let Some(ordinal) = date_to_ordinal(&day.date) else {
+            continue;
+        };
+        if ordinal < start || ordinal > end {
+            continue;
+        }
+        let bucket = measure.bucket(day);
+        if bucket.seconds > 0 {
+            active_days += 1;
+            // The span's own edges are what a reader wants dated, not the edges of
+            // the arithmetic: an all-time window reaching back to the epoch should
+            // report the first day that holds work.
+            if first.is_none() {
+                first = Some(&day.date);
+            }
+            last = Some(&day.date);
+        }
+        seconds += bucket.seconds;
+        sessions = sessions.saturating_add(bucket.sessions);
+        requests = requests.saturating_add(day.requests);
+        commits.absorb(&day.commits);
+        lines.absorb_facts(&day.lines);
+        for (model, usage) in &day.tokens {
+            tokens.entry(model.clone()).or_default().absorb(usage);
+        }
+        for (language, count) in &bucket.languages {
+            if ignored(language) {
+                continue;
+            }
+            *totals.seconds.entry(language.clone()).or_default() += count;
+        }
+        for fact in &day.lines {
+            if fact.language.is_empty() || ignored(&fact.language) {
+                continue;
+            }
+            let held = totals.lines.entry(fact.language.clone()).or_default();
+            match fact.author {
+                Author::Agent => held.agent += fact.total(),
+                Author::Human => held.human += fact.total(),
+            }
+        }
+    }
+
+    let window = ActivityWindow {
+        span,
+        start: first.unwrap_or_default().to_owned(),
+        end: last.unwrap_or_default().to_owned(),
+        active_days,
+        seconds,
+        sessions,
+        commits,
+        lines,
+        tokens,
+        requests,
+    };
+    (window, totals)
+}
+
+/// Puts the two windows' language totals side by side, ordered by the recent
+/// share so the card leads with what is being worked on now, and the longer span
+/// reads as the baseline it is being compared against.
+fn join_languages(
+    recent: &LanguageTotals,
+    baseline: &LanguageTotals,
+    limit: usize,
+) -> Vec<ActivityLanguage> {
+    let recent_total = recent.seconds.values().sum::<u64>();
+    let baseline_total = baseline.seconds.values().sum::<u64>();
+
+    // A language can appear in one of these and not the other: a source may know
+    // what was written without knowing how long it took, or the reverse. Taking
+    // the union means neither kind of knowledge silently discards the other.
+    let mut joined = recent
+        .seconds
+        .keys()
+        .chain(baseline.seconds.keys())
+        .chain(recent.lines.keys())
+        .chain(baseline.lines.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|name| {
+            let recent_seconds = recent.seconds.get(name).copied().unwrap_or_default();
+            let baseline_seconds = baseline.seconds.get(name).copied().unwrap_or_default();
+            ActivityLanguage {
+                name: name.clone(),
+                recent_seconds,
+                recent_basis_points: percentage_basis_points(recent_seconds, recent_total),
+                baseline_seconds,
+                baseline_basis_points: percentage_basis_points(baseline_seconds, baseline_total),
+                lines: recent.lines.get(name).copied().unwrap_or_default(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    joined.sort_by(|left, right| {
+        right
+            .recent_seconds
+            .cmp(&left.recent_seconds)
+            .then_with(|| right.baseline_seconds.cmp(&left.baseline_seconds))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    joined.truncate(limit);
+    joined
 }
 
 fn rank_for_stats(data: &GithubData) -> (&'static str, u32) {

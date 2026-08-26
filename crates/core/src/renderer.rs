@@ -1,7 +1,7 @@
 use crate::{
-    AggregatedStats, CardData, CodingActivitySummary, GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing,
-    HeatScale, HeatShape, HeatWindow, ImageSize, LanguageShare, StatMetric, StreakMetric,
-    StreakSummary, Theme, TileMetric,
+    ActivityComparison, ActivityWindow, AggregatedStats, CardData, CodingActivitySummary,
+    GithubStatsConfig, HEAT_RAMP_STEPS, HeatRing, HeatScale, HeatShape, HeatWindow, ImageSize,
+    LanguageShare, StatMetric, StreakMetric, StreakSummary, Theme, TileMetric,
 };
 
 const FONT_STACK: &str =
@@ -55,6 +55,21 @@ const METRIC_BLOCK_HEIGHT: u32 = METRIC_LABEL_TO_NOTE + 40;
 /// rows reach when the card is not cramped.
 const STAT_ROWS_TOP: u32 = 58;
 const STAT_ROW_STEP: u32 = 30;
+
+/// The activity card. `BLOCK_TOP` is where both the first window's label and the
+/// first language row sit, so the two sides of a wide card start on the same
+/// line. `WINDOW_STEP` is the drop from one window to the next, measured to clear
+/// the figure and its note.
+const ACTIVITY_BLOCK_TOP: u32 = 48;
+const ACTIVITY_WINDOW_STEP: u32 = 62;
+const ACTIVITY_ROW_STEP: u32 = 22;
+
+/// Room kept at the right edge for a share such as `27.6%`.
+const ACTIVITY_SHARE_COLUMN: u32 = 46;
+
+/// On a narrow card the windows sit side by side and the tracks go underneath, so
+/// the tracks start below one window block rather than beside two.
+const ACTIVITY_STACKED_TRACKS: u32 = ACTIVITY_BLOCK_TOP + 26;
 
 /// Rows of the languages panel, as tracks on a narrow card and as two columns on
 /// a wide one.
@@ -322,7 +337,7 @@ fn render_streak_card(
 }
 
 fn render_activity_card(
-    summary: &CodingActivitySummary,
+    comparison: &ActivityComparison,
     config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
@@ -334,7 +349,7 @@ fn render_activity_card(
         config.scale_basis_points,
         theme,
         title,
-        activity_section(card_area(size, pad), summary, theme),
+        activity_section(card_area(size, pad), comparison, config, theme),
     )
 }
 
@@ -383,6 +398,7 @@ fn natural_height(card: &CardData, config: &GithubStatsConfig) -> u32 {
         }
         CardData::Heat(_) => ring_radius_for(width) * 2 + RING_BLOCK_SLACK,
         CardData::Metric { .. } => METRIC_BLOCK_HEIGHT,
+        CardData::Activity(comparison) => activity_natural_height(width, comparison, config),
         _ => return config.size.height,
     };
 
@@ -401,6 +417,27 @@ fn language_natural_height(
         let per_column = config.language_rows.div_ceil(2).max(1) as u32;
         let rows = drawn.min(per_column);
         LANGUAGE_COLUMN_TOP + LANGUAGE_COLUMN_STEP * (rows.saturating_sub(1)) + DESCENDER + 4
+    }
+}
+
+/// A wide card sets figures beside tracks, so it needs whichever is taller. A
+/// narrow one stacks them, so it needs both.
+fn activity_natural_height(
+    width: u32,
+    comparison: &ActivityComparison,
+    config: &GithubStatsConfig,
+) -> u32 {
+    if comparison.is_empty() {
+        return 74 + DESCENDER;
+    }
+    let rows = comparison.languages.len().min(config.language_rows).max(1) as u32;
+    let tracks = ACTIVITY_ROW_STEP * rows + DESCENDER;
+    let windows = ACTIVITY_WINDOW_STEP + 44 + DESCENDER;
+
+    if is_narrow(width) {
+        ACTIVITY_STACKED_TRACKS + tracks
+    } else {
+        ACTIVITY_BLOCK_TOP + windows.max(tracks)
     }
 }
 
@@ -1420,34 +1457,273 @@ fn level_color<'a>(level: Option<usize>, ring: &'a Ring) -> &'a str {
     })
 }
 
-fn activity_section(area: Rect, summary: &CodingActivitySummary, theme: &RenderTheme) -> String {
-    let step = (area.height.saturating_sub(52) / 5).clamp(18, 26);
-    let rows = summary
-        .entries
-        .iter()
-        .take(5)
-        .enumerate()
-        .map(|(index, entry)| {
-            let y = area.y + 52 + index as u32 * step;
-            format!(
-                "{}{}",
-                text(area.x, y, 12.5, theme.ink, &entry.language),
-                text_end(
-                    area.right(),
-                    y,
-                    12.5,
-                    theme.muted,
-                    &format_duration(entry.seconds)
+/// Draws two spans of the record against each other: the figures for each on one
+/// side, and the languages of the shorter span on the other with the longer span
+/// marked on the same track.
+///
+/// Putting the baseline on the same track as the recent bar is what makes this a
+/// comparison rather than two lists. A mark to the left of the bar's end means
+/// the language has grown since the longer span; to the right, it has shrunk. A
+/// reader gets the direction without doing arithmetic on two columns of
+/// percentages.
+fn activity_section(
+    area: Rect,
+    comparison: &ActivityComparison,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+) -> String {
+    let head = format!(
+        "{}{}",
+        eyebrow(area.x, area.y + 16, "Coding activity", theme),
+        text_end(
+            area.right(),
+            area.y + 16,
+            10.5,
+            theme.muted,
+            &comparison.measure.label().to_uppercase(),
+        ),
+    );
+
+    if comparison.is_empty() {
+        return format!(
+            "{head}{}{}",
+            text(
+                area.x,
+                area.y + 52,
+                14.0,
+                theme.ink,
+                "No activity recorded yet",
+            ),
+            text(
+                area.x,
+                area.y + 74,
+                11.5,
+                theme.muted,
+                &format!(
+                    "{} and {} hold no {} time",
+                    comparison.recent.span.label().to_lowercase(),
+                    comparison.baseline.span.label().to_lowercase(),
+                    comparison.measure.as_str(),
                 ),
+            ),
+        );
+    }
+
+    if is_narrow(area.width) {
+        format!(
+            "{head}{}",
+            stacked_activity(area, comparison, config, theme)
+        )
+    } else {
+        format!(
+            "{head}{}",
+            columned_activity(area, comparison, config, theme)
+        )
+    }
+}
+
+/// Figures on the left, language tracks on the right, divided by a hairline.
+fn columned_activity(
+    area: Rect,
+    comparison: &ActivityComparison,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+) -> String {
+    let figures = (area.width * 34 / 100).clamp(150, 260);
+    let divider = area.x + figures + GUTTER / 2;
+    let tracks = Rect {
+        x: divider + GUTTER / 2,
+        y: area.y,
+        width: area.right().saturating_sub(divider + GUTTER / 2),
+        height: area.height,
+    };
+
+    format!(
+        "{}{}{}",
+        activity_figures(
+            Rect {
+                x: area.x,
+                y: area.y,
+                width: figures,
+                height: area.height
+            },
+            comparison,
+            theme,
+        ),
+        vertical_hairline(
+            divider,
+            area.y + ACTIVITY_BLOCK_TOP - 18,
+            ACTIVITY_WINDOW_STEP + 30,
+            theme,
+        ),
+        activity_tracks(tracks, comparison, config, theme),
+    )
+}
+
+/// The two windows side by side above the language tracks, for a card too narrow
+/// to hold figures and tracks in one row.
+fn stacked_activity(
+    area: Rect,
+    comparison: &ActivityComparison,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+) -> String {
+    let column = area.width / 2;
+    let windows = [&comparison.recent, &comparison.baseline]
+        .into_iter()
+        .enumerate()
+        .map(|(index, window)| {
+            activity_window(
+                area.x + index as u32 * column,
+                area.y + ACTIVITY_BLOCK_TOP,
+                window,
+                index == 0,
+                theme,
             )
         })
         .collect::<String>();
 
+    let tracks = Rect {
+        x: area.x,
+        y: area.y + ACTIVITY_STACKED_TRACKS,
+        width: area.width,
+        height: area.height.saturating_sub(ACTIVITY_STACKED_TRACKS),
+    };
+
     format!(
-        "{}{}",
-        eyebrow(area.x, area.y + 16, "Coding Activity", theme),
-        rows
+        "{windows}{}",
+        activity_tracks(tracks, comparison, config, theme,),
     )
+}
+
+/// The two windows stacked, the recent one leading.
+fn activity_figures(area: Rect, comparison: &ActivityComparison, theme: &RenderTheme) -> String {
+    [&comparison.recent, &comparison.baseline]
+        .into_iter()
+        .enumerate()
+        .map(|(index, window)| {
+            activity_window(
+                area.x,
+                area.y + ACTIVITY_BLOCK_TOP + index as u32 * ACTIVITY_WINDOW_STEP,
+                window,
+                index == 0,
+                theme,
+            )
+        })
+        .collect()
+}
+
+/// One window: how long it spans, how much time it holds, and how much of the
+/// span recorded any. The last of those is not decoration — without it a span
+/// reaching further back than the record does reads as an idle stretch.
+fn activity_window(
+    x: u32,
+    y: u32,
+    window: &ActivityWindow,
+    leading: bool,
+    theme: &RenderTheme,
+) -> String {
+    let size = if leading { 21.0 } else { 17.0 };
+    let ink = if leading { theme.ink } else { theme.muted };
+    format!(
+        "{}{}{}",
+        eyebrow(x, y, &window.span.label(), theme),
+        text(x, y + 26, size, ink, &format_duration(window.seconds)),
+        text(x, y + 44, 11.0, theme.muted, &window.coverage()),
+    )
+}
+
+/// A language per row: the recent share as a bar, the longer span as a mark on
+/// the same track.
+fn activity_tracks(
+    area: Rect,
+    comparison: &ActivityComparison,
+    config: &GithubStatsConfig,
+    theme: &RenderTheme,
+) -> String {
+    let rows = comparison.languages.len().min(config.language_rows).max(1);
+    let step = (area
+        .height
+        .saturating_sub(ACTIVITY_BLOCK_TOP)
+        .saturating_sub(DESCENDER)
+        / rows as u32)
+        .clamp(16, ACTIVITY_ROW_STEP);
+    let name_column = (area.width * 30 / 100).clamp(72, 130);
+    let track_x = area.x + name_column;
+    let track_width = area
+        .width
+        .saturating_sub(name_column + ACTIVITY_SHARE_COLUMN)
+        .max(TRACK_MINIMUM);
+    // The scale is the largest recent share rather than the whole, so a card whose
+    // top language holds a quarter of the time still fills its longest bar. A
+    // baseline mark can sit past that language's own bar, so the same scale has to
+    // cover the larger of the two or a mark would be drawn off the track.
+    let ceiling = comparison
+        .languages
+        .iter()
+        .take(rows)
+        .map(|language| {
+            language
+                .recent_basis_points
+                .max(language.baseline_basis_points)
+        })
+        .max()
+        .unwrap_or(10_000)
+        .max(1);
+
+    comparison
+        .languages
+        .iter()
+        .take(rows)
+        .enumerate()
+        .map(|(index, language)| {
+            let y = area.y + ACTIVITY_BLOCK_TOP + index as u32 * step;
+            let colour = language_color(&language.name, index);
+            let filled = track_width * language.recent_basis_points / ceiling;
+            let mark = track_width * language.baseline_basis_points / ceiling;
+            format!(
+                "{}{}{}{}{}{}",
+                circle(area.x + 4, y - 4, 3.5, colour),
+                text(area.x + 15, y, 11.5, theme.ink, &language.name),
+                rounded_rect(track_x, y - 7, track_width, 4, theme.track),
+                rounded_rect(track_x, y - 7, filled, 4, colour),
+                baseline_mark(track_x + mark, y - 7, theme),
+                text_end(
+                    area.right(),
+                    y,
+                    11.5,
+                    theme.muted,
+                    &percentage(language.recent_basis_points),
+                ),
+            )
+        })
+        .collect()
+}
+
+/// Where the longer span put this language, drawn across the track so it reads
+/// against the bar rather than beside it.
+fn baseline_mark(x: u32, track_y: u32, theme: &RenderTheme) -> String {
+    format!(
+        r#"<rect x="{}" y="{}" width="2" height="10" rx="1" fill="{}" opacity="0.75"/>"#,
+        x.saturating_sub(1),
+        track_y.saturating_sub(3),
+        theme.ink,
+    )
+}
+
+fn vertical_hairline(x: u32, y: u32, height: u32, theme: &RenderTheme) -> String {
+    format!(
+        r#"<rect x="{x}" y="{y}" width="1" height="{height}" fill="{}"/>"#,
+        theme.line,
+    )
+}
+
+fn circle(cx: u32, cy: u32, radius: f32, fill: &str) -> String {
+    format!(r#"<circle cx="{cx}" cy="{cy}" r="{radius}" fill="{fill}"/>"#)
+}
+
+fn percentage(basis_points: u32) -> String {
+    format!("{:.1}%", f64::from(basis_points) / 100.0)
 }
 
 fn eyebrow(x: u32, y: u32, value: &str, theme: &RenderTheme) -> String {
@@ -1717,7 +1993,9 @@ fn progress_bar(seconds: u64, total: u64) -> String {
     )
 }
 
-fn format_duration(seconds: u64) -> String {
+/// Words a span of seconds the way every card and chart words it, so the same
+/// quantity reads the same wherever it is shown.
+pub fn format_duration(seconds: u64) -> String {
     let hours = seconds / 3600;
     let minutes = seconds % 3600 / 60;
     format!("{hours} hrs {minutes} mins")
