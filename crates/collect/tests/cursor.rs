@@ -6,16 +6,40 @@
 //! the alternative is finding out from a wrong number on a card.
 
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
 
 use github_personal_stats_collect::{
-    cursor::{commit_day, database_path, read},
+    cursor::{commit_day, database_path, read as read_source},
     error::CollectError,
+    sessions,
 };
-use github_personal_stats_core::{Author, DayBucket};
+use github_personal_stats_core::{Author, DayBucket, MEASURE_AGENT};
 use rusqlite::Connection;
+
+/// Reads this source and turns its moments into hours.
+///
+/// The reader hands out moments rather than hours because hours are not a
+/// property of one source: the collector sorts every source's moments into one
+/// timeline so that two agents working the same afternoon are one afternoon. What
+/// these tests check is this source's own reading, so they do that last step
+/// themselves.
+fn read(
+    path: &Path,
+    idle_timeout_seconds: i64,
+) -> Result<BTreeMap<String, DayBucket>, CollectError> {
+    let reading = read_source(path)?;
+    let mut days = reading.days;
+    for (date, worked) in sessions::accumulate(&reading.moments, idle_timeout_seconds) {
+        *days
+            .entry(date.clone())
+            .or_insert_with(|| DayBucket::new(&date))
+            .measure_mut(MEASURE_AGENT) = worked;
+    }
+    Ok(days)
+}
 
 fn scratch(name: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("gps-cursor-{name}-{}", std::process::id()));

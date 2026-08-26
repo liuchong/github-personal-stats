@@ -11,7 +11,10 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use github_personal_stats_collect::records::{publish, read_days};
+use github_personal_stats_collect::{
+    CollectError,
+    records::{Recount, Written, publish, read_days},
+};
 use github_personal_stats_core::{
     ActivitySnapshot, Author, DayBucket,
     store::{MANIFEST, parse_manifest},
@@ -28,6 +31,12 @@ fn worked(date: &str, agent_seconds: u64) -> DayBucket {
     day.add_lines("", Author::Agent, "a-model", 500, 0);
     day.requests = 7;
     day
+}
+
+/// Publishing under the ordinary rule, which is what all but one of these are
+/// about: a day already on record is replaced only by a fuller reading of it.
+fn keeping(root: &Path, snapshot: &ActivitySnapshot) -> Result<Written, CollectError> {
+    publish(root, snapshot, Recount::KeepFuller)
 }
 
 fn reading(collected_at: &str, days: Vec<DayBucket>) -> ActivitySnapshot {
@@ -55,7 +64,7 @@ fn root() -> PathBuf {
 fn a_day_becomes_its_own_file() {
     let place = root();
 
-    let written = publish(
+    let written = keeping(
         place.as_path(),
         &reading(
             "2026-08-26T00:00:00Z",
@@ -76,13 +85,13 @@ fn the_day_the_source_forgot_is_still_in_the_record() {
     // The failure this module exists to prevent. A collection made a month later
     // cannot see the old day at all, and must not be able to erase it.
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-05-12T00:00:00Z", vec![worked("2026-05-12", 7_200)]),
     )
     .expect("the first publication should work");
 
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-26", 1_800)]),
     )
@@ -103,13 +112,13 @@ fn a_thinner_reading_of_a_published_day_does_not_shrink_it() {
     // The window's edge: the day is still in the source, but only partly, so the
     // reading is short. The fuller reading already published is the true one.
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-01", 7_200)]),
     )
     .expect("the first publication should work");
 
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-27T00:00:00Z", vec![worked("2026-08-01", 600)]),
     )
@@ -123,13 +132,13 @@ fn a_thinner_reading_of_a_published_day_does_not_shrink_it() {
 #[test]
 fn more_work_on_a_day_already_recorded_is_taken() {
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T06:00:00Z", vec![worked("2026-08-26", 1_800)]),
     )
     .expect("the first publication should work");
 
-    let written = publish(
+    let written = keeping(
         place.as_path(),
         &reading("2026-08-26T18:00:00Z", vec![worked("2026-08-26", 7_200)]),
     )
@@ -148,19 +157,57 @@ fn more_work_on_a_day_already_recorded_is_taken() {
 }
 
 #[test]
+fn recounting_replaces_the_time_it_can_see_and_leaves_the_rest() {
+    // For when the way time is counted changes rather than the record growing.
+    // The keeping rule would hold the older, larger figure for ever, so a
+    // correction downwards needs asking for.
+    let place = root();
+    keeping(
+        place.as_path(),
+        &reading(
+            "2026-08-26T06:00:00Z",
+            vec![worked("2026-07-01", 7_200), worked("2026-08-26", 7_200)],
+        ),
+    )
+    .expect("the first publication should work");
+
+    // A run that reaches only the newer day, counting it as less than before.
+    publish(
+        place.as_path(),
+        &reading("2026-08-27T06:00:00Z", vec![worked("2026-08-26", 1_800)]),
+        Recount::Replace,
+    )
+    .expect("a recount should work");
+
+    let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
+    let day = |date: &str| {
+        held.iter()
+            .find(|day| day.date == date)
+            .expect("the day should still be on record")
+    };
+    assert_eq!(day("2026-08-26").measure("agent").seconds, 1_800);
+    // The older day the sources have since forgotten keeps what it had. A
+    // recount corrects a reading; it does not delete history.
+    assert_eq!(day("2026-07-01").measure("agent").seconds, 7_200);
+    // And only time is recounted: lines are counts, and a thinner reading of
+    // them is not a correction.
+    assert_eq!(day("2026-08-26").lines[0].added, 500);
+}
+
+#[test]
 fn collecting_again_with_nothing_new_writes_nothing() {
     // What a daemon on a timer does almost every time it wakes. If this wrote,
     // every run would be a commit.
     let place = root();
     let days = vec![worked("2026-08-26", 3_600)];
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T06:00:00Z", days.clone()),
     )
     .expect("the first publication should work");
 
     // A later clock reading, the same work.
-    let written = publish(place.as_path(), &reading("2026-08-26T06:30:00Z", days))
+    let written = keeping(place.as_path(), &reading("2026-08-26T06:30:00Z", days))
         .expect("a second publication should work");
 
     assert!(
@@ -174,7 +221,7 @@ fn only_the_day_that_changed_is_rewritten() {
     // The reason for one file per day: a reader can fetch a window, and the
     // history says which day each commit recorded.
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading(
             "2026-08-26T06:00:00Z",
@@ -190,7 +237,7 @@ fn only_the_day_that_changed_is_rewritten() {
         .collect::<Vec<_>>();
     later.push(worked("2026-08-21", 1_800));
 
-    let written = publish(place.as_path(), &reading("2026-08-27T06:00:00Z", later))
+    let written = keeping(place.as_path(), &reading("2026-08-27T06:00:00Z", later))
         .expect("a later publication should work");
 
     let days = written
@@ -205,12 +252,12 @@ fn only_the_day_that_changed_is_rewritten() {
 #[test]
 fn the_manifest_totals_the_days_that_survived() {
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-05-12T00:00:00Z", vec![worked("2026-05-12", 7_200)]),
     )
     .expect("the first publication should work");
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-26", 1_800)]),
     )
@@ -235,7 +282,7 @@ fn the_manifest_totals_the_days_that_survived() {
 #[test]
 fn two_machines_do_not_touch_each_others_days() {
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-26", 3_600)]),
     )
@@ -243,7 +290,7 @@ fn two_machines_do_not_touch_each_others_days() {
 
     let mut desktop = ActivitySnapshot::new("m-desktop", "2026-08-26T00:00:00Z");
     desktop.days = vec![worked("2026-08-26", 1_800)];
-    publish(place.as_path(), &desktop).expect("the desktop should publish");
+    keeping(place.as_path(), &desktop).expect("the desktop should publish");
 
     let laptop = read_days(place.as_path(), "m-laptop").expect("the laptop record should read");
     let other = read_days(place.as_path(), "m-desktop").expect("the desktop record should read");
@@ -267,7 +314,7 @@ fn the_single_file_record_is_taken_in_rather_than_left_behind() {
     )
     .expect("the older record should be placed");
 
-    let written = publish(
+    let written = keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-26", 1_800)]),
     )
@@ -290,7 +337,7 @@ fn a_day_file_that_cannot_be_read_stops_the_run() {
     // Skipping it would let the next thin reading be written over a day whose
     // only copy is the file that failed to parse.
     let place = root();
-    publish(
+    keeping(
         place.as_path(),
         &reading("2026-08-26T00:00:00Z", vec![worked("2026-08-26", 3_600)]),
     )
@@ -302,7 +349,7 @@ fn a_day_file_that_cannot_be_read_stops_the_run() {
     )
     .expect("the file should be damaged");
 
-    let error = publish(
+    let error = keeping(
         place.as_path(),
         &reading("2026-08-27T00:00:00Z", vec![worked("2026-08-27", 1_800)]),
     )

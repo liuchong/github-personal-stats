@@ -144,14 +144,16 @@ Activity options:
   --activity-blocks <spec>
                           Text chart blocks, semicolon separated, each written
                           value/dimension with optional settings. Values are
-                          time, lines, tokens; dimensions are languages, models,
+                          lines, time, tokens; dimensions are languages, models,
                           authors, windows; settings are limit, split, authors,
-                          time, title, measure. Lines are counted and hours are
+                          time, title, measure. Lines are counted where hours are
                           inferred from them, so lines lead and time=on adds the
-                          hours behind any breakdown. A block naming a measure
-                          reads that one, so one chart can hold agent hours
-                          beside imported hours; authors=on makes a block of
-                          hours say who wrote each language's lines
+                          hours behind any breakdown. Lines are additions only:
+                          the editor keeps a row per line that exists, so a
+                          deleted line leaves nothing to count. A block naming a
+                          measure reads that one, so one chart can hold agent
+                          hours beside imported hours; authors=on makes a block
+                          of hours say who wrote each language's lines
                           (default: lines/languages;lines/authors;lines/models)
   --activity-columns <list>
                           Columns in order from name, value, bar, share, aside

@@ -4,13 +4,13 @@ use std::{
     time::Duration,
 };
 
-use github_personal_stats_core::{Author, DayBucket, MEASURE_AGENT};
+use github_personal_stats_core::{Author, DayBucket};
 use rusqlite::{Connection, OpenFlags};
 
 use crate::{
     error::CollectError,
     language,
-    sessions::{self, Event, Part},
+    sessions::{Event, Part},
 };
 
 const SCORED_COMMITS: &str = "scored_commits";
@@ -61,10 +61,19 @@ pub fn database_path(home: &Path) -> PathBuf {
         .join("ai-code-tracking.db")
 }
 
-pub fn read(
-    path: &Path,
-    idle_timeout_seconds: i64,
-) -> Result<BTreeMap<String, DayBucket>, CollectError> {
+/// What one source saw: whole days, and the moments behind any time in them.
+///
+/// The moments are handed out rather than turned into hours here because hours
+/// are not a property of one source. Two agents working the same afternoon are
+/// one afternoon, and only a caller holding every source's moments can say so;
+/// a source that counted its own hours would have them counted again beside the
+/// other's.
+pub struct Reading {
+    pub days: BTreeMap<String, DayBucket>,
+    pub moments: Vec<Event>,
+}
+
+pub fn read(path: &Path) -> Result<Reading, CollectError> {
     if !path.exists() {
         return Err(CollectError::NotFound {
             what: "Cursor AI tracking database",
@@ -97,9 +106,9 @@ pub fn read(
     let mut days = BTreeMap::new();
     read_committed(&connection, &mut days)?;
     read_generated(&connection, &mut days)?;
-    read_worked_time(&connection, idle_timeout_seconds, &mut days)?;
     read_requests(&connection, &mut days)?;
-    Ok(days)
+    let moments = read_moments(&connection)?;
+    Ok(Reading { days, moments })
 }
 
 fn read_committed(
@@ -199,23 +208,6 @@ fn read_generated(
             positive(lines),
             0,
         );
-    }
-
-    Ok(())
-}
-
-fn read_worked_time(
-    connection: &Connection,
-    idle_timeout_seconds: i64,
-    days: &mut BTreeMap<String, DayBucket>,
-) -> Result<(), CollectError> {
-    let moments = read_moments(connection)?;
-
-    for (date, bucket) in sessions::accumulate(&moments, idle_timeout_seconds) {
-        *days
-            .entry(date.clone())
-            .or_insert_with(|| DayBucket::new(date))
-            .measure_mut(MEASURE_AGENT) = bucket;
     }
 
     Ok(())

@@ -101,12 +101,34 @@ pub fn read_days(root: &Path, machine: &str) -> Result<Vec<DayBucket>, CollectEr
     Ok(days)
 }
 
+/// What to do with the time already on record for the days a reading covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recount {
+    /// Keep whichever reading saw more, which is right for as long as the way
+    /// time is counted stays the same.
+    KeepFuller,
+    /// Replace it with this reading's, for the days this reading covers.
+    ///
+    /// For when the counting itself changes rather than the record growing. A
+    /// larger figure from the old rule is not a fuller reading of the day, it is
+    /// a figure from a rule no longer in force, and keeping the larger of the two
+    /// would mean a measure could never be corrected downwards.
+    ///
+    /// Only time is replaced, and only for days this reading covers, so this
+    /// cannot erase lines or commits the sources have since forgotten.
+    Replace,
+}
+
 /// Folds a collection into the published record, writing only what changed.
 ///
 /// The root holds one directory per machine. Two machines therefore write
 /// disjoint sets of paths, which is what makes a shared git repository work
 /// without a merge strategy.
-pub fn publish(root: &Path, snapshot: &ActivitySnapshot) -> Result<Written, CollectError> {
+pub fn publish(
+    root: &Path,
+    snapshot: &ActivitySnapshot,
+    recount: Recount,
+) -> Result<Written, CollectError> {
     let machine = snapshot.machine.as_str();
     let mut written = Written {
         directory: machine_directory(root, machine),
@@ -118,7 +140,10 @@ pub fn publish(root: &Path, snapshot: &ActivitySnapshot) -> Result<Written, Coll
         written.removed.push(superseded);
     }
 
-    let held = keep_fuller_days(&published, &snapshot.days);
+    let mut held = keep_fuller_days(&published, &snapshot.days);
+    if recount == Recount::Replace {
+        recount_time(&mut held, &snapshot.days);
+    }
 
     for day in &held {
         let record = DayRecord::new(machine, day.clone());
@@ -146,6 +171,18 @@ pub fn publish(root: &Path, snapshot: &ActivitySnapshot) -> Result<Written, Coll
     }
 
     Ok(written)
+}
+
+/// Puts this reading's time on the days it covers, in place of what was there.
+///
+/// A day the reading did not reach keeps the time it had: the sources forget, and
+/// a day they have forgotten is not a day that held no work.
+fn recount_time(held: &mut [DayBucket], fresh: &[DayBucket]) {
+    for day in held.iter_mut() {
+        if let Some(reading) = fresh.iter().find(|other| other.date == day.date) {
+            day.time = reading.time.clone();
+        }
+    }
 }
 
 /// Takes in the record written before days were split into files, so that the

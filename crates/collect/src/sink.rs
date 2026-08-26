@@ -21,13 +21,20 @@ use std::{
 
 use github_personal_stats_core::ActivitySnapshot;
 
-use crate::{error::CollectError, records};
+use crate::{
+    error::CollectError,
+    records::{self, Recount},
+};
 
 const SNAPSHOT_DIR: &str = "snapshots";
 
 pub trait Sink {
     /// Puts the snapshot where whoever renders the cards will find it.
-    fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError>;
+    fn publish(
+        &self,
+        snapshot: &ActivitySnapshot,
+        recount: Recount,
+    ) -> Result<PathBuf, CollectError>;
 
     /// Where that is, in words, for a daemon that has to say what it is doing
     /// before it has done it. Reporting the configured file path regardless of
@@ -49,8 +56,12 @@ pub struct FileSink {
 }
 
 impl Sink for FileSink {
-    fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError> {
-        let written = records::publish(&self.path, snapshot)?;
+    fn publish(
+        &self,
+        snapshot: &ActivitySnapshot,
+        recount: Recount,
+    ) -> Result<PathBuf, CollectError> {
+        let written = records::publish(&self.path, snapshot, recount)?;
         Ok(written.directory)
     }
 
@@ -87,7 +98,11 @@ pub struct GitSink {
 }
 
 impl Sink for GitSink {
-    fn publish(&self, snapshot: &ActivitySnapshot) -> Result<PathBuf, CollectError> {
+    fn publish(
+        &self,
+        snapshot: &ActivitySnapshot,
+        recount: Recount,
+    ) -> Result<PathBuf, CollectError> {
         self.prepare()?;
         // Catch up with the remote before reading what is published, so the
         // comparison below is against what is actually there, and so this
@@ -95,7 +110,7 @@ impl Sink for GitSink {
         self.catch_up()?;
 
         let root = self.repo.join(SNAPSHOT_DIR);
-        let written = records::publish(&root, snapshot)?;
+        let written = records::publish(&root, snapshot, recount)?;
 
         // A publication that changed nothing is what a daemon on a timer produces
         // most of the time, and it must not become a commit.

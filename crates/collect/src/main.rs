@@ -1,7 +1,8 @@
 use std::{env, error::Error, path::PathBuf, process};
 
 use github_personal_stats_collect::{
-    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, preferences::Preferences, sink,
+    DEFAULT_IDLE_TIMEOUT_MINUTES, Settings, collect, machine, preferences::Preferences,
+    records::Recount, sink,
 };
 use github_personal_stats_core::{MEASURE_AGENT, MEASURE_EDITOR, summarise_activity};
 
@@ -61,7 +62,13 @@ fn run() -> Result<(), Box<dyn Error>> {
         chosen(&args, &prefs, "--branch").as_deref(),
         !(args.iter().any(|arg| arg == "--no-push") || prefs.switch("no-push")),
     )?;
-    let written = sink.publish(&snapshot)?;
+    let recount = if args.iter().any(|arg| arg == "--recount-time") || prefs.switch("recount-time")
+    {
+        Recount::Replace
+    } else {
+        Recount::KeepFuller
+    };
+    let written = sink.publish(&snapshot, recount)?;
 
     let totals = summarise_activity(&snapshot.days);
     println!(
@@ -141,6 +148,11 @@ Options:
   --branch <name>          Branch to push to (default: master)
   --no-push                Commit locally without pushing
   --idle-timeout <minutes> Gap that ends a working stretch (default: {DEFAULT_IDLE_TIMEOUT_MINUTES})
+  --recount-time           Replace the time already recorded for the days this
+                           run can see, instead of keeping whichever reading was
+                           larger. For when the way time is counted changed;
+                           lines, commits and tokens are left alone, and days
+                           this run cannot see are untouched
   --state <dir>            Where the machine identity, token and pulse journal live
                            (default: XDG state directory)
   --home <dir>             Where to look for local records (default: HOME)
@@ -149,9 +161,24 @@ Options:
 What is read:
   Cursor keeps a record of the code it wrote at
   ~/.cursor/ai-tracking/ai-code-tracking.db. Committed lines come from its own
-  per-commit scoring; generated lines, models, languages, and agent time come
-  from the timestamps on the code it produced. Editor time comes from the pulse
-  journal that editor plugins write through the daemon.
+  per-commit scoring, and generated lines, models and languages from the
+  timestamps on the code it produced. Codex and Claude Code keep transcripts of
+  their sessions, which give tokens and the times they were working. Editor time
+  comes from the pulse journal that editor plugins write through the daemon.
+
+How time is counted:
+  Every timestamped moment from every agent goes into one timeline, and a gap of
+  up to the idle timeout between two of them counts as time worked. One timeline
+  rather than one per source, because an afternoon in which an agent ran in the
+  editor and another ran in a terminal is one afternoon; summing each source's
+  own hours would count it twice.
+
+  Reading the terminal agents matters more than it sounds. Measured over one
+  month of this record, the editor saw an agent writing in 8,214 minutes and the
+  terminal agents were working in 13,150 further minutes it could not see. With
+  both, four fifths of the counted time comes from gaps under thirty seconds —
+  that is, from observed activity. With the editor alone, over half came from
+  gaps above a minute, which is interpolation across silence.
 
 How the record is laid out:
   One directory per machine, one file per day inside it, and a manifest holding

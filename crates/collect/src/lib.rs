@@ -14,7 +14,7 @@ pub mod transcripts;
 
 use std::{collections::BTreeMap, path::PathBuf};
 
-use github_personal_stats_core::{ActivitySnapshot, DayBucket, MEASURE_EDITOR};
+use github_personal_stats_core::{ActivitySnapshot, DayBucket, MEASURE_AGENT, MEASURE_EDITOR};
 
 pub use error::CollectError;
 
@@ -42,30 +42,39 @@ pub struct Settings {
 /// cannot shrink a record it never opened.
 pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
     let machine = machine::identity(&settings.state_dir)?;
-    let fresh = cursor::read(
-        &cursor::database_path(&settings.home),
-        settings.idle_timeout_seconds,
-    )?;
+    let editor = cursor::read(&cursor::database_path(&settings.home))?;
+    let mut days: BTreeMap<String, DayBucket> = editor.days;
 
-    let worked = pulse::read(&settings.state_dir, settings.idle_timeout_seconds)?;
+    // Terminal agents keep their own records: tokens nothing else can see, and
+    // timestamps for work that never passes through an editor.
+    let mut moments = editor.moments;
+    moments.extend(transcripts::read(&settings.home, &mut days)?);
 
-    // The two sources measure different things and neither can fill in for the
-    // other: Cursor's store knows what an agent changed, and the editor plugins
-    // know when someone was present. So each owns a measure of its own, and the
-    // two are never added — an agent working while its operator watches is time
-    // in both, and summing them would make a day longer than a day.
-    let mut days: BTreeMap<String, DayBucket> = fresh.into_iter().collect();
-    for (date, editor) in worked {
+    // One timeline, not one per source. An afternoon in which an agent ran in the
+    // editor and another in a terminal is one afternoon, and the only way to say
+    // so is to sort every moment together and let the gaps fall where they fall.
+    // Two sources counting their own hours would count that afternoon twice; two
+    // sources here instead bound each other's gaps, which is the whole reason the
+    // figure gets better rather than merely larger.
+    moments.sort_by_key(|moment| moment.second);
+    for (date, worked) in sessions::accumulate(&moments, settings.idle_timeout_seconds) {
         *days
             .entry(date.clone())
             .or_insert_with(|| DayBucket::new(&date))
-            .measure_mut(MEASURE_EDITOR) = editor;
+            .measure_mut(MEASURE_AGENT) = worked;
     }
 
-    // Terminal agents keep their own records and report tokens nothing else can
-    // see. They add to the same days without touching either measure of time,
-    // since what they answer is how much was spent rather than how long it took.
-    transcripts::read(&settings.home, &mut days)?;
+    // Editor time is a different quantity and stays a separate measure. Cursor's
+    // store knows what an agent changed; the editor plugins know when someone was
+    // present. The two are never added — an agent working while its operator
+    // watches is time in both, and summing them would make a day longer than a
+    // day.
+    for (date, present) in pulse::read(&settings.state_dir, settings.idle_timeout_seconds)? {
+        *days
+            .entry(date.clone())
+            .or_insert_with(|| DayBucket::new(&date))
+            .measure_mut(MEASURE_EDITOR) = present;
+    }
 
     let mut snapshot = ActivitySnapshot::new(machine, clock::utc_timestamp(clock::now()));
     snapshot.days = days.into_values().collect();

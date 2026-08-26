@@ -625,6 +625,160 @@ Run:
 cargo run -p github-personal-stats -- update-readme --section activity --target README.md
 ```
 
+Print the same chart to a terminal instead, which is the quickest way to try a configuration:
+
+```sh
+cargo run -p github-personal-stats -- chart --activity-record <your record>
+```
+
+With nothing configured you get what was written, who wrote it, and what wrote it:
+
+```txt
+LINES BY LANGUAGE
+
+Total        +492,274   lines, 90.24% by an agent
+
+Rust         +121,554   #################========   24.69 %
+Markdown     +118,978   #######################=-   24.16 %
+Go            +94,234   ##################=------   19.14 %
+
+LINES BY AUTHOR
+
+Total             +492,274   lines, last 30 days
+
+agent             +444,235   #########################   90.24 %
+not by an agent    +48,039   ###----------------------    9.75 %
+
+LINES BY MODEL
+
+Total            +444,235   lines, 90.24% by an agent
+
+gpt-5.6-sol      +126,003   #########################   28.36 %
+claude-opus-5    +122,111   ########################-   27.48 %
+gpt-5.5          +109,701   ######################---   24.69 %
+
+# agent    = not by an agent    - rest
+```
+
+### What the figures mean
+
+Three different things can be counted, they are measured by different means, and they are not interchangeable. Which one a chart leads with is worth choosing deliberately.
+
+| Value | What it counts | Knows the language | Knows who wrote it |
+| --- | --- | --- | --- |
+| `lines` | Lines the editor watched appear | Yes | Yes |
+| `time` | Wall clock while an agent was working | Partly | Yes |
+| `tokens` | Tokens the agents were billed for | No | No |
+
+`lines` is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.
+
+It is also why the figures are additions only, written `+492,274` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
+
+`not by an agent` means only that: nothing observed an agent writing it. It is a weaker claim than a person having typed it, and it is deliberately not called "me". Only an editor plugin watching keystrokes can honestly make the stronger claim.
+
+### How time is measured
+
+Time is the weakest of the figures and the one worth understanding before quoting it.
+
+There is no clock running. What exists is a set of moments — instants at which something was observed happening — and time is the space between consecutive moments, counted when the gap is shorter than the idle timeout (five minutes by default, `--idle-timeout`). A gap longer than that ends the stretch and is not counted at all. So the figure is only as good as how densely those moments were observed.
+
+Every source's moments go into **one** timeline before any of this is counted, rather than each source being totalled on its own and the totals added. An afternoon in which an agent worked in your editor while another ran in a terminal is one afternoon, and summing per source would bill it twice.
+
+Reading the terminal agents is what makes the figure defensible. Measured over one month of a real record:
+
+| | Minutes with observed activity |
+| --- | --- |
+| Editor only | 8,214 |
+| Terminal agents only | 13,150 |
+| Together | 21,364 |
+
+More work happened outside the editor's view than inside it. That changes not just the total but its quality — how much of the figure is observation and how much is filling in silence:
+
+| Counted seconds coming from gaps of | Share |
+| --- | --- |
+| Under 30 seconds | 79% |
+| 30 seconds to 2 minutes | 9% |
+| 2 to 5 minutes | 12% |
+
+With the editor alone, over half the total came from gaps above a minute, which is interpolation. With both sources, four fifths of it comes from gaps under half a minute, which is very nearly direct observation. Tightening the idle timeout from five minutes to thirty seconds now changes the monthly total by less than a fifth, which is the useful way to say that the figure is being set by evidence rather than by the length of the silences.
+
+The remaining limitation is that most of those hours cannot be attributed to a language. The terminal agents report when they were working without reporting what they were working on; roughly one in eight of their moments names a file at all, and a file named at one instant says nothing about the minutes around it. So a block of hours by language ranks only the hours it can place, and says how many it could not:
+
+```txt
+TIME BY LANGUAGE
+
+Total        134 hrs 49 mins   last 30 days, 243 hrs 28 mins not placed to a language
+
+Markdown      35 hrs 10 mins   #########################   26.08 %
+Rust          31 hrs 45 mins   #######################--   23.55 %
+Go            25 hrs 35 mins   ##################-------   18.98 %
+```
+
+That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with `time=on`:
+
+```txt
+LINES BY LANGUAGE
+
+Rust         +121,554   #################========   24.69 %   31 hrs 45 mins
+Markdown     +118,978   #######################=-   24.16 %   35 hrs 10 mins
+```
+
+### Choosing what the chart says
+
+A chart is a list of blocks separated by semicolons. Each block is written `value/dimension` with optional `,setting=value` pairs:
+
+```sh
+--activity-blocks 'lines/languages,limit=8,time=on;lines/authors;tokens/models'
+```
+
+Values are `lines`, `time` and `tokens`. Dimensions are `languages`, `models`, `authors` and `windows`. Not every pairing was measured — nothing records a token against a language or an author — and a block that asks for a pairing nothing measured says `nothing recorded` rather than inventing a number.
+
+| Setting | Does |
+| --- | --- |
+| `limit=8` | Rows at most, largest first |
+| `time=on` | Adds the hours behind each row |
+| `authors=on` | On a block of hours, adds who wrote each language's lines |
+| `split=off` | Draws each bar whole instead of dividing it by author |
+| `title=…` | Replaces the heading |
+| `measure=…` | Reads a named measure of time rather than the chart's |
+
+A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.
+
+```sh
+--activity-blocks 'time/languages;time/languages,measure=imported'
+```
+
+Two spans are compared, and both are configurable — a day count or `all`:
+
+```sh
+--activity-windows 30,90
+```
+
+### Choosing how it looks
+
+```sh
+--activity-columns name,value,bar,share,aside
+--activity-bar '#=-'
+--activity-bar-width 25
+--activity-bar-basis largest
+```
+
+Columns are drawn in the order given, and a column that no row fills is not drawn at all. `--activity-bar` takes two or three characters: the agent's share, the share nothing watched an agent write, and the remainder. `--activity-bar-basis` decides whether a bar's length is measured against the largest row or against the block's total.
+
+Everything is padded to a monospace grid, so the chart belongs in a fenced block. `update-readme` writes one for you.
+
+### When the counting itself changes
+
+The record keeps whichever reading of a day saw the most, which is right while the way time is counted stays the same, and wrong the moment it changes: a larger figure from an old rule is not a fuller reading, and nothing smaller can ever replace it.
+
+So a change of rule can be asked for explicitly:
+
+```sh
+github-personal-stats-collect --recount-time
+```
+
+This replaces the time recorded for the days the current run can actually see, and leaves everything else alone — lines, commits and tokens are untouched, and so is any day older than your sources remember. The daemon never does this on its own.
+
 ## Local Activity Storage
 
 Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.

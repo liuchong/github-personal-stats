@@ -33,8 +33,17 @@ fn cli_generates_dashboard_svg_file() {
 
 /// A record with one day in it, laid out the way a collector leaves one: a
 /// directory per machine holding dated day files.
+///
+/// A root of its own for each call. Tests run at the same time and each removes
+/// the record it made, so a shared path would have one deleting the record
+/// another was still reading.
 fn a_record_with_one_day() -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("gps-record-{}-{}", std::process::id(), line!()));
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let root = std::env::temp_dir().join(format!(
+        "gps-record-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let machine = root.join("m-test");
     fs::create_dir_all(&machine).unwrap();
     fs::write(
@@ -77,7 +86,7 @@ fn cli_updates_marked_readme_section() {
     // What lands in the README is the chart the record describes, in a fenced
     // block so the columns keep their alignment wherever it is read.
     assert!(readme.contains("```txt"), "{readme}");
-    assert!(readme.contains("LINES  BY LANGUAGE"), "{readme}");
+    assert!(readme.contains("LINES BY LANGUAGE"), "{readme}");
     assert!(readme.contains("Rust"), "{readme}");
     let _ = fs::remove_dir_all(&record);
     assert!(readme.contains("after"));

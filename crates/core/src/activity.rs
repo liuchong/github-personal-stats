@@ -480,17 +480,20 @@ impl TimeBucket {
         }
     }
 
-    /// Keeps whichever reading saw more of the day.
+    /// Keeps whichever reading saw more of the day, whole.
+    ///
+    /// Field by field would be wrong here in a way it is not wrong for counts. A
+    /// reading of a day's time is one accumulation: its total, the languages it
+    /// divides into and the facts refining those all come out of a single pass
+    /// over a single timeline. Taking the largest of each field separately mixes
+    /// two accumulations, and the parts then need not fit inside either total —
+    /// a language's seconds from one reading beside a total from the other can
+    /// sum to more than the day was long, which was observed happening. So the
+    /// fuller reading wins entire, and every part stays with the whole it was
+    /// measured against.
     pub(crate) fn keep_fuller(&mut self, other: &Self) {
-        self.seconds = self.seconds.max(other.seconds);
-        self.sessions = self.sessions.max(other.sessions);
-        for (language, seconds) in &other.languages {
-            let held = self.languages.entry(language.clone()).or_default();
-            *held = (*held).max(*seconds);
-        }
-        for fact in &other.facts {
-            let held = self.fact_mut(&fact.language, fact.author, &fact.model);
-            held.seconds = held.seconds.max(fact.seconds);
+        if other.seconds > self.seconds {
+            *self = other.clone();
         }
     }
 

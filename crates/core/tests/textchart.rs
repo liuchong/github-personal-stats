@@ -13,7 +13,7 @@ use github_personal_stats_core::{
 };
 
 fn block() -> ChartBlock {
-    ChartBlock::new("TIME  BY LANGUAGE")
+    ChartBlock::new("TIME BY LANGUAGE")
         .with_summary(ChartSummary::new("Total", "91 hrs 46 mins", "last 30 days"))
         .with_rows(
             vec![
@@ -127,7 +127,7 @@ fn a_bar_is_as_long_as_the_row_is_large() {
 
 #[test]
 fn a_divided_row_shows_the_split_inside_its_bar() {
-    let divided = ChartBlock::new("LINES  BY LANGUAGE")
+    let divided = ChartBlock::new("LINES BY LANGUAGE")
         .with_rows(
             vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
             1_000,
@@ -147,7 +147,7 @@ fn a_divided_row_shows_the_split_inside_its_bar() {
 
     // A block that divides without saying what its parts are gets no key, since
     // a key naming nothing would be worse than none.
-    let unnamed = ChartBlock::new("LINES  BY LANGUAGE").with_rows(
+    let unnamed = ChartBlock::new("LINES BY LANGUAGE").with_rows(
         vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
         1_000,
     );
@@ -202,11 +202,11 @@ fn columns_can_be_dropped_and_reordered() {
 #[test]
 fn a_block_with_no_rows_says_so_rather_than_drawing_nothing() {
     let text = render_text_chart(
-        &[ChartBlock::new("TOKENS  BY MODEL")],
+        &[ChartBlock::new("TOKENS BY MODEL")],
         &ChartStyle::default(),
     );
 
-    assert!(text.contains("TOKENS  BY MODEL"), "{text}");
+    assert!(text.contains("TOKENS BY MODEL"), "{text}");
     assert!(text.contains("nothing recorded"), "{text}");
 }
 
@@ -258,12 +258,12 @@ fn the_blocks_a_record_can_fill_are_folded_from_its_facts() {
     );
 
     // Lines by default, because a line is counted where an hour is inferred.
-    assert!(text.contains("LINES  BY LANGUAGE"), "{text}");
-    assert!(text.contains("LINES  BY AUTHOR"), "{text}");
+    assert!(text.contains("LINES BY LANGUAGE"), "{text}");
+    assert!(text.contains("LINES BY AUTHOR"), "{text}");
     // Eleven hundred agent lines against two hundred nobody watched an agent
     // write, said as the change they are rather than as a quantity.
     assert!(text.contains("+1,100"), "{text}");
-    assert!(text.contains("LINES  BY MODEL"), "{text}");
+    assert!(text.contains("LINES BY MODEL"), "{text}");
     assert!(text.contains("gpt-5.6"), "{text}");
     // The hours are there for the asking, against the same breakdown.
     let timed = render_text_chart(
@@ -322,6 +322,47 @@ fn a_block_whose_data_was_never_recorded_stays_empty_rather_than_guessing() {
     );
 
     assert!(text.contains("nothing recorded"), "{text}");
+}
+
+#[test]
+fn hours_no_language_can_be_put_to_are_left_out_and_declared() {
+    // The terminal agents say when they were working without saying what on, and
+    // they account for more of the time than the editor does. Ranking that as a
+    // language would make most of the block a row that is not a language.
+    let mut day = DayBucket::new("2026-08-25");
+    {
+        let bucket = day.measure_mut(MEASURE_AGENT);
+        bucket.seconds = 10_800;
+        bucket.languages.insert("Rust".to_owned(), 3_600);
+    }
+
+    let comparison = compare_activity(
+        &[day],
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-08-25"),
+        10,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&comparison),
+            &parse_blocks("time/languages").unwrap(),
+        ),
+        &ChartStyle::default(),
+    );
+
+    // One hour placed of three observed, and the block says so rather than
+    // quietly totalling something other than what a reader of the other blocks
+    // has already seen.
+    let total = text.lines().find(|line| line.starts_with("Total")).unwrap();
+    assert!(total.contains("1 hrs  0 mins"), "{text}");
+    assert!(
+        total.contains("2 hrs  0 mins not placed to a language"),
+        "{text}"
+    );
+    assert!(text.contains("Rust"), "{text}");
+    assert!(!text.contains("unknown"), "{text}");
 }
 
 #[test]
@@ -409,7 +450,7 @@ fn a_blocks_total_is_the_total_of_what_it_shows() {
 
 #[test]
 fn minutes_line_up_even_when_one_row_has_a_single_digit() {
-    let hours = ChartBlock::new("TIME  BY LANGUAGE").with_rows(
+    let hours = ChartBlock::new("TIME BY LANGUAGE").with_rows(
         vec![
             ChartRow::new("Clojure", format_duration_aligned(5_901_180), 5_901_180),
             ChartRow::new("Go", format_duration_aligned(3_431_220), 3_431_220),
@@ -469,8 +510,8 @@ fn a_block_reads_the_measure_it_names_rather_than_the_charts() {
 
     // Hours an agent spent and hours carried in from elsewhere overlap, so a
     // chart may put them side by side under names that say which is which.
-    assert!(text.contains("AGENT TIME  BY SPAN"), "{text}");
-    assert!(text.contains("IMPORTED TIME  BY SPAN"), "{text}");
+    assert!(text.contains("AGENT TIME BY SPAN"), "{text}");
+    assert!(text.contains("IMPORTED TIME BY SPAN"), "{text}");
     assert!(text.contains("1 hrs  0 mins"), "{text}");
     assert!(text.contains("8 hrs  0 mins"), "{text}");
 }
@@ -488,13 +529,13 @@ fn a_block_naming_a_measure_nobody_folded_stays_empty() {
     let specs = vec![BlockSpec::new(ChartValue::Time, ChartRows::Windows).of("treadmill")];
     let text = render_text_chart(&build_blocks(&folds, &specs), &ChartStyle::default());
 
-    assert!(text.contains("TREADMILL TIME  BY SPAN"), "{text}");
+    assert!(text.contains("TREADMILL TIME BY SPAN"), "{text}");
     assert!(text.contains("nothing recorded"), "{text}");
 }
 
 #[test]
 fn dropping_the_bar_does_not_drop_what_the_total_is_a_total_of() {
-    let block = ChartBlock::new("TIME  BY LANGUAGE")
+    let block = ChartBlock::new("TIME BY LANGUAGE")
         .with_summary(ChartSummary::new(
             "Total",
             "9 hrs",

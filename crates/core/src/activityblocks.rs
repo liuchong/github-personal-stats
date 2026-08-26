@@ -23,7 +23,12 @@ use crate::{
 pub enum ChartValue {
     /// Seconds of the measure the comparison was built for.
     Time,
-    /// Lines written.
+    /// Lines the editor watched being written.
+    ///
+    /// Additions only, and no removal will ever appear beside them. The editor
+    /// keeps a row per line that exists, so a line that was deleted stops having
+    /// one and there is nothing left to count. Reporting a removal needs each
+    /// edit watched as it happens, which is a plugin's job and not a record's.
     Lines,
     /// Tokens spent, for the sources that report them.
     Tokens,
@@ -185,13 +190,13 @@ impl BlockSpec {
         // holding a single unnamed measure has nothing to tell apart.
         let value = match self.value {
             ChartValue::Time if !self.measure.is_empty() => {
-                return format!("{}  {}", self.time_heading(), self.row_heading());
+                return format!("{} {}", self.time_heading(), self.row_heading());
             }
             ChartValue::Time => "TIME",
             ChartValue::Lines => "LINES",
             ChartValue::Tokens => "TOKENS",
         };
-        format!("{value}  {}", self.row_heading())
+        format!("{value} {}", self.row_heading())
     }
 
     fn time_heading(&self) -> String {
@@ -359,11 +364,21 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, fold: &Fold) -> Op
         ChartValue::Time => ChartSummary::new(
             "Total",
             format_duration_aligned(total),
-            format!(
-                "{}, {}",
-                window.span.label().to_lowercase(),
-                window.coverage()
-            ),
+            match spec.rows {
+                // A block of hours by language totals only the hours it could
+                // place, so it has to say what it left out, or its total reads as
+                // disagreeing with every other block of the same measure.
+                ChartRows::Languages => format!(
+                    "{}, {} not placed to a language",
+                    window.span.label().to_lowercase(),
+                    format_duration_aligned(window.seconds.saturating_sub(total)).trim()
+                ),
+                _ => format!(
+                    "{}, {}",
+                    window.span.label().to_lowercase(),
+                    window.coverage()
+                ),
+            },
         ),
         ChartValue::Lines => {
             let note = match spec.rows {
@@ -383,16 +398,31 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, fold: &Fold) -> Op
     })
 }
 
+/// Hours by language, over the hours that have one.
+///
+/// Most of the measured time has no language and cannot be given one. An hour is
+/// counted from moments an agent was seen working, and the terminal agents — which
+/// account for more of that than the editor does — say when they were working
+/// without saying what on. Measured across this record, one in eight of their
+/// moments names a file at all, and a file named at one instant says nothing about
+/// the minutes either side of it.
+///
+/// So the unplaced hours are left out of the rows and out of the total, and the
+/// summary says how many they were. Ranking them as a language called unknown
+/// would put two thirds of the block in a row that is not a language, and
+/// dropping them silently would leave a total that quietly disagrees with every
+/// other block. Lines are kept the other way round, as a row: there the unnamed
+/// part is a rounding error and it does mean a real thing, a file whose extension
+/// names no language.
 fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
-    let total = comparison
-        .languages
-        .iter()
-        .map(|language| language.recent_seconds)
-        .sum();
-    let rows = comparison
-        .languages
-        .iter()
-        .filter(|language| language.recent_seconds > 0)
+    let placed = || {
+        comparison
+            .languages
+            .iter()
+            .filter(|language| !language.name.is_empty() && language.recent_seconds > 0)
+    };
+    let total = placed().map(|language| language.recent_seconds).sum();
+    let rows = placed()
         .take(spec.limit)
         .map(|language| {
             let row = ChartRow::new(

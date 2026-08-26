@@ -4,7 +4,10 @@ use std::{
     process::Command,
 };
 
-use github_personal_stats_collect::sink::{FileSink, GitSink, Sink};
+use github_personal_stats_collect::{
+    records::Recount,
+    sink::{FileSink, GitSink, Sink},
+};
 use github_personal_stats_core::{ActivitySnapshot, DayBucket};
 
 fn scratch(name: &str) -> PathBuf {
@@ -69,7 +72,7 @@ fn a_file_sink_writes_where_it_was_told() {
     let path = root.join("nested");
 
     let written = FileSink { path: path.clone() }
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .unwrap();
 
     assert_eq!(written, path.join("m-1234abcd"));
@@ -83,7 +86,7 @@ fn a_machine_writes_a_directory_named_after_itself() {
     let repo = repository(&root);
 
     let written = sink(&repo)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .unwrap();
 
     assert_eq!(written, repo.join("snapshots").join("m-1234abcd"));
@@ -100,7 +103,8 @@ fn a_commit_says_which_day_it_recorded() {
     let repo = repository(&root);
     let sink = sink(&repo);
 
-    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60)).unwrap();
+    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
 
     let subject = git(&repo, &["log", "-1", "--format=%s"]);
     assert_eq!(subject.trim(), "Record activity for 2026-08-24");
@@ -112,12 +116,15 @@ fn collecting_again_without_working_again_writes_no_commit() {
     let repo = repository(&root);
     let sink = sink(&repo);
 
-    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60)).unwrap();
+    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
     let after_first = commits(&repo);
 
     // Only the clock has moved. This is what a daemon on a timer does all night.
-    sink.publish(&snapshot("2026-08-24T19:30:00Z", 60)).unwrap();
-    sink.publish(&snapshot("2026-08-24T20:00:00Z", 60)).unwrap();
+    sink.publish(&snapshot("2026-08-24T19:30:00Z", 60), Recount::KeepFuller)
+        .unwrap();
+    sink.publish(&snapshot("2026-08-24T20:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
 
     assert_eq!(commits(&repo), after_first);
     assert_eq!(git(&repo, &["status", "--short"]), "");
@@ -129,9 +136,10 @@ fn collecting_after_working_more_does_write_a_commit() {
     let repo = repository(&root);
     let sink = sink(&repo);
 
-    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60)).unwrap();
+    sink.publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
     let after_first = commits(&repo);
-    sink.publish(&snapshot("2026-08-24T19:30:00Z", 120))
+    sink.publish(&snapshot("2026-08-24T19:30:00Z", 120), Recount::KeepFuller)
         .unwrap();
 
     assert_eq!(commits(&repo), after_first + 1);
@@ -148,8 +156,8 @@ fn two_machines_never_touch_the_same_file() {
     let mut desktop = snapshot("2026-08-24T19:00:00Z", 120);
     desktop.machine = "m-desktop".to_owned();
 
-    sink.publish(&laptop).unwrap();
-    sink.publish(&desktop).unwrap();
+    sink.publish(&laptop, Recount::KeepFuller).unwrap();
+    sink.publish(&desktop, Recount::KeepFuller).unwrap();
 
     let mut written = fs::read_dir(repo.join("snapshots"))
         .unwrap()
@@ -170,7 +178,7 @@ fn publishing_into_something_that_is_not_a_checkout_says_so() {
     let root = scratch("bare");
 
     let refused = sink(&root.join("not-a-repo"))
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .expect_err("a missing checkout should be refused");
 
     assert!(refused.to_string().contains("git checkout"));
@@ -192,7 +200,7 @@ fn a_published_record_that_cannot_be_read_stops_the_run() {
     fs::write(&path, "{ this is not a day").unwrap();
 
     let refused = sink(&repo)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .expect_err("an unreadable day should stop the run");
 
     assert!(refused.to_string().contains("2026-05-12"), "{refused}");
@@ -227,7 +235,7 @@ fn a_checkout_that_is_not_there_yet_is_cloned() {
     let repo = root.join("runtime").join("storage");
 
     let written = cloning(&repo, &origin)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .expect("an absent checkout should be created rather than refused");
 
     assert!(written.starts_with(&repo));
@@ -241,7 +249,7 @@ fn the_first_snapshot_reaches_an_empty_remote() {
     let repo = root.join("storage");
 
     cloning(&repo, &origin)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .unwrap();
 
     let landed = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
@@ -260,10 +268,10 @@ fn a_second_machine_lands_on_top_of_the_first_without_conflict() {
 
     // Two checkouts that know nothing of each other, as two machines would be.
     cloning(&root.join("one"), &origin)
-        .publish(&laptop)
+        .publish(&laptop, Recount::KeepFuller)
         .unwrap();
     cloning(&root.join("two"), &origin)
-        .publish(&desktop)
+        .publish(&desktop, Recount::KeepFuller)
         .expect("a remote that moved should be caught up with, not fought over");
 
     let history = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
@@ -284,7 +292,7 @@ fn a_machine_that_cannot_reach_the_remote_still_records_locally() {
     let origin = bare(&root);
     let repo = root.join("storage");
     cloning(&repo, &origin)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .unwrap();
 
     // The remote goes away, as it does on a train.
@@ -296,7 +304,7 @@ fn a_machine_that_cannot_reach_the_remote_still_records_locally() {
         branch: "master".to_owned(),
         push: false,
     };
-    sink.publish(&snapshot("2026-08-24T19:30:00Z", 120))
+    sink.publish(&snapshot("2026-08-24T19:30:00Z", 120), Recount::KeepFuller)
         .expect("an unreachable remote should not lose the collection");
 
     // Both collections are committed and waiting; the next run with a reachable
@@ -319,7 +327,7 @@ fn a_checkout_records_whether_or_not_an_identity_is_configured() {
     let repo = root.join("storage");
 
     cloning(&repo, &origin)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .expect("a checkout with no configured identity should still commit");
 
     assert_eq!(commits(&repo), 1);
@@ -333,7 +341,7 @@ fn a_configured_identity_is_left_alone() {
     let repo = repository(&root);
 
     sink(&repo)
-        .publish(&snapshot("2026-08-24T19:00:00Z", 60))
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
         .unwrap();
 
     let author = git(&repo, &["log", "-1", "--format=%ae"]);

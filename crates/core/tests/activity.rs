@@ -441,3 +441,35 @@ fn two_machines_add_their_attributed_time_and_two_readings_do_not() {
         3_600
     );
 }
+
+#[test]
+fn the_fuller_reading_of_a_day_wins_whole_rather_than_field_by_field() {
+    // Two readings of one day that split it differently. Keeping the larger of
+    // each field separately would take the hour from one and the languages from
+    // the other, and the languages would then add up to more than the day was
+    // long. The reading that saw more is kept entire instead.
+    let reading = |seconds: u64, languages: [(&str, u64); 2]| {
+        let mut day = DayBucket::new("2026-08-14");
+        let bucket = day.measure_mut(MEASURE_AGENT);
+        bucket.seconds = seconds;
+        for (language, spent) in languages {
+            bucket.languages.insert(language.to_owned(), spent);
+            bucket.spend(language, Author::Agent, "", spent);
+        }
+        day
+    };
+
+    let mut held = reading(3_600, [("Rust", 3_000), ("Go", 600)]);
+    held.keep_fuller(&reading(5_400, [("Rust", 1_000), ("Go", 4_400)]));
+
+    let bucket = held.measure(MEASURE_AGENT);
+    assert_eq!(bucket.seconds, 5_400);
+    assert_eq!(bucket.languages.get("Rust").copied(), Some(1_000));
+    assert_eq!(bucket.languages.get("Go").copied(), Some(4_400));
+    assert!(bucket.languages.values().sum::<u64>() <= bucket.seconds);
+    assert!(bucket.facts.iter().map(|fact| fact.seconds).sum::<u64>() <= bucket.seconds);
+
+    // And the thinner reading does not undo the fuller one.
+    held.keep_fuller(&reading(60, [("Rust", 30), ("Go", 30)]));
+    assert_eq!(held.measure(MEASURE_AGENT).seconds, 5_400);
+}

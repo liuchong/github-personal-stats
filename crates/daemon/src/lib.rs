@@ -12,7 +12,7 @@ use std::{
 use github_personal_stats_collect::{
     CollectError, Settings, collect, presence,
     pulse::{self, PulseBatch},
-    records,
+    records::{self, Recount},
     sink::Sink,
 };
 use github_personal_stats_core::{ActivitySnapshot, store::keep_fuller_days, summarise_activity};
@@ -206,7 +206,10 @@ impl Daemon {
             Ok(snapshot) => snapshot,
             Err(error) => return Response::problem(500, &error.to_string()),
         };
-        let written = match self.sink.publish(&snapshot) {
+        // Always the keeping rule here. A daemon on a timer must not quietly
+        // correct a day downwards; recounting is a deliberate act, asked for by
+        // hand on the collector when the way time is counted has changed.
+        let written = match self.sink.publish(&snapshot, Recount::KeepFuller) {
             Ok(path) => path,
             Err(error) => return Response::problem(500, &error.to_string()),
         };
