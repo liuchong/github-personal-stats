@@ -423,9 +423,36 @@ cargo run -p github-personal-stats -- generate \
   --output profile/tiles/stats.svg
 ```
 
-The `dashboard`, `activity`, and `status` cards divide a height between sections
-rather than having one of their own, so they need an explicit height; asking them
-for `auto` is refused rather than quietly ignored.
+The `dashboard` and `status` cards divide a height between sections rather than
+having one of their own, so they need an explicit height; asking them for `auto`
+is refused rather than quietly ignored.
+
+### The activity card
+
+Every other card is drawn from your GitHub profile. This one is drawn from the
+activity you collected locally, so it needs `--activity-record` pointing at the
+same place `chart` reads, and refuses rather than drawing an empty card without
+it:
+
+```sh
+cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card activity \
+  --activity-record ~/.local/state/github-personal-stats/storage/snapshots \
+  --width 900 --height auto \
+  --output profile/activity.svg
+```
+
+It takes the same `--activity-measure`, `--activity-windows` and `--hide-language`
+as `chart`, and shows one measure over two spans: a bar per language for the
+recent one, with a mark across each bar for where the longer span put it.
+
+The shares are shares of the time a language could be put to, which on a record
+with terminal agents in it is well short of the time measured — a source that
+never says what was being worked on leaves its hours with no language to be a
+share of. The card declares that remainder in a line beneath the bars, in the same
+words and to the same arithmetic as `chart`, so putting the two side by side gives
+one number per language rather than two.
 
 ### Splitting the streak card
 

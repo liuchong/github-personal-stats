@@ -498,3 +498,70 @@ fn cli_points_an_unsupported_command_at_the_usage() {
     assert!(stderr.contains("unsupported command: render-everything"));
     assert!(stderr.contains("Commands:"));
 }
+
+#[test]
+fn an_activity_card_is_drawn_from_the_record() {
+    let record = a_record_with_one_day();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-activity-{}.svg",
+        std::process::id()
+    ));
+
+    let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--card",
+            "activity",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--activity-record",
+            record.to_str().unwrap(),
+            "--width",
+            "760",
+            "--height",
+            "auto",
+            "--output",
+            target.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let svg = fs::read_to_string(&target).unwrap();
+    // The card took `--activity-record` and drew nothing from it for a whole
+    // release: the flag parsed, the record loaded, and the aggregation handed back
+    // an empty comparison anyway.
+    assert!(!svg.contains("No activity recorded yet"), "{svg}");
+    assert!(svg.contains(">Rust<"), "{svg}");
+    assert!(svg.contains(">1 hrs 0 mins<"), "{svg}");
+
+    fs::remove_file(&target).ok();
+    fs::remove_dir_all(&record).ok();
+}
+
+#[test]
+fn an_activity_card_says_it_needs_a_record() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--card",
+            "activity",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--output",
+            "/dev/null",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--activity-record is needed"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

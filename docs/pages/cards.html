@@ -83,7 +83,17 @@ cargo run -p github-personal-stats -- generate --fixture profile.json --card hea
   --width 275 \
   --height auto \
   --output profile/tiles/stats.svg</code></pre>
-<p>The <code>dashboard</code>, <code>activity</code>, and <code>status</code> cards divide a height between sections rather than having one of their own, so they need an explicit height; asking them for <code>auto</code> is refused rather than quietly ignored.</p>
+<p>The <code>dashboard</code> and <code>status</code> cards divide a height between sections rather than having one of their own, so they need an explicit height; asking them for <code>auto</code> is refused rather than quietly ignored.</p>
+<h3 id="the-activity-card">The activity card<a class="permalink" href="#the-activity-card" aria-label="Link to this section">#</a></h3>
+<p>Every other card is drawn from your GitHub profile. This one is drawn from the activity you collected locally, so it needs <code>--activity-record</code> pointing at the same place <code>chart</code> reads, and refuses rather than drawing an empty card without it:</p>
+<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
+  --user your-github-login \
+  --card activity \
+  --activity-record ~/.local/state/github-personal-stats/storage/snapshots \
+  --width 900 --height auto \
+  --output profile/activity.svg</code></pre>
+<p>It takes the same <code>--activity-measure</code>, <code>--activity-windows</code> and <code>--hide-language</code> as <code>chart</code>, and shows one measure over two spans: a bar per language for the recent one, with a mark across each bar for where the longer span put it.</p>
+<p>The shares are shares of the time a language could be put to, which on a record with terminal agents in it is well short of the time measured — a source that never says what was being worked on leaves its hours with no language to be a share of. The card declares that remainder in a line beneath the bars, in the same words and to the same arithmetic as <code>chart</code>, so putting the two side by side gives one number per language rather than two.</p>
 <h3 id="splitting-the-streak-card">Splitting the streak card<a class="permalink" href="#splitting-the-streak-card" aria-label="Link to this section">#</a></h3>
 <p>At a tile width the streak card gives the ring a full-width row and sits its two figures underneath, because three columns leave each figure about 90px:</p>
 <img src="../images/tiles/tile-streak.svg" alt="Streak card at 275px" width="275" />

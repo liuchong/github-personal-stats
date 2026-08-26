@@ -305,6 +305,38 @@ impl ActivityComparison {
             .iter()
             .any(|language| language.lines.total() > 0)
     }
+
+    /// The languages the recent span can put time to, largest first.
+    ///
+    /// A source that never says what was being worked on leaves its seconds under
+    /// no name at all, and where terminal agents do most of the work that is the
+    /// largest share of the record. Left in the ranking it takes the top row of
+    /// every chart and every card as a bar with no label, which is how it was
+    /// found. So it is kept out of the ranking, and `unplaced_seconds` is what any
+    /// view showing these has to declare beside them, or the parts will not add up
+    /// to a total the reader can see elsewhere.
+    ///
+    /// Both the card and the text chart read this, because two views filtering the
+    /// same list by their own rules is how they come to disagree.
+    pub fn placed(&self) -> impl Iterator<Item = &ActivityLanguage> {
+        self.languages
+            .iter()
+            .filter(|language| !language.name.is_empty() && language.recent_seconds > 0)
+    }
+
+    /// Recent seconds no language can be put to.
+    ///
+    /// Taken as the window's total less what could be placed, rather than by
+    /// adding up the nameless entries. Some sources file their unplaced time under
+    /// an empty name and some simply never mention a language at all, and only the
+    /// subtraction catches both.
+    pub fn unplaced_seconds(&self) -> u64 {
+        let placed = self
+            .placed()
+            .map(|language| language.recent_seconds)
+            .sum::<u64>();
+        self.recent.seconds.saturating_sub(placed)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -686,8 +718,21 @@ fn join_languages(
     baseline: &LanguageTotals,
     limit: usize,
 ) -> Vec<ActivityLanguage> {
-    let recent_total = recent.seconds.values().sum::<u64>();
-    let baseline_total = baseline.seconds.values().sum::<u64>();
+    // A share is a share of the time a language could be put to, not of the whole
+    // window. Time no source could place has no language to be a share of, and
+    // dividing by the whole would make every bar on the card smaller than the
+    // figure the text chart gives for the same language — the same number twice,
+    // disagreeing with itself.
+    let placed = |totals: &LanguageTotals| {
+        totals
+            .seconds
+            .iter()
+            .filter(|(name, _)| !name.is_empty())
+            .map(|(_, seconds)| seconds)
+            .sum::<u64>()
+    };
+    let recent_total = placed(recent);
+    let baseline_total = placed(baseline);
 
     // A language can appear in one of these and not the other: a source may know
     // what was written without knowing how long it took, or the reverse. Taking

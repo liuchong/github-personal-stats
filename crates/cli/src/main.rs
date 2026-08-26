@@ -1,8 +1,8 @@
 use github_personal_stats_core::{
-    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, BlockSpec, ChartStyle, Column,
-    DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS,
-    GithubData, GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING,
-    MockGithubClient, OutputKind, aggregate_card_data, build_blocks, compare_activity,
+    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, BlockSpec, CardData, ChartStyle,
+    Column, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS, DEFAULT_HEAT_THRESHOLD,
+    DEFAULT_LANGUAGE_ROWS, GithubData, GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS,
+    MAX_PADDING, MockGithubClient, OutputKind, aggregate_card_data, build_blocks, compare_activity,
     default_blocks, json::write_github_fixture, parse_blocks, parse_output_kind, render_card,
     render_text_chart, store::read_record, workspace_info,
 };
@@ -22,12 +22,13 @@ const DEFAULT_METRIC: &str = "current";
 
 /// Cards whose content decides their height. The dashboard and the status cards
 /// divide a height they are given, so fitting them to content is meaningless.
-const AUTO_HEIGHT_CARDS: [OutputKind; 5] = [
+const AUTO_HEIGHT_CARDS: [OutputKind; 6] = [
     OutputKind::Stats,
     OutputKind::Languages,
     OutputKind::Streak,
     OutputKind::Heat,
     OutputKind::Metric,
+    OutputKind::Activity,
 ];
 const DEFAULT_STREAK_SIDES: &str = "total,longest";
 
@@ -309,9 +310,17 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
             .into());
         }
     }
+    let kind = parse_output_kind(&card)?;
     let mut data = github_data(&config, saved)?;
     hide_languages(&mut data, &config.hidden_languages);
-    let card_data = aggregate_card_data(&data, parse_output_kind(&card)?, &config.heat_ring);
+    let card_data = match kind {
+        // An activity card is drawn from the local record, not from the profile,
+        // so it is the one card whose data does not come out of the aggregation.
+        OutputKind::Activity | OutputKind::ActivityReadme => {
+            CardData::Activity(Box::new(activity_card_fold(&args)?))
+        }
+        _ => aggregate_card_data(&data, kind, &config.heat_ring),
+    };
     let rendered = render_card(&card_data, &config);
 
     write_output(PathBuf::from(output), rendered)?;
@@ -356,6 +365,20 @@ fn activity_chart(args: &[String]) -> Result<String, Box<dyn Error>> {
         &build_blocks(&activity_folds(args, &blocks)?, &blocks),
         &chart_style(args)?,
     ))
+}
+
+/// The one fold an activity card draws.
+///
+/// A card shows a single measure over two spans, where a chart can hold several
+/// measures side by side, so this asks for the card's measure and nothing else.
+/// Without a record there is nothing to draw, and saying so is better than
+/// handing back a card that reads `no activity recorded yet` when the record was
+/// there all along and only the plumbing was missing.
+fn activity_card_fold(args: &[String]) -> Result<ActivityComparison, Box<dyn Error>> {
+    let measure = activity_measure(args)?;
+    activity_comparisons(args, vec![measure])?
+        .pop()
+        .ok_or_else(|| "an activity card needs one measure to draw".into())
 }
 
 /// One fold per measure the chart reads: the chart's own, then any a block asked

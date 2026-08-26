@@ -1,8 +1,9 @@
 use github_personal_stats_core::{
-    ActivityMeasure, ActivitySpan, AggregatedStats, Author, CardData, CodingActivityEntry,
-    DayBucket, GithubClient, GithubStatsConfig, GithubStatsError, HeatRing, LanguageShare,
-    MEASURE_AGENT, MockGithubClient, OutputKind, StreakMode, StreakSummary, aggregate_card_data,
-    aggregate_coding_activity, compare_activity, render_card, render_readme_section,
+    ActivityComparison, ActivityMeasure, ActivitySpan, AggregatedStats, Author, BlockSpec,
+    CardData, ChartRows, ChartStyle, ChartValue, CodingActivityEntry, DayBucket, GithubClient,
+    GithubStatsConfig, GithubStatsError, HeatRing, LanguageShare, MEASURE_AGENT, MockGithubClient,
+    OutputKind, StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity,
+    build_blocks, compare_activity, render_card, render_readme_section, render_text_chart,
 };
 
 /// A day of agent time spread over the given languages, with lines to match so
@@ -544,4 +545,72 @@ fn readme_section_escapes_title_and_handles_zero_total() {
     assert!(markdown.starts_with("### Coding &lt;Activity&gt;"));
     assert!(markdown.contains("Rust ░░░░░░░░░░ 0 hrs 0 mins"));
     assert!(markdown.contains("Total: 0 hrs 0 mins"));
+}
+
+/// A day where a source knew how long the work took but never what it was, which
+/// is every terminal agent, and on a real record the largest share of all.
+fn unplaced_day(date: &str, seconds: u64) -> DayBucket {
+    let mut day = DayBucket::new(date);
+    let bucket = day.measure_mut(MEASURE_AGENT);
+    bucket.seconds = seconds;
+    bucket.sessions = 1;
+    day
+}
+
+fn comparison_over(days: &[DayBucket]) -> ActivityComparison {
+    compare_activity(
+        days,
+        ActivityMeasure::default(),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        Some("2026-05-24"),
+        8,
+        &[],
+    )
+}
+
+#[test]
+fn time_no_language_can_be_put_to_is_declared_rather_than_ranked() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(760, 260)
+        .unwrap();
+    let comparison = comparison_over(&[
+        worked_day("2026-05-24", &[("Rust", 3600)]),
+        unplaced_day("2026-05-23", 7200),
+    ]);
+
+    let svg = render_card(&CardData::Activity(Box::new(comparison)), &config);
+
+    // The nameless share used to sort first and draw a bar with no label beside
+    // it, which is how it was found.
+    assert!(svg.contains(">Rust<"));
+    assert!(!svg.contains("font-size=\"11.5\" font-weight=\"400\" fill=\"#15181d\"></text>"));
+    assert!(svg.contains("2 hrs 0 mins not placed to a language"));
+    // Rust is all of the time that could be placed, even though it is a third of
+    // the time measured.
+    assert!(svg.contains(">100.0%<"));
+}
+
+#[test]
+fn a_card_and_a_chart_of_the_same_measure_give_the_same_share() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(760, 260)
+        .unwrap();
+    let comparison = comparison_over(&[
+        worked_day("2026-05-24", &[("Rust", 3600), ("Go", 1200)]),
+        unplaced_day("2026-05-23", 9000),
+    ]);
+
+    let svg = render_card(&CardData::Activity(Box::new(comparison.clone())), &config);
+    let spec = BlockSpec::new(ChartValue::Time, ChartRows::Languages);
+    let chart = render_text_chart(
+        &build_blocks(std::slice::from_ref(&comparison), &[spec]),
+        &ChartStyle::default(),
+    );
+
+    // Both read hours by language off the same fold, so a reader putting the card
+    // beside the chart must not find two different numbers for Rust.
+    assert!(svg.contains(">75.0%<"), "card: {svg}");
+    assert!(chart.contains("75.00 %"), "chart: {chart}");
 }

@@ -420,12 +420,7 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, fold: &Fold) -> Op
 /// part is a rounding error and it does mean a real thing, a file whose extension
 /// names no language.
 fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
-    let placed = || {
-        comparison
-            .languages
-            .iter()
-            .filter(|language| !language.name.is_empty() && language.recent_seconds > 0)
-    };
+    let placed = || comparison.placed();
     let total = placed().map(|language| language.recent_seconds).sum();
     let rows = placed()
         .take(spec.limit)

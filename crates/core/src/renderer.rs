@@ -430,7 +430,8 @@ fn activity_natural_height(
     if comparison.is_empty() {
         return 74 + DESCENDER;
     }
-    let rows = comparison.languages.len().min(config.language_rows).max(1) as u32;
+    let rows = comparison.placed().count().min(config.language_rows).max(1) as u32
+        + u32::from(unplaced_note(comparison).is_some());
     let tracks = ACTIVITY_ROW_STEP * rows + DESCENDER;
     let windows = ACTIVITY_WINDOW_STEP + 44 + DESCENDER;
 
@@ -1641,11 +1642,14 @@ fn activity_tracks(
     config: &GithubStatsConfig,
     theme: &RenderTheme,
 ) -> String {
-    let rows = comparison.languages.len().min(config.language_rows).max(1);
+    let placed = comparison.placed().collect::<Vec<_>>();
+    let rows = placed.len().min(config.language_rows).max(1);
+    let note = unplaced_note(comparison);
     let step = (area
         .height
         .saturating_sub(ACTIVITY_BLOCK_TOP)
         .saturating_sub(DESCENDER)
+        .saturating_sub(if note.is_some() { ACTIVITY_ROW_STEP } else { 0 })
         / rows as u32)
         .clamp(16, ACTIVITY_ROW_STEP);
     let name_column = (area.width * 30 / 100).clamp(72, 130);
@@ -1658,8 +1662,7 @@ fn activity_tracks(
     // top language holds a quarter of the time still fills its longest bar. A
     // baseline mark can sit past that language's own bar, so the same scale has to
     // cover the larger of the two or a mark would be drawn off the track.
-    let ceiling = comparison
-        .languages
+    let ceiling = placed
         .iter()
         .take(rows)
         .map(|language| {
@@ -1671,8 +1674,7 @@ fn activity_tracks(
         .unwrap_or(10_000)
         .max(1);
 
-    comparison
-        .languages
+    let drawn = placed
         .iter()
         .take(rows)
         .enumerate()
@@ -1697,7 +1699,32 @@ fn activity_tracks(
                 ),
             )
         })
-        .collect()
+        .collect::<String>();
+
+    match note {
+        Some(said) => {
+            let y = area.y + ACTIVITY_BLOCK_TOP + rows as u32 * step + 4;
+            format!("{drawn}{}", text(area.x + 15, y, 11.0, theme.muted, &said))
+        }
+        None => drawn,
+    }
+}
+
+/// What the bars leave out, in the words the text chart uses for the same gap.
+///
+/// The shares on this card are shares of the time a language could be put to, so
+/// a card whose record is mostly terminal work would otherwise show six bars
+/// adding to a hundred per cent over a third of the hours. Saying it costs one
+/// line and is the difference between a share and a claim.
+fn unplaced_note(comparison: &ActivityComparison) -> Option<String> {
+    let unplaced = comparison.unplaced_seconds();
+    if unplaced == 0 {
+        return None;
+    }
+    Some(format!(
+        "{} not placed to a language",
+        format_duration(unplaced)
+    ))
 }
 
 /// Where the longer span put this language, drawn across the track so it reads
