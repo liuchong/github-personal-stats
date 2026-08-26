@@ -311,15 +311,18 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
         }
     }
     let kind = parse_output_kind(&card)?;
-    let mut data = github_data(&config, saved)?;
-    hide_languages(&mut data, &config.hidden_languages);
     let card_data = match kind {
-        // An activity card is drawn from the local record, not from the profile,
-        // so it is the one card whose data does not come out of the aggregation.
+        // An activity card is drawn from the local record and never touches the
+        // profile, so it must not ask GitHub for one: this is the only card that
+        // renders with no token, no fixture and no network at all.
         OutputKind::Activity | OutputKind::ActivityReadme => {
             CardData::Activity(Box::new(activity_card_fold(&args)?))
         }
-        _ => aggregate_card_data(&data, kind, &config.heat_ring),
+        _ => {
+            let mut data = github_data(&config, saved)?;
+            hide_languages(&mut data, &config.hidden_languages);
+            aggregate_card_data(&data, kind, &config.heat_ring)
+        }
     };
     let rendered = render_card(&card_data, &config);
 

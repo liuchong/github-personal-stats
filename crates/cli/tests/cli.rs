@@ -542,6 +542,49 @@ fn an_activity_card_is_drawn_from_the_record() {
 }
 
 #[test]
+fn an_activity_card_asks_github_for_nothing() {
+    let record = a_record_with_one_day();
+    let target = std::env::temp_dir().join(format!(
+        "github-personal-stats-activity-alone-{}.svg",
+        std::process::id()
+    ));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--card",
+            "activity",
+            "--activity-record",
+            record.to_str().unwrap(),
+            "--width",
+            "275",
+            "--height",
+            "auto",
+            "--output",
+            target.to_str().unwrap(),
+        ])
+        // No token, no saved profile, and a proxy that would fail any request
+        // made: this card is drawn from the record alone, so a fetch here would
+        // be a fetch nobody asked for.
+        .env_remove("GITHUB_TOKEN")
+        .env("HTTPS_PROXY", "http://127.0.0.1:1")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let svg = fs::read_to_string(&target).unwrap();
+    assert!(svg.contains(">Rust<"), "{svg}");
+
+    fs::remove_file(&target).ok();
+    fs::remove_dir_all(&record).ok();
+}
+
+#[test]
 fn an_activity_card_says_it_needs_a_record() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../core/tests/fixtures/github_user_data.json");
