@@ -1,13 +1,36 @@
 use std::collections::BTreeMap;
 
-use github_personal_stats_core::TimeBucket;
+use github_personal_stats_core::{Author, TimeBucket};
 
-/// A moment at which something happened, with the languages it touched. The
-/// weights say how to divide that moment's time when it touched more than one.
+/// A moment at which something happened, with what it touched. The weights say
+/// how to divide that moment's time when it touched more than one thing.
+///
+/// A part carries an author where the source knew one. Where it did not, the
+/// moment still counts towards its language and towards the day; only the
+/// attribution is missing, and a missing attribution is recorded as missing
+/// rather than guessed at.
 pub struct Event {
     pub second: i64,
     pub day: String,
-    pub languages: Vec<(&'static str, u64)>,
+    pub languages: Vec<Part>,
+}
+
+/// A share of one moment: what was touched, by whom if known, and how much of
+/// the moment it accounts for.
+pub struct Part {
+    pub language: &'static str,
+    pub author: Option<Author>,
+    pub weight: u64,
+}
+
+impl Part {
+    pub fn new(language: &'static str, author: Option<Author>, weight: u64) -> Self {
+        Self {
+            language,
+            author,
+            weight,
+        }
+    }
 }
 
 impl Event {
@@ -15,7 +38,7 @@ impl Event {
         Self {
             second,
             day: day.into(),
-            languages: vec![(language, 1)],
+            languages: vec![Part::new(language, None, 1)],
         }
     }
 }
@@ -59,21 +82,34 @@ fn spend(days: &mut BTreeMap<String, TimeBucket>, event: &Event, seconds: u64) {
     let bucket = days.entry(event.day.clone()).or_default();
     bucket.seconds += seconds;
 
-    let weight: u64 = event.languages.iter().map(|(_, weight)| weight).sum();
+    let weight: u64 = event.languages.iter().map(|part| part.weight).sum();
     if weight == 0 {
         return;
     }
 
     let mut spent = 0;
-    for (language, share) in &event.languages {
-        let slice = seconds * share / weight;
-        *bucket.languages.entry((*language).to_string()).or_default() += slice;
+    for part in &event.languages {
+        let slice = seconds * part.weight / weight;
+        *bucket
+            .languages
+            .entry(part.language.to_string())
+            .or_default() += slice;
+        if let Some(author) = part.author {
+            bucket.spend(part.language, author, slice);
+        }
         spent += slice;
     }
 
     // Integer division loses a second here and there. Give the remainder to the
-    // language that took the largest share, so the parts equal the whole.
-    if let Some((language, _)) = event.languages.first() {
-        *bucket.languages.entry((*language).to_string()).or_default() += seconds - spent;
+    // part that took the largest share, so the parts equal the whole.
+    if let Some(part) = event.languages.first() {
+        let remainder = seconds - spent;
+        *bucket
+            .languages
+            .entry(part.language.to_string())
+            .or_default() += remainder;
+        if let Some(author) = part.author {
+            bucket.spend(part.language, author, remainder);
+        }
     }
 }

@@ -15,6 +15,7 @@ fn timing(seconds: u64, sessions: u32, languages: &[(&str, u64)]) -> TimeBucket 
             .iter()
             .map(|(name, seconds)| ((*name).to_owned(), *seconds))
             .collect(),
+        ..TimeBucket::default()
     }
 }
 

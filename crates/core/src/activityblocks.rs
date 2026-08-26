@@ -238,8 +238,21 @@ fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock 
         Some(summary) => block.with_summary(summary),
         None => block,
     };
-    block.with_rows(rows, total)
+    // A bar is only ever divided by authorship at present, so that is what its
+    // parts are called. The words live here rather than in the layout because the
+    // layout has no way of knowing what a bar was divided by.
+    block.with_rows(rows, total).divided_into(AGENT, NOT_AGENT)
 }
+
+/// What the record can say about who wrote a line.
+///
+/// It knows when a change came from an agent it was watching. Everything else is
+/// only known not to have, which is a weaker claim than a person having typed it:
+/// a checkout, a rebase, a formatter or a scripted rewrite all land in it. Saying
+/// "me" would claim the stronger thing, and only an editor plugin watching
+/// keystrokes can honestly claim that.
+const AGENT: &str = "agent";
+const NOT_AGENT: &str = "not by an agent";
 
 /// The block's total.
 ///
@@ -308,11 +321,19 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Char
         .filter(|language| language.recent_seconds > 0)
         .take(spec.limit)
         .map(|language| {
-            ChartRow::new(
+            let row = ChartRow::new(
                 language_label(&language.name),
                 format_duration_aligned(language.recent_seconds),
                 language.recent_seconds,
-            )
+            );
+            // A source that could not say who spent the time leaves both parts
+            // at zero, and the bar is drawn whole rather than pretending the
+            // whole of it was unattributed.
+            if spec.split {
+                row.divided(language.attributed.agent, language.attributed.human)
+            } else {
+                row
+            }
         })
         .collect();
     (rows, total)
@@ -353,7 +374,7 @@ fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Cha
 
 fn author_lines(window: &ActivityWindow) -> (Vec<ChartRow>, u64) {
     let total = window.lines.total();
-    let rows = [("agent", window.lines.agent), ("me", window.lines.human)]
+    let rows = [(AGENT, window.lines.agent), (NOT_AGENT, window.lines.human)]
         .into_iter()
         .filter(|(_, lines)| *lines > 0 || total > 0)
         .map(|(name, lines)| ChartRow::new(name, thousands(lines), lines))

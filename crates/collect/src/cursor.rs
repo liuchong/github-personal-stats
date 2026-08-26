@@ -10,7 +10,7 @@ use rusqlite::{Connection, OpenFlags};
 use crate::{
     error::CollectError,
     language,
-    sessions::{self, Event},
+    sessions::{self, Event, Part},
 };
 
 const SCORED_COMMITS: &str = "scored_commits";
@@ -39,10 +39,16 @@ const GENERATED_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'local
      COALESCE(fileExtension, '') AS extension, COUNT(*) AS lines \
      FROM ai_code_hashes GROUP BY day, source, model, extension";
 
+/// Moments, kept by who caused them as well as by what file they touched.
+///
+/// The source column costs nothing to carry and is what lets a measure of time be
+/// divided by author later. Dropping it here would have meant the record could
+/// say which language an hour went to but not who spent it, for no reason other
+/// than not having asked.
 const EVENT_QUERY: &str = "SELECT createdAt / 1000 AS second, \
      date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
-     COALESCE(fileExtension, '') AS extension, COUNT(*) AS weight \
-     FROM ai_code_hashes GROUP BY second, extension ORDER BY second";
+     COALESCE(fileExtension, '') AS extension, source, COUNT(*) AS weight \
+     FROM ai_code_hashes GROUP BY second, extension, source ORDER BY second";
 
 const REQUEST_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
      COUNT(DISTINCT requestId) AS requests \
@@ -178,12 +184,12 @@ fn read_generated(
             .entry(date.clone())
             .or_insert_with(|| DayBucket::new(date));
 
-        // A person's lines carry no model, so the model column is dropped for
-        // them rather than recorded as belonging to whatever was loaded.
-        let (author, model) = if source == "human" {
-            (Author::Human, String::new())
-        } else {
-            (Author::Agent, model)
+        // A change nobody generated carries no model, so the model column is
+        // dropped for it rather than recorded as belonging to whatever was loaded.
+        let author = author_of(&source);
+        let model = match author {
+            Author::Human => String::new(),
+            Author::Agent => model,
         };
         bucket.add_lines(
             language::from_extension(&extension),
@@ -214,6 +220,21 @@ fn read_worked_time(
     Ok(())
 }
 
+/// Reads the source column as an author.
+///
+/// Anything the editor generated names what generated it; the one value that
+/// means otherwise is the one it uses for changes it merely observed. Treating
+/// unrecognised values as generated would credit an agent for work no agent was
+/// seen doing, so the test is for the observed case and everything else is a
+/// named generator.
+fn author_of(source: &str) -> Author {
+    if source == "human" {
+        Author::Human
+    } else {
+        Author::Agent
+    }
+}
+
 fn read_moments(connection: &Connection) -> Result<Vec<Event>, CollectError> {
     let mut statement = connection
         .prepare(EVENT_QUERY)
@@ -225,36 +246,42 @@ fn read_moments(connection: &Connection) -> Result<Vec<Event>, CollectError> {
                 row.get::<_, i64>(0)?,
                 row.get::<_, Option<String>>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
             ))
         })
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
     let mut moments = Vec::<Event>::new();
     for row in rows {
-        let (second, day, extension, weight) =
+        let (second, day, extension, source, weight) =
             row.map_err(|error| schema_error(CODE_HASHES, error))?;
         let Some(day) = day else {
             continue;
         };
-        let language = crate::language::from_extension(&extension);
+        let part = Part::new(
+            crate::language::from_extension(&extension),
+            Some(author_of(&source)),
+            positive(weight),
+        );
 
         match moments.last_mut() {
-            Some(moment) if moment.second == second => {
-                moment.languages.push((language, positive(weight)));
-            }
+            Some(moment) if moment.second == second => moment.languages.push(part),
             _ => moments.push(Event {
                 second,
                 day,
-                languages: vec![(language, positive(weight))],
+                languages: vec![part],
             }),
         }
     }
 
     for moment in &mut moments {
-        moment
-            .languages
-            .sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+        moment.languages.sort_by(|left, right| {
+            right
+                .weight
+                .cmp(&left.weight)
+                .then_with(|| left.language.cmp(right.language))
+        });
     }
 
     Ok(moments)

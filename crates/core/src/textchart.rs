@@ -203,6 +203,14 @@ pub struct ChartBlock {
     /// summing the rows instead would be wrong for a block whose rows are only
     /// the largest few.
     pub total: u64,
+    /// What the two parts of a divided bar are called, supplied by whoever
+    /// divided it.
+    ///
+    /// The layout knows that a bar can be in two parts and nothing about what
+    /// they mean, so it cannot name them; naming them here keeps the words next
+    /// to the decision to split by that dimension, which is also what lets a
+    /// block divided by something other than authorship label itself correctly.
+    pub parts: Option<[String; 2]>,
 }
 
 impl ChartBlock {
@@ -221,6 +229,12 @@ impl ChartBlock {
     pub fn with_rows(mut self, rows: Vec<ChartRow>, total: u64) -> Self {
         self.rows = rows;
         self.total = total;
+        self
+    }
+
+    /// Names the two parts of this block's divided bars.
+    pub fn divided_into(mut self, primary: &str, secondary: &str) -> Self {
+        self.parts = Some([primary.to_owned(), secondary.to_owned()]);
         self
     }
 }
@@ -252,11 +266,17 @@ pub fn render_text_chart(blocks: &[ChartBlock], style: &ChartStyle) -> String {
     }
 
     if style.legend && divided {
-        let _ = write!(
-            out,
-            "\n{} agent    {} me    {} rest\n",
-            style.glyphs.primary, style.glyphs.secondary, style.glyphs.empty
-        );
+        let named = blocks
+            .iter()
+            .filter(|block| block.rows.iter().any(ChartRow::divides))
+            .find_map(|block| block.parts.as_ref());
+        if let Some([primary, secondary]) = named {
+            let _ = write!(
+                out,
+                "\n{} {primary}    {} {secondary}    {} rest\n",
+                style.glyphs.primary, style.glyphs.secondary, style.glyphs.empty
+            );
+        }
     }
 
     out

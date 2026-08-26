@@ -38,11 +38,17 @@ pub fn language_label(name: &str) -> &str {
     }
 }
 
-/// Who wrote a line.
+/// Who a change came from.
 ///
-/// This is the only split in the record that is exact. Two measures of time can
-/// cover the same minute, so time cannot be divided between an agent and a
-/// person; a line has one author and can.
+/// Exact for a line, which has one author. Time divides by the same rule that
+/// puts it against a language — a gap belongs to the moment before it, and that
+/// moment had one cause — so time divides too, within a single measure. What
+/// never divides is time across measures: agent time and editor time can cover
+/// the same minute, and nothing sums them.
+///
+/// `Human` is the weaker of the two claims. It means an agent was not seen to do
+/// it, which also covers a checkout, a rebase, a formatter and a scripted
+/// rewrite. Only a plugin watching keystrokes can say a person typed something.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Author {
@@ -229,21 +235,24 @@ impl LineCounts {
     }
 }
 
-/// Lines in one language, split by who wrote them.
+/// How much of something each author accounts for.
+///
+/// Used for lines and for seconds, because the question is the same shape in both
+/// cases and a second type of two `u64`s would only invite them to drift apart.
 ///
 /// This is a narrower question than `LineCounts` answers. That one describes what
 /// landed in a commit and can say "nobody is sure who wrote this"; this one
-/// describes what the editor watched being typed or generated, where the author
-/// is known by construction. Keeping them apart means a card can show a split it
-/// is confident about without borrowing the commit record's uncertainty.
+/// describes what the editor watched happen, where the author is known by
+/// construction. Keeping them apart means a card can show a split it is confident
+/// about without borrowing the commit record's uncertainty.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct LanguageLines {
+pub struct AuthorShare {
     pub agent: u64,
     pub human: u64,
 }
 
-impl LanguageLines {
+impl AuthorShare {
     pub fn total(&self) -> u64 {
         self.agent + self.human
     }
@@ -266,7 +275,7 @@ impl LanguageLines {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LineTotals {
     pub by_model: BTreeMap<String, u64>,
-    pub by_language: BTreeMap<String, LanguageLines>,
+    pub by_language: BTreeMap<String, AuthorShare>,
     pub agent: u64,
     pub human: u64,
     pub added: u64,
@@ -381,6 +390,15 @@ pub struct TimeBucket {
     pub seconds: u64,
     pub languages: BTreeMap<String, u64>,
     pub sessions: u32,
+    /// The same seconds, said again by author where the source knew one.
+    ///
+    /// Not every source does: a tracker that watches an editor reports how long
+    /// a file was worked on and has no view on who was doing it. So this refines
+    /// `languages` rather than replacing it, and a language's seconds here never
+    /// exceed its seconds there. What is missing is time nobody could attribute,
+    /// which is a different thing from time attributed to nobody.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub by_author: Vec<TimeFact>,
 }
 
 impl TimeBucket {
@@ -389,6 +407,9 @@ impl TimeBucket {
         self.sessions += other.sessions;
         for (language, seconds) in &other.languages {
             *self.languages.entry(language.clone()).or_default() += seconds;
+        }
+        for fact in &other.by_author {
+            self.spend(&fact.language, fact.author, fact.seconds);
         }
     }
 
@@ -400,7 +421,64 @@ impl TimeBucket {
             let held = self.languages.entry(language.clone()).or_default();
             *held = (*held).max(*seconds);
         }
+        for fact in &other.by_author {
+            let held = self.fact_mut(&fact.language, fact.author);
+            held.seconds = held.seconds.max(fact.seconds);
+        }
     }
+
+    /// Adds attributed seconds, keeping one entry per language and author.
+    pub fn spend(&mut self, language: &str, author: Author, seconds: u64) {
+        self.fact_mut(language, author).seconds += seconds;
+    }
+
+    /// The seconds in one language that a given author is known to account for.
+    pub fn attributed(&self, language: &str, author: Author) -> u64 {
+        self.by_author
+            .iter()
+            .find(|fact| fact.language == language && fact.author == author)
+            .map(|fact| fact.seconds)
+            .unwrap_or_default()
+    }
+
+    fn fact_mut(&mut self, language: &str, author: Author) -> &mut TimeFact {
+        let key = (language, author);
+        match self
+            .by_author
+            .binary_search_by(|held| (held.language.as_str(), held.author).cmp(&key))
+        {
+            Ok(index) => &mut self.by_author[index],
+            Err(index) => {
+                self.by_author.insert(
+                    index,
+                    TimeFact {
+                        language: language.to_owned(),
+                        author,
+                        seconds: 0,
+                    },
+                );
+                &mut self.by_author[index]
+            }
+        }
+    }
+}
+
+/// Seconds in one language that one author is known to account for.
+///
+/// The rule that produces these is the same one that puts seconds against a
+/// language at all: a gap between two moments belongs to the moment before it,
+/// so it belongs to that moment's file and to whoever caused it. Attributing the
+/// author is therefore no more of an estimate than attributing the language, and
+/// the two are recorded together for that reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeFact {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub language: String,
+    /// No default: a fact whose author is unknown is what `languages` is for.
+    pub author: Author,
+    #[serde(default)]
+    pub seconds: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

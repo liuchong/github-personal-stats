@@ -1,6 +1,7 @@
 use github_personal_stats_core::{
-    ACTIVITY_SCHEMA, ActivitySnapshot, Author, DayBucket, LineCounts, UNKNOWN_LANGUAGE,
-    merge_snapshots, parse_activity_snapshot, summarise_activity, write_activity_snapshot,
+    ACTIVITY_SCHEMA, ActivitySnapshot, Author, DayBucket, LineCounts, MEASURE_AGENT, TimeBucket,
+    UNKNOWN_LANGUAGE, merge_snapshots, parse_activity_snapshot, summarise_activity,
+    write_activity_snapshot,
 };
 
 /// A day whose time is agent time, which is what the editor's own record can
@@ -379,4 +380,68 @@ fn an_unnamed_reading_with_nothing_finer_beside_it_is_kept_whole() {
 
     assert_eq!(held.lines.len(), 1);
     assert_eq!(held.lines[0].added, 770);
+}
+
+#[test]
+fn time_divides_by_author_without_exceeding_what_it_divides() {
+    let mut bucket = TimeBucket {
+        seconds: 100,
+        ..TimeBucket::default()
+    };
+    bucket.languages.insert("Rust".to_owned(), 100);
+    bucket.spend("Rust", Author::Agent, 70);
+    bucket.spend("Rust", Author::Human, 20);
+
+    assert_eq!(bucket.attributed("Rust", Author::Agent), 70);
+    assert_eq!(bucket.attributed("Rust", Author::Human), 20);
+    // The ten seconds nobody could put a name to stay unattributed rather than
+    // being handed to whichever author was handy.
+    let named = bucket
+        .by_author
+        .iter()
+        .map(|fact| fact.seconds)
+        .sum::<u64>();
+    assert_eq!(named, 90);
+    assert!(named <= bucket.seconds);
+}
+
+#[test]
+fn a_source_that_cannot_name_an_author_leaves_the_split_empty() {
+    // An imported day knows how long a language took and nothing about who was
+    // doing it, so it must not appear to claim that nobody was.
+    let mut bucket = TimeBucket {
+        seconds: 3_600,
+        ..TimeBucket::default()
+    };
+    bucket.languages.insert("Clojure".to_owned(), 3_600);
+
+    assert!(bucket.by_author.is_empty());
+    assert_eq!(bucket.attributed("Clojure", Author::Agent), 0);
+}
+
+#[test]
+fn two_machines_add_their_attributed_time_and_two_readings_do_not() {
+    let day = |seconds: u64| {
+        let mut day = DayBucket::new("2026-08-20");
+        let bucket = day.measure_mut(MEASURE_AGENT);
+        bucket.seconds = seconds;
+        bucket.spend("Go", Author::Agent, seconds);
+        day
+    };
+
+    // Two machines worked an hour and half an hour on the same day, which is an
+    // hour and a half of work. Summing happens as a record is read, so it is
+    // checked through the summary rather than reached into.
+    let summed = summarise_activity(&[day(3_600), day(1_800)]);
+    assert_eq!(summed.measure(MEASURE_AGENT).seconds, 5_400);
+
+    // One machine read twice saw the same hour twice, which is still an hour.
+    let mut merged = day(3_600);
+    merged.keep_fuller(&day(1_800));
+    assert_eq!(
+        merged
+            .measure(MEASURE_AGENT)
+            .attributed("Go", Author::Agent),
+        3_600
+    );
 }

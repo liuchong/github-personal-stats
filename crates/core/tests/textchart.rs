@@ -127,10 +127,12 @@ fn a_bar_is_as_long_as_the_row_is_large() {
 
 #[test]
 fn a_divided_row_shows_the_split_inside_its_bar() {
-    let divided = ChartBlock::new("LINES  BY LANGUAGE").with_rows(
-        vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
-        1_000,
-    );
+    let divided = ChartBlock::new("LINES  BY LANGUAGE")
+        .with_rows(
+            vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
+            1_000,
+        )
+        .divided_into("agent", "not by an agent");
     let style = ChartStyle {
         bar_cells: 20,
         ..ChartStyle::default()
@@ -142,6 +144,14 @@ fn a_divided_row_shows_the_split_inside_its_bar() {
     // durations is not annotated with a split it does not have.
     assert!(text.contains("# agent"), "{text}");
     assert!(!render_text_chart(&[block()], &style).contains("# agent"));
+
+    // A block that divides without saying what its parts are gets no key, since
+    // a key naming nothing would be worse than none.
+    let unnamed = ChartBlock::new("LINES  BY LANGUAGE").with_rows(
+        vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
+        1_000,
+    );
+    assert!(!render_text_chart(&[unnamed], &style).contains("agent"));
 }
 
 #[test]
@@ -376,7 +386,12 @@ fn a_blocks_total_is_the_total_of_what_it_shows() {
 
     // Everyone wrote a thousand lines; the models wrote nine hundred of them. A
     // block that totalled the wrong one would make its own percentages read wrong.
-    assert!(by_author.contains("Total   1,000"), "{by_author}");
+    assert!(
+        by_author
+            .lines()
+            .any(|line| line.starts_with("Total") && line.contains("1,000")),
+        "{by_author}"
+    );
     assert!(by_model.contains("Total"), "{by_model}");
     assert!(by_model.contains("900"), "{by_model}");
     assert!(!by_model.contains("1,000"), "{by_model}");
@@ -525,4 +540,71 @@ fn lines_whose_language_went_unrecorded_are_named_rather_than_dropped() {
         })
         .collect::<Vec<_>>();
     assert_eq!(totals, vec!["500", "500"], "the two totals differ\n{text}");
+}
+
+#[test]
+fn a_time_block_divides_its_bars_by_who_spent_the_time() {
+    let mut day = DayBucket::new("2026-08-20");
+    let bucket = day.measure_mut(MEASURE_AGENT);
+    bucket.seconds = 4_000;
+    bucket.languages.insert("Rust".to_owned(), 4_000);
+    bucket.spend("Rust", Author::Agent, 3_000);
+    bucket.spend("Rust", Author::Human, 1_000);
+
+    let fold = compare_activity(
+        &[day],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&fold),
+            &parse_blocks("time/languages,split=on").unwrap(),
+        ),
+        &ChartStyle {
+            bar_cells: 20,
+            ..ChartStyle::default()
+        },
+    );
+
+    // Three quarters of the hour was an agent's and a quarter was not, by the
+    // same rule that put the hour against Rust in the first place.
+    assert!(text.contains("###############====="), "{text}");
+    assert!(text.contains("# agent"), "{text}");
+}
+
+#[test]
+fn time_from_a_source_that_names_no_author_is_drawn_in_one_piece() {
+    let mut day = DayBucket::new("2026-08-20");
+    let bucket = day.measure_mut(MEASURE_IMPORTED);
+    bucket.seconds = 4_000;
+    bucket.languages.insert("Clojure".to_owned(), 4_000);
+
+    let fold = compare_activity(
+        &[day],
+        ActivityMeasure::new(MEASURE_IMPORTED),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&fold),
+            &parse_blocks("time/languages,split=on").unwrap(),
+        ),
+        &ChartStyle {
+            bar_cells: 20,
+            ..ChartStyle::default()
+        },
+    );
+
+    // An imported hour is an hour nobody claimed, which is not the same as an
+    // hour claimed by nobody: the bar is whole and there is no key.
+    assert!(text.contains("####################"), "{text}");
+    assert!(!text.contains("="), "{text}");
+    assert!(!text.contains("# agent"), "{text}");
 }

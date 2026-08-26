@@ -1,7 +1,7 @@
 use crate::{
-    Author, ContributionDay, DEFAULT_ACTIVITY_WINDOWS, DayBucket, GithubData, HeatRing, HeatWindow,
-    LanguageLines, LineCounts, LineTotals, MAX_ACTIVITY_WINDOW, MEASURE_AGENT, MEASURE_EDITOR,
-    MEASURE_IMPORTED, OutputKind, RepositoryLanguage, TimeBucket, TokenUsage,
+    Author, AuthorShare, ContributionDay, DEFAULT_ACTIVITY_WINDOWS, DayBucket, GithubData,
+    HeatRing, HeatWindow, LineCounts, LineTotals, MAX_ACTIVITY_WINDOW, MEASURE_AGENT,
+    MEASURE_EDITOR, MEASURE_IMPORTED, OutputKind, RepositoryLanguage, TimeBucket, TokenUsage,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -243,7 +243,11 @@ pub struct ActivityLanguage {
     pub baseline_seconds: u64,
     pub baseline_basis_points: u32,
     /// Authorship of this language's lines in the recent span.
-    pub lines: LanguageLines,
+    pub lines: AuthorShare,
+    /// Authorship of this language's seconds in the recent span, as far as the
+    /// source could say. Sums to at most `recent_seconds`; the difference is
+    /// time nobody could attribute rather than time attributed to nobody.
+    pub attributed: AuthorShare,
 }
 
 /// Two windows over the same record, with the languages joined across them.
@@ -550,7 +554,9 @@ pub fn compare_activity(
 #[derive(Default)]
 struct LanguageTotals {
     seconds: BTreeMap<String, u64>,
-    lines: BTreeMap<String, LanguageLines>,
+    /// The part of `seconds` that a source could put a name to. Never larger.
+    attributed: BTreeMap<String, AuthorShare>,
+    lines: BTreeMap<String, AuthorShare>,
 }
 
 /// Sums one span, returning the window and its per-language totals.
@@ -613,6 +619,16 @@ fn window(
             }
             *totals.seconds.entry(language.clone()).or_default() += count;
         }
+        for fact in &bucket.by_author {
+            if ignored(&fact.language) {
+                continue;
+            }
+            let held = totals.attributed.entry(fact.language.clone()).or_default();
+            match fact.author {
+                Author::Agent => held.agent += fact.seconds,
+                Author::Human => held.human += fact.seconds,
+            }
+        }
         for fact in &day.lines {
             // Lines whose language went unrecorded are kept under the empty name
             // they were recorded with, so that a per-language view adds up to the
@@ -665,6 +681,7 @@ fn join_languages(
         .chain(baseline.seconds.keys())
         .chain(recent.lines.keys())
         .chain(baseline.lines.keys())
+        .chain(recent.attributed.keys())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .map(|name| {
@@ -677,6 +694,7 @@ fn join_languages(
                 baseline_seconds,
                 baseline_basis_points: percentage_basis_points(baseline_seconds, baseline_total),
                 lines: recent.lines.get(name).copied().unwrap_or_default(),
+                attributed: recent.attributed.get(name).copied().unwrap_or_default(),
             }
         })
         .collect::<Vec<_>>();
