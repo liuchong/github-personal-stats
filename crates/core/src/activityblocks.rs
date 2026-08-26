@@ -281,8 +281,10 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Opt
         ChartValue::Lines => {
             let note = match spec.rows {
                 // A block already broken down by author would only be repeating
-                // itself if the total named the split too.
-                ChartRows::Authors => format!("lines, {}", window.coverage()),
+                // itself if the total named the split too, so it says the span
+                // instead: without it the figure is a count of lines over an
+                // unstated period.
+                ChartRows::Authors => format!("lines, {}", window.span.label().to_lowercase()),
                 _ => format!(
                     "lines, {} by an agent",
                     percent(window.lines.ai_share_basis_points())

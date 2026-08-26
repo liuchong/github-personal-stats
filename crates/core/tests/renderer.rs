@@ -161,7 +161,7 @@ fn renderer_outputs_streak_activity_and_status_cards() {
     // they overlap.
     assert!(activity_svg.contains("AGENT TIME"));
     assert!(activity_svg.contains(">3 hrs 1 mins<"));
-    assert!(activity_svg.contains(">1 of 30 days<"));
+    assert!(activity_svg.contains(">1 day active<"));
     assert!(status_svg.contains("Service health"));
     assert!(status_svg.contains(">ready<"));
 }

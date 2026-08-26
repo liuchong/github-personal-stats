@@ -187,15 +187,21 @@ pub struct ActivityWindow {
 }
 
 impl ActivityWindow {
-    /// How much of the span recorded work, phrased for the line under the figure.
+    /// How many days of the span recorded work, phrased for the line under the
+    /// figure.
     ///
-    /// A fixed span says how much of itself it covers, because that is what makes
-    /// a short record legible. All time has nothing to be a fraction of, so it
-    /// just counts its days.
+    /// Every place this is drawn names the span beside it, so it counts the
+    /// active days without repeating the span's length: "30 of 30 days" under a
+    /// heading that already says thirty says thirty three times and tells the
+    /// reader nothing on the second and third.
     pub fn coverage(&self) -> String {
         match self.span {
-            ActivitySpan::Days(days) => format!("{} of {days} days", self.active_days),
-            ActivitySpan::All => format!("{} {}", self.active_days, days_word(self.active_days)),
+            ActivitySpan::Days(days) if self.active_days == days => "every day active".to_owned(),
+            _ => format!(
+                "{} {} active",
+                self.active_days,
+                days_word(self.active_days)
+            ),
         }
     }
 
