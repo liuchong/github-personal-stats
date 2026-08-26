@@ -31,6 +31,20 @@ fn cli_generates_dashboard_svg_file() {
     let _ = fs::remove_file(output);
 }
 
+/// A record with one day in it, laid out the way a collector leaves one: a
+/// directory per machine holding dated day files.
+fn a_record_with_one_day() -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("gps-record-{}-{}", std::process::id(), line!()));
+    let machine = root.join("m-test");
+    fs::create_dir_all(&machine).unwrap();
+    fs::write(
+        machine.join("2026-08-20.json"),
+        r#"{"schema":2,"machine":"m-test","date":"2026-08-20","time":{"agent":{"seconds":3600,"languages":{"Rust":3600},"sessions":1}},"lines":[{"language":"Rust","author":"agent","model":"a-model","added":500}]}"#,
+    )
+    .unwrap();
+    root
+}
+
 #[test]
 fn cli_updates_marked_readme_section() {
     let target = std::env::temp_dir().join(format!(
@@ -43,6 +57,7 @@ fn cli_updates_marked_readme_section() {
     )
     .unwrap();
 
+    let record = a_record_with_one_day();
     let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .args([
             "update-readme",
@@ -50,6 +65,8 @@ fn cli_updates_marked_readme_section() {
             target.to_str().unwrap(),
             "--section",
             "activity",
+            "--activity-record",
+            record.to_str().unwrap(),
         ])
         .status()
         .unwrap();
@@ -57,7 +74,12 @@ fn cli_updates_marked_readme_section() {
     assert!(status.success());
     let readme = fs::read_to_string(&target).unwrap();
     assert!(readme.contains("before"));
-    assert!(readme.contains("### Coding Activity"));
+    // What lands in the README is the chart the record describes, in a fenced
+    // block so the columns keep their alignment wherever it is read.
+    assert!(readme.contains("```txt"), "{readme}");
+    assert!(readme.contains("TIME  BY LANGUAGE"), "{readme}");
+    assert!(readme.contains("Rust"), "{readme}");
+    let _ = fs::remove_dir_all(&record);
     assert!(readme.contains("after"));
     assert!(!readme.contains("old"));
     let _ = fs::remove_file(target);
@@ -206,14 +228,22 @@ fn cli_reports_missing_readme_section_marker() {
     ));
     fs::write(&target, "no generated section here\n").unwrap();
 
+    let record = a_record_with_one_day();
     let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
-        .args(["update-readme", "--target", target.to_str().unwrap()])
+        .args([
+            "update-readme",
+            "--target",
+            target.to_str().unwrap(),
+            "--activity-record",
+            record.to_str().unwrap(),
+        ])
         .output()
         .unwrap();
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("missing section marker: <!--START_SECTION:activity-->"));
+    let _ = fs::remove_dir_all(&record);
     let _ = fs::remove_file(target);
 }
 

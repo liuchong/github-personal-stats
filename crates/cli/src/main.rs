@@ -1,11 +1,10 @@
 use github_personal_stats_core::{
-    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, BlockSpec, ChartStyle,
-    CodingActivityEntry, Column, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS,
-    DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData, GithubGraphqlClient,
-    GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING, MockGithubClient, OutputKind,
-    aggregate_card_data, aggregate_coding_activity, build_blocks, compare_activity, default_blocks,
-    json::write_github_fixture, parse_blocks, parse_output_kind, render_card,
-    render_readme_section, render_text_chart, store::read_record, workspace_info,
+    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, BlockSpec, ChartStyle, Column,
+    DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS,
+    GithubData, GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING,
+    MockGithubClient, OutputKind, aggregate_card_data, build_blocks, compare_activity,
+    default_blocks, json::write_github_fixture, parse_blocks, parse_output_kind, render_card,
+    render_text_chart, store::read_record, workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
@@ -153,8 +152,8 @@ Activity options:
   --activity-columns <list>
                           Columns in order from name, value, bar, share
                           (default: name,value,bar,share)
-  --activity-bar <chars>  Two or three characters for agent fill, my fill, and
-                          empty (default: #=-)
+  --activity-bar <chars>  Two or three characters for the agent's share, the
+                          share no agent wrote, and empty (default: #=-)
   --activity-bar-width <cells>
                           Bar width in characters (default: {DEFAULT_BAR_CELLS})
   --activity-bar-basis <largest|total>
@@ -331,13 +330,9 @@ fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(&target)?;
 
     // A record turns into the chart it describes. Without one there is nothing to
-    // say, and the sample that used to stand in here only ever looked like data.
-    let replacement = if args.iter().any(|arg| arg == "--activity-record") {
-        format!("```txt\n{}\n```", activity_chart(&args)?.trim_end())
-    } else {
-        let summary = aggregate_coding_activity(sample_coding_activity(), 8, &[], true);
-        render_readme_section(&summary, "Coding Activity")
-    };
+    // say: what used to stand in here was two invented figures, which a reader
+    // had no way of telling from the real thing.
+    let replacement = format!("```txt\n{}\n```", activity_chart(&args)?.trim_end());
     let updated = replace_section(&source, &start, &end, &replacement)?;
 
     fs::write(target, updated)?;
@@ -483,19 +478,6 @@ fn live_github_data(config: &GithubStatsConfig) -> Result<GithubData, Box<dyn Er
             config,
         )?,
     )
-}
-
-fn sample_coding_activity() -> Vec<CodingActivityEntry> {
-    vec![
-        CodingActivityEntry {
-            language: "Rust".to_owned(),
-            seconds: 7200,
-        },
-        CodingActivityEntry {
-            language: "Shell".to_owned(),
-            seconds: 1800,
-        },
-    ]
 }
 
 fn replace_section(
