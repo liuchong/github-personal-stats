@@ -128,6 +128,14 @@ pub struct ChartStyle {
     pub relative_to_largest: bool,
     /// Whether to print a line saying what the bar characters mean.
     pub legend: bool,
+    /// Whether to open with the dates the chart's record covers.
+    ///
+    /// On, because every figure below is a share or a total of some period, and a
+    /// reader who cannot see which period is reading a number with no scale. It
+    /// is worth stating even when a block already says `last 30 days`: a record
+    /// that begins nine years ago and one that begins last Tuesday give that same
+    /// month a very different meaning.
+    pub dates: bool,
 }
 
 impl Default for ChartStyle {
@@ -138,6 +146,7 @@ impl Default for ChartStyle {
             glyphs: BarGlyphs::default(),
             relative_to_largest: true,
             legend: true,
+            dates: true,
         }
     }
 }
@@ -239,6 +248,14 @@ pub struct ChartBlock {
     /// to the decision to split by that dimension, which is also what lets a
     /// block divided by something other than authorship label itself correctly.
     pub parts: Option<[String; 2]>,
+    /// The first and last day the record behind this block holds work on, as
+    /// `YYYY-MM-DD`.
+    ///
+    /// Carried per block rather than per chart because the blocks of one chart
+    /// can read different measures, and a measure imported from elsewhere covers
+    /// a different stretch of time than one collected here. The chart states the
+    /// union, which is the period a reader is looking at.
+    pub covering: Option<[String; 2]>,
 }
 
 impl ChartBlock {
@@ -265,6 +282,14 @@ impl ChartBlock {
         self.parts = Some([primary.to_owned(), secondary.to_owned()]);
         self
     }
+
+    /// The first and last day the record behind this block holds work on.
+    pub fn covering(mut self, start: &str, end: &str) -> Self {
+        if !start.is_empty() && !end.is_empty() {
+            self.covering = Some([start.to_owned(), end.to_owned()]);
+        }
+        self
+    }
 }
 
 /// Lays out blocks as aligned text.
@@ -276,6 +301,12 @@ impl ChartBlock {
 pub fn render_text_chart(blocks: &[ChartBlock], style: &ChartStyle) -> String {
     let mut out = String::new();
     let mut divided = false;
+
+    if style.dates {
+        if let Some([start, end]) = covered(blocks) {
+            let _ = writeln!(out, "From: {start} - To: {end}");
+        }
+    }
 
     for block in blocks {
         if !out.is_empty() {
@@ -308,6 +339,61 @@ pub fn render_text_chart(blocks: &[ChartBlock], style: &ChartStyle) -> String {
     }
 
     out
+}
+
+/// The period the chart's blocks cover between them, ready to be read.
+///
+/// The union rather than any one block's, because the blocks are read together:
+/// a chart holding hours collected here beside hours imported from elsewhere
+/// covers the earlier of the two beginnings and the later of the two ends.
+/// Dates in `YYYY-MM-DD` sort in the order they happened, so the earliest and
+/// latest are the smallest and largest.
+fn covered(blocks: &[ChartBlock]) -> Option<[String; 2]> {
+    let mut start: Option<&str> = None;
+    let mut end: Option<&str> = None;
+    for [from, to] in blocks.iter().filter_map(|block| block.covering.as_ref()) {
+        start = Some(match start {
+            Some(held) if held <= from.as_str() => held,
+            _ => from,
+        });
+        end = Some(match end {
+            Some(held) if held >= to.as_str() => held,
+            _ => to,
+        });
+    }
+    Some([spelled(start?)?, spelled(end?)?])
+}
+
+/// A day as a person would write it: `2017-09-26` as `26 September 2017`.
+///
+/// Spelled out rather than left numeric because a chart is read at a glance and
+/// `2017-09-26` invites the reader to work out which field is the month. Nothing
+/// here needs a calendar library: the parts are already in the string, and only
+/// the month becomes a word.
+fn spelled(day: &str) -> Option<String> {
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+
+    let mut parts = day.split('-');
+    let year = parts.next()?;
+    let month = parts.next()?.parse::<usize>().ok()?;
+    let date = parts.next()?.parse::<u32>().ok()?;
+    if parts.next().is_some() || year.len() != 4 {
+        return None;
+    }
+    Some(format!("{date} {} {year}", MONTHS.get(month - 1)?))
 }
 
 /// One column as drawn: its kind, and which remark it holds where a row has

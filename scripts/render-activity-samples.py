@@ -112,13 +112,17 @@ MACHINE = "m-5a1e9c72"
 
 
 def shaped(offset: int) -> float:
-    """A day's weight. Weekends are lighter, and no two weeks are identical."""
-    weekday = (date.today() - timedelta(days=offset)).weekday()
-    weekend = 0.42 if weekday >= 5 else 1.0
-    # A fixed cycle rather than a random walk: the sample has to be the same
-    # every time it is generated, or the docs churn on every run.
+    """A day's weight. Two days in seven are lighter, and no two weeks alike.
+
+    Both factors are taken from how far back the day is rather than from what
+    day of the week it lands on, so that every run produces the same figures.
+    Shaped by the real calendar, the quiet days would move through the recent
+    window as the week turned and every quoted number in the guide would change
+    daily, which is exactly the churn a fixed sample exists to avoid.
+    """
+    quiet = 0.42 if offset % 7 >= 5 else 1.0
     cycle = (0.86, 1.12, 0.95, 1.21, 1.03, 0.78, 1.09)[offset % 7]
-    return weekend * cycle
+    return quiet * cycle
 
 
 def divided(total: int, shares: dict[str, int]) -> dict[str, int]:
@@ -255,6 +259,12 @@ CHARTS = {
     "what the agents were billed for": ["--activity-blocks", "tokens/models,limit=4"],
 }
 
+# The dates a chart opens with are the sample record's, and the sample record
+# ends today, so a quoted date line is out of date the day after it is pasted.
+# The guide quotes the line once, where it is being explained, and shows the
+# other samples as the single blocks they are, which do not carry it anyway.
+DATED = "the default blocks"
+
 
 def main() -> int:
     if not BINARY.exists():
@@ -276,8 +286,9 @@ def main() -> int:
         # Flushed because the chart is written by a subprocess straight to the
         # same stream, and a buffered heading would arrive after its chart.
         print(f"\n=== {described} ===", flush=True)
+        dates = [] if described == DATED else ["--activity-dates", "off"]
         subprocess.run(
-            [str(BINARY), "chart", "--activity-record", str(RECORD), *options],
+            [str(BINARY), "chart", "--activity-record", str(RECORD), *options, *dates],
             check=True,
         )
 

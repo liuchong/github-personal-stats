@@ -315,12 +315,14 @@ fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock 
         None => block,
     };
     let (rows, total) = (fold.rows, fold.total);
+    let [from, to] = comparison.covering();
     // A bar is only ever divided by authorship at present, so that is what its
     // parts are called. The words live here rather than in the layout because the
     // layout has no way of knowing what a bar was divided by.
     block
         .with_rows(rows, total)
         .divided_into(AGENT, UNATTRIBUTED)
+        .covering(from, to)
 }
 
 /// What the record can say about who wrote a line.

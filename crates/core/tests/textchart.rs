@@ -517,6 +517,101 @@ fn a_block_reads_the_measure_it_names_rather_than_the_charts() {
 }
 
 #[test]
+fn a_chart_opens_with_the_days_it_covers() {
+    let mut early = DayBucket::new("2017-09-26");
+    early.measure_mut(MEASURE_IMPORTED).seconds = 3_600;
+    let mut late = DayBucket::new("2026-08-25");
+    late.measure_mut(MEASURE_IMPORTED).seconds = 3_600;
+
+    let text = render_text_chart(
+        &build_blocks(
+            &[compare_activity(
+                &[early, late],
+                ActivityMeasure::new(MEASURE_IMPORTED),
+                [ActivitySpan::Days(30), ActivitySpan::All],
+                Some("2026-08-26"),
+                12,
+                &[],
+            )],
+            &[BlockSpec::new(ChartValue::Time, ChartRows::Windows)],
+        ),
+        &ChartStyle::default(),
+    );
+
+    // Spelled out, and the first thing the reader meets: every figure below is a
+    // share or a total of some period, and the period is not in any of them.
+    assert!(
+        text.starts_with("From: 26 September 2017 - To: 25 August 2026\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_chart_of_two_measures_covers_the_earliest_and_the_latest() {
+    let mut old = DayBucket::new("2017-09-26");
+    old.measure_mut(MEASURE_IMPORTED).seconds = 3_600;
+    let mut new = DayBucket::new("2026-08-20");
+    new.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    let days = vec![old, new];
+
+    let fold = |measure: &str| {
+        compare_activity(
+            &days,
+            ActivityMeasure::new(measure),
+            [ActivitySpan::Days(30), ActivitySpan::All],
+            Some("2026-08-26"),
+            12,
+            &[],
+        )
+    };
+    let specs = vec![
+        BlockSpec::new(ChartValue::Time, ChartRows::Windows).of(MEASURE_AGENT),
+        BlockSpec::new(ChartValue::Time, ChartRows::Windows).of(MEASURE_IMPORTED),
+    ];
+    let text = render_text_chart(
+        &build_blocks(&[fold(MEASURE_AGENT), fold(MEASURE_IMPORTED)], &specs),
+        &ChartStyle::default(),
+    );
+
+    // Neither block covers this on its own: the imported hours begin in 2017 and
+    // end there, the agent's are all from this month. Read together they cover
+    // both ends, and stating one block's period would misdescribe the other's.
+    assert!(
+        text.starts_with("From: 26 September 2017 - To: 20 August 2026\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_chart_asked_not_to_date_itself_does_not() {
+    let style = ChartStyle {
+        dates: false,
+        ..ChartStyle::default()
+    };
+    let dated = block().covering("2026-08-01", "2026-08-26");
+
+    assert!(
+        render_text_chart(std::slice::from_ref(&dated), &style).starts_with("TIME BY LANGUAGE")
+    );
+    assert!(
+        render_text_chart(&[dated], &ChartStyle::default()).starts_with("From: 1 August 2026 - "),
+    );
+}
+
+#[test]
+fn a_day_the_chart_cannot_read_is_left_unsaid() {
+    // A record is a file, and a file can hold anything. A day that is not a day
+    // costs the reader the line; inventing one, or refusing to draw the chart,
+    // would cost more.
+    let text = render_text_chart(
+        &[block().covering("last tuesday", "2026-08-26")],
+        &ChartStyle::default(),
+    );
+
+    assert!(text.starts_with("TIME BY LANGUAGE"), "{text}");
+}
+
+#[test]
 fn a_block_naming_a_measure_nobody_folded_stays_empty() {
     let folds = vec![compare_activity(
         &[DayBucket::new("2026-08-20")],

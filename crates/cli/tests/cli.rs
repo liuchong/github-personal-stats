@@ -95,6 +95,43 @@ fn cli_updates_marked_readme_section() {
 }
 
 #[test]
+fn the_chart_dates_itself_unless_told_not_to() {
+    let record = a_record_with_one_day();
+    let chart = |dates: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+            .args(["chart", "--activity-record"])
+            .arg(&record)
+            .args(dates)
+            .output()
+            .unwrap();
+        (
+            output.status.success(),
+            String::from_utf8(output.stdout).unwrap(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+
+    let (ok, dated, _) = chart(&[]);
+    assert!(ok);
+    assert!(
+        dated.starts_with("From: 20 August 2026 - To: 20 August 2026"),
+        "{dated}"
+    );
+
+    let (ok, bare, _) = chart(&["--activity-dates", "off"]);
+    assert!(ok);
+    assert!(bare.starts_with("LINES BY LANGUAGE"), "{bare}");
+
+    // A misspelt switch is refused rather than read as off, so that a chart
+    // asked to date itself either does or says why not.
+    let (ok, _, complaint) = chart(&["--activity-dates", "sometimes"]);
+    assert!(!ok);
+    assert!(complaint.contains("must be on or off"), "{complaint}");
+
+    let _ = fs::remove_dir_all(&record);
+}
+
+#[test]
 fn cli_defaults_to_workspace_info() {
     let output = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
         .output()

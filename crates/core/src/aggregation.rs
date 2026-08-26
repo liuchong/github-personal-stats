@@ -337,6 +337,23 @@ impl ActivityComparison {
             .sum::<u64>();
         self.recent.seconds.saturating_sub(placed)
     }
+
+    /// The first and last day either window holds work on, as `YYYY-MM-DD`, or
+    /// two empty strings when neither holds any.
+    ///
+    /// Both windows rather than the longer one, because which is longer depends
+    /// on the spans asked for, and a window is empty until the record reaches
+    /// back far enough to fill it.
+    pub fn covering(&self) -> [&str; 2] {
+        fn days(window: &ActivityWindow) -> Option<[&str; 2]> {
+            (!window.start.is_empty()).then_some([window.start.as_str(), window.end.as_str()])
+        }
+        match (days(&self.recent), days(&self.baseline)) {
+            (Some([from, to]), Some([earlier, later])) => [from.min(earlier), to.max(later)],
+            (Some(only), None) | (None, Some(only)) => only,
+            (None, None) => ["", ""],
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

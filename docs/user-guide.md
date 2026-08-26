@@ -631,14 +631,14 @@ And a chart, for a README that is mostly words:
 ```txt
 LINES BY LANGUAGE
 
-Total        +115,987   lines, 99.94% by an agent
+Total        +120,398   lines, 99.94% by an agent
 
-Rust          +34,255   #########################   29.53 %
-Markdown      +26,925   ####################-----   23.21 %
-Go            +21,869   ################---------   18.85 %
-TypeScript    +12,556   #########----------------   10.82 %
-Python         +8,995   #######------------------    7.75 %
-Zig            +6,585   #####--------------------    5.67 %
+Rust          +35,677   #########################   29.63 %
+Markdown      +28,014   ####################-----   23.26 %
+Go            +22,547   ################---------   18.72 %
+TypeScript    +13,048   #########----------------   10.83 %
+Python         +9,276   ######-------------------    7.70 %
+Zig            +6,863   #####--------------------    5.70 %
 ```
 
 Both read the same collected record through the same fold, so they can sit on one page without disagreeing. Nothing here is fetched: the card is the only one in this project that renders with no token, no saved profile and no network at all.
@@ -658,7 +658,7 @@ Two spans are named on the left, the recent one leading. Under each is how much 
 
 On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see [How time is measured](#how-time-is-measured).
 
-The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `588 hrs 45 mins` needs a quarter more room than `9 hrs 2 mins`:
+The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `612 hrs 58 mins` needs a quarter more room than `9 hrs 2 mins`:
 
 | `--width 900 --theme light` | `--width 900 --theme dark` | `--width 275` |
 | --- | --- | --- |
@@ -684,39 +684,45 @@ Print the same chart to a terminal instead, which is the quickest way to try a c
 github-personal-stats chart --activity-record <your record>
 ```
 
-With nothing configured you get what was written, who wrote it, and what wrote it:
+With nothing configured you get the period covered, then what was written, who wrote it, and what wrote it:
 
 ```txt
+From: 24 May 2026 - To: 26 August 2026
+
 LINES BY LANGUAGE
 
-Total        +115,987   lines, 99.94% by an agent
+Total        +120,398   lines, 99.94% by an agent
 
-Rust          +34,255   #########################   29.53 %
-Markdown      +26,925   ####################-----   23.21 %
-Go            +21,869   ################---------   18.85 %
-TypeScript    +12,556   #########----------------   10.82 %
-Python         +8,995   #######------------------    7.75 %
-Zig            +6,585   #####--------------------    5.67 %
+Rust          +35,677   #########################   29.63 %
+Markdown      +28,014   ####################-----   23.26 %
+Go            +22,547   ################---------   18.72 %
+TypeScript    +13,048   #########----------------   10.83 %
+Python         +9,276   ######-------------------    7.70 %
+Zig            +6,863   #####--------------------    5.70 %
 
 LINES BY AUTHOR
 
-Total          +115,987   lines, last 30 days
+Total          +120,398   lines, last 30 days
 
-agent          +115,925   #########################   99.94 %
-unattributed        +62   -------------------------    0.05 %
+agent          +120,335   #########################   99.94 %
+unattributed        +63   -------------------------    0.05 %
 
 LINES BY MODEL
 
-Total           +115,925   lines, 99.94% by an agent
+Total           +120,335   lines, 99.94% by an agent
 
-claude-opus-5    +37,499   #########################   32.34 %
-gpt-5.6-sol      +31,201   #####################----   26.91 %
-gpt-5.5          +24,243   ################---------   20.91 %
-grok-4.6         +14,972   ##########---------------   12.91 %
-unnamed           +8,010   #####--------------------    6.90 %
+claude-opus-5    +38,917   #########################   32.34 %
+gpt-5.6-sol      +32,385   #####################----   26.91 %
+gpt-5.5          +25,168   ################---------   20.91 %
+grok-4.6         +15,544   ##########---------------   12.91 %
+unnamed           +8,321   #####--------------------    6.91 %
 
 # agent    = unattributed    - rest
 ```
+
+The first line is the first and last day your record holds work on, which is the one thing none of the figures below can tell you. A month is a month, but a month out of nine years of history and a month out of a fortnight's mean different things, and a total that says `all time` means whatever your record happens to reach back to. Where a chart holds several measures the line covers all of them, so a chart pairing hours collected here with hours imported from a tracker you used for years opens at the earliest day either of them knows about. Turn it off with `--activity-dates off`.
+
+The remaining samples in this chapter are single blocks, shown without that line.
 
 ### What the figures mean
 
@@ -730,7 +736,7 @@ Three different things can be counted, they are measured by different means, and
 
 `lines` is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.
 
-It is also why the figures are additions only, written `+115,987` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
+It is also why the figures are additions only, written `+120,398` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
 
 `unattributed` means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.
 
@@ -767,14 +773,14 @@ The remaining limitation is that most of those hours cannot be attributed to a l
 ```txt
 TIME BY LANGUAGE
 
-Total        71 hrs  5 mins   last 30 days, 115 hrs 59 mins not placed to a language
+Total        73 hrs 47 mins   last 30 days, 120 hrs 23 mins not placed to a language
 
-Rust         20 hrs 57 mins   #########################   29.48 %
-Markdown     16 hrs 30 mins   ####################-----   23.22 %
-Go           13 hrs 24 mins   ################---------   18.85 %
-TypeScript    7 hrs 42 mins   #########----------------   10.84 %
-Python        5 hrs 31 mins   #######------------------    7.76 %
-Zig           4 hrs  2 mins   #####--------------------    5.68 %
+Rust         21 hrs 50 mins   #########################   29.59 %
+Markdown     17 hrs 10 mins   ####################-----   23.27 %
+Go           13 hrs 48 mins   ################---------   18.72 %
+TypeScript    8 hrs  0 mins   #########----------------   10.85 %
+Python        5 hrs 41 mins   #######------------------    7.71 %
+Zig           4 hrs 12 mins   #####--------------------    5.70 %
 ```
 
 That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with `time=on`:
@@ -782,12 +788,12 @@ That is also why hours are an option on a block rather than the thing a chart le
 ```txt
 LINES BY LANGUAGE
 
-Total        +115,987   lines, 99.94% by an agent
+Total        +120,398   lines, 99.94% by an agent
 
-Rust          +34,255   #########################   29.53 %   20 hrs 57 mins
-Markdown      +26,925   ####################-----   23.21 %   16 hrs 30 mins
-Go            +21,869   ################---------   18.85 %   13 hrs 24 mins
-TypeScript    +12,556   #########----------------   10.82 %    7 hrs 42 mins
+Rust          +35,677   #########################   29.63 %   21 hrs 50 mins
+Markdown      +28,014   ####################-----   23.26 %   17 hrs 10 mins
+Go            +22,547   ################---------   18.72 %   13 hrs 48 mins
+TypeScript    +13,048   #########----------------   10.83 %    8 hrs  0 mins
 ```
 
 ### Choosing what the chart says
@@ -814,14 +820,14 @@ Every bar is already divided by author, so its shape says how much of a language
 ```txt
 LINES BY LANGUAGE
 
-Total        +115,987   lines, 99.94% by an agent
+Total        +120,398   lines, 99.94% by an agent
 
-Rust          +34,255   #########################   29.53 %    99.92% agent
-Markdown      +26,925   ####################-----   23.21 %    99.92% agent
-Go            +21,869   ################---------   18.85 %    99.93% agent
-TypeScript    +12,556   #########----------------   10.82 %   100.00% agent
-Python         +8,995   #######------------------    7.75 %   100.00% agent
-Zig            +6,585   #####--------------------    5.67 %   100.00% agent
+Rust          +35,677   #########################   29.63 %    99.93% agent
+Markdown      +28,014   ####################-----   23.26 %    99.92% agent
+Go            +22,547   ################---------   18.72 %    99.91% agent
+TypeScript    +13,048   #########----------------   10.83 %   100.00% agent
+Python         +9,276   ######-------------------    7.70 %   100.00% agent
+Zig            +6,863   #####--------------------    5.70 %   100.00% agent
 
 # agent    = unattributed    - rest
 ```
@@ -837,20 +843,20 @@ A measure belongs to a block rather than to the whole chart, because the interes
 ```txt
 TIME BY SPAN
 
-Longest        588 hrs 45 mins   spans overlap; each reads as a share of this
+Longest        612 hrs 58 mins   spans overlap; each reads as a share of this
 
-Last 30 days   187 hrs  4 mins   ########-----------------    31.77 %
-All time       588 hrs 45 mins   #########################   100.00 %
+Last 30 days   194 hrs 11 mins   ########-----------------    31.67 %
+All time       612 hrs 58 mins   #########################   100.00 %
 
 IMPORTED TIME BY SPAN
 
-Longest        254 hrs 26 mins   spans overlap; each reads as a share of this
+Longest        266 hrs 21 mins   spans overlap; each reads as a share of this
 
 Last 30 days     0 hrs  0 mins   -------------------------     0.00 %
-All time       254 hrs 26 mins   #########################   100.00 %
+All time       266 hrs 21 mins   #########################   100.00 %
 ```
 
-The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 843 hours of a period that only holds 588.
+The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 879 hours of a period that only holds 613.
 
 Two spans are compared, and both are configurable — a day count or `all`:
 
@@ -865,9 +871,10 @@ Two spans are compared, and both are configurable — a day count or `all`:
 --activity-bar '#=-'
 --activity-bar-width 25
 --activity-bar-basis largest
+--activity-dates on
 ```
 
-Columns are drawn in the order given, and a column that no row fills is not drawn at all. `--activity-bar` takes two or three characters: the agent's share, the share nothing watched an agent write, and the remainder. `--activity-bar-basis` decides whether a bar's length is measured against the largest row or against the block's total.
+Columns are drawn in the order given, and a column that no row fills is not drawn at all. `--activity-bar` takes two or three characters: the agent's share, the share nothing watched an agent write, and the remainder. `--activity-bar-basis` decides whether a bar's length is measured against the largest row or against the block's total. `--activity-dates off` drops the opening line of dates, which is worth doing when the chart sits under a heading that already says which period it covers.
 
 Everything is padded to a monospace grid, so the chart belongs in a fenced block. `update-readme` writes one for you.
 

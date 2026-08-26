@@ -431,11 +431,11 @@ def landing():
   than pictures:</p>
   <pre><code>LINES BY LANGUAGE
 
-Total        +115,987   lines, 99.94% by an agent
+Total        +120,398   lines, 99.94% by an agent
 
-Rust          +34,255   #########################   29.53 %
-Markdown      +26,925   ####################-----   23.21 %
-Go            +21,869   ################---------   18.85 %</code></pre>
+Rust          +35,677   #########################   29.63 %
+Markdown      +28,014   ####################-----   23.26 %
+Go            +22,547   ################---------   18.72 %</code></pre>
   <div class="actions">
     <a class="button" href="pages/activity.html">What it measures</a>
     <a class="button" href="pages/collecting.html">How to collect it</a>

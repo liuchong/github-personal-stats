@@ -167,6 +167,9 @@ Activity options:
   --activity-bar-basis <largest|total>
                           Whether a bar's length is measured against the biggest
                           row or the block total (default: largest)
+  --activity-dates <on|off>
+                          Whether to open with the first and last day the record
+                          holds work on (default: on)
 
 Update-readme options:
   --target <path>         README to rewrite (default: {DEFAULT_TARGET})
@@ -447,6 +450,19 @@ fn parse_windows(value: &str) -> Result<[ActivitySpan; 2], Box<dyn Error>> {
     Ok([read(recent)?, read(baseline)?])
 }
 
+/// A flag that is either on or off, refusing anything else.
+///
+/// Refused rather than read as off, because a switch that quietly ignores
+/// `--activity-dates yes please` leaves the caller looking for the line they
+/// asked for in the wrong place.
+fn switched(flag: &str, value: &str) -> Result<bool, Box<dyn Error>> {
+    match value.trim() {
+        "on" | "true" | "yes" => Ok(true),
+        "off" | "false" | "no" => Ok(false),
+        other => Err(format!("{flag} {other:?} must be on or off").into()),
+    }
+}
+
 fn chart_style(args: &[String]) -> Result<ChartStyle, Box<dyn Error>> {
     let mut style = ChartStyle::default();
     if let Some(value) = option_value(args, "--activity-columns") {
@@ -468,6 +484,9 @@ fn chart_style(args: &[String]) -> Result<ChartStyle, Box<dyn Error>> {
             .trim()
             .parse()
             .map_err(|_| format!("--activity-bar-width {value:?} must be a whole number"))?;
+    }
+    if let Some(value) = option_value(args, "--activity-dates") {
+        style.dates = switched("--activity-dates", &value)?;
     }
     if let Some(value) = option_value(args, "--activity-bar-basis") {
         style.relative_to_largest = match value.trim() {
