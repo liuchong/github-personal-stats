@@ -737,10 +737,29 @@ Values are `lines`, `time` and `tokens`. Dimensions are `languages`, `models`, `
 | --- | --- |
 | `limit=8` | Rows at most, largest first |
 | `time=on` | Adds the hours behind each row |
-| `authors=on` | On a block of hours, adds who wrote each language's lines |
+| `authors=on` | Adds the agent's share of each row, as a number beside the bar |
 | `split=off` | Draws each bar whole instead of dividing it by author |
 | `title=…` | Replaces the heading |
 | `measure=…` | Reads a named measure of time rather than the chart's |
+
+Every bar is already divided by author, so a glance says which languages an agent wrote most of. `authors=on` puts the number beside it, which is what you want when the interesting rows are the ones that go against the average:
+
+```txt
+LINES BY LANGUAGE
+
+Total        +492,274   lines, 90.24% by an agent
+
+Rust         +121,554   #################========   24.69 %    69.50% agent
+Markdown     +118,978   #######################=-   24.16 %    96.36% agent
+Go            +94,234   ##################=------   19.14 %    96.61% agent
+Zig           +28,323   ######-------------------    5.75 %   100.00% agent
+Python        +25,323   #####--------------------    5.14 %    91.38% agent
+TypeScript    +24,649   #####--------------------    5.00 %   100.00% agent
+
+# agent    = not by an agent    - rest
+```
+
+On a block of hours the same setting writes `69.50% agent lines`, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.
 
 A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.
 

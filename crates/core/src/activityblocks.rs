@@ -439,7 +439,7 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
                 row
             };
             if spec.authors {
-                row.with_aside(authorship(&language.lines))
+                row.with_aside(authorship(&language.lines, false))
             } else {
                 row
             }
@@ -448,15 +448,23 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
     Fold::plain(rows, total)
 }
 
-/// How a language's lines divide, for a row whose figure is not lines.
+/// How a row's lines divide, for a reader who wants the number and not the bar.
 ///
-/// It names what it counted. On a block of hours the reader has every reason to
-/// assume a percentage refers to the hours, and this one does not.
-fn authorship(lines: &LineShare) -> String {
+/// Whether it has to name what it counted depends on the row it sits beside. On
+/// a block of hours a percentage would be taken for a share of the hours, so
+/// there it says which figure it means; on a block of lines it is already
+/// talking about the figure to its left, and saying so again would only widen
+/// the column.
+fn authorship(lines: &LineShare, of_lines: bool) -> String {
     if lines.total() == 0 {
         return String::new();
     }
-    format!("{} agent lines", percent(lines.ai_share_basis_points()))
+    let share = percent(lines.ai_share_basis_points());
+    if of_lines {
+        format!("{share} agent")
+    } else {
+        format!("{share} agent lines")
+    }
 }
 
 /// A count of lines, said as a change rather than as a quantity.
@@ -500,6 +508,11 @@ fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
             );
             let row = if spec.split {
                 row.divided(language.lines.agent.total(), language.lines.human.total())
+            } else {
+                row
+            };
+            let row = if spec.authors {
+                row.with_aside(authorship(&language.lines, true))
             } else {
                 row
             };

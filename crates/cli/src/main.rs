@@ -152,8 +152,8 @@ Activity options:
                           the editor keeps a row per line that exists, so a
                           deleted line leaves nothing to count. A block naming a
                           measure reads that one, so one chart can hold agent
-                          hours beside imported hours; authors=on makes a block
-                          of hours say who wrote each language's lines
+                          hours beside imported hours; authors=on writes the
+                          agent's share of each row beside its bar
                           (default: lines/languages;lines/authors;lines/models)
   --activity-columns <list>
                           Columns in order from name, value, bar, share, aside

@@ -98,7 +98,21 @@ Markdown     +118,978   #######################=-   24.16 %   35 hrs 10 mins</co
 <p>A chart is a list of blocks separated by semicolons. Each block is written <code>value/dimension</code> with optional <code>,setting=value</code> pairs:</p>
 <pre data-language="sh"><code>--activity-blocks &#x27;lines/languages,limit=8,time=on;lines/authors;tokens/models&#x27;</code></pre>
 <p>Values are <code>lines</code>, <code>time</code> and <code>tokens</code>. Dimensions are <code>languages</code>, <code>models</code>, <code>authors</code> and <code>windows</code>. Not every pairing was measured — nothing records a token against a language or an author — and a block that asks for a pairing nothing measured says <code>nothing recorded</code> rather than inventing a number.</p>
-<div class="table-scroll"><table><thead><tr><th>Setting</th><th>Does</th></tr></thead><tbody><tr><td><code>limit=8</code></td><td>Rows at most, largest first</td></tr><tr><td><code>time=on</code></td><td>Adds the hours behind each row</td></tr><tr><td><code>authors=on</code></td><td>On a block of hours, adds who wrote each language&#x27;s lines</td></tr><tr><td><code>split=off</code></td><td>Draws each bar whole instead of dividing it by author</td></tr><tr><td><code>title=…</code></td><td>Replaces the heading</td></tr><tr><td><code>measure=…</code></td><td>Reads a named measure of time rather than the chart&#x27;s</td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th>Setting</th><th>Does</th></tr></thead><tbody><tr><td><code>limit=8</code></td><td>Rows at most, largest first</td></tr><tr><td><code>time=on</code></td><td>Adds the hours behind each row</td></tr><tr><td><code>authors=on</code></td><td>Adds the agent&#x27;s share of each row, as a number beside the bar</td></tr><tr><td><code>split=off</code></td><td>Draws each bar whole instead of dividing it by author</td></tr><tr><td><code>title=…</code></td><td>Replaces the heading</td></tr><tr><td><code>measure=…</code></td><td>Reads a named measure of time rather than the chart&#x27;s</td></tr></tbody></table></div>
+<p>Every bar is already divided by author, so a glance says which languages an agent wrote most of. <code>authors=on</code> puts the number beside it, which is what you want when the interesting rows are the ones that go against the average:</p>
+<pre data-language="txt"><code>LINES BY LANGUAGE
+
+Total        +492,274   lines, 90.24% by an agent
+
+Rust         +121,554   #################========   24.69 %    69.50% agent
+Markdown     +118,978   #######################=-   24.16 %    96.36% agent
+Go            +94,234   ##################=------   19.14 %    96.61% agent
+Zig           +28,323   ######-------------------    5.75 %   100.00% agent
+Python        +25,323   #####--------------------    5.14 %    91.38% agent
+TypeScript    +24,649   #####--------------------    5.00 %   100.00% agent
+
+# agent    = not by an agent    - rest</code></pre>
+<p>On a block of hours the same setting writes <code>69.50% agent lines</code>, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.</p>
 <p>A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.</p>
 <pre data-language="sh"><code>--activity-blocks &#x27;time/languages;time/languages,measure=imported&#x27;</code></pre>
 <p>Two spans are compared, and both are configurable — a day count or <code>all</code>:</p>
