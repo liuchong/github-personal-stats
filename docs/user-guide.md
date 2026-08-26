@@ -658,7 +658,7 @@ Two spans are named on the left, the recent one leading. Under each is how much 
 
 On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see [How time is measured](#how-time-is-measured).
 
-The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `588 hrs 45 mins` needs half again the room of `9 hrs 2 mins`:
+The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `588 hrs 45 mins` needs a quarter more room than `9 hrs 2 mins`:
 
 | `--width 900 --theme light` | `--width 900 --theme dark` | `--width 275` |
 | --- | --- | --- |
@@ -875,8 +875,13 @@ Everything is padded to a monospace grid, so the chart belongs in a fenced block
 
 Two commands and one editor extension, none of which are needed by the cards above.
 
+The collector reads databases your editor keeps and the daemon listens on a socket, so neither is published to crates.io alongside the renderer; build them from the repository:
+
 ```sh
-cargo install github-personal-stats-collect
+git clone https://github.com/liuchong/github-personal-stats
+cd github-personal-stats
+cargo install --path crates/collect
+cargo install --path crates/daemon
 github-personal-stats-collect
 ```
 
@@ -886,7 +891,14 @@ That reads what is on this machine and writes a record. Once the configuration b
 github-personal-stats-daemon install
 ```
 
-Installing the daemon registers it with `launchd` or `systemd`, so it starts with your session, rebuilds the record on a timer, and listens on loopback for the editor extension. It also serves a small panel at `http://127.0.0.1:7391` showing what it has, which is the quickest way to see whether any of this is working.
+Installing the daemon registers it with `launchd` or `systemd`, so it starts with your session, rebuilds the record on a timer, and listens on loopback for the editor extension.
+
+It also serves a page showing what it has, which is the quickest way to see whether any of this is working. The page needs the same shared secret the plugins use, because anything running on your machine can reach a loopback port, including a page you have open in a browser. The daemon prints the address with the secret in it when it starts:
+
+```
+listening on http://127.0.0.1:7391
+panel http://127.0.0.1:7391/?token=…
+```
 
 The extension in `plugins/vscode` covers Cursor, VS Code and VSCodium from one build. It reports nothing but a timestamp, a date, and the kind of file open — no paths, no project names, no content — to the daemon on your own machine.
 
@@ -902,7 +914,7 @@ github-personal-stats-daemon status
 daemon      listening on 127.0.0.1:7391
 token       /Users/you/.local/state/github-personal-stats/token
 publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode - 412 pulses today, last 30s ago
+editors     vscode — 412 pulses today, last 30s ago
 collected   100 days, agent 146h 29m, editor 3h 12m
 ```
 
@@ -911,7 +923,7 @@ Each line is something that can be separately broken. `editors no plugin has loa
 A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
 
 ```
-editors     vscode 1.5.0 - loaded 12m ago, nothing reported today
+editors     vscode 1.5.0 — loaded 12m ago, nothing reported today
 ```
 
 That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.
