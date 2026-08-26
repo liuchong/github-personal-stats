@@ -6,9 +6,10 @@
 //! broken. So they check column positions rather than just the presence of words.
 
 use github_personal_stats_core::{
-    ActivityMeasure, ActivitySpan, Author, BarGlyphs, ChartBlock, ChartRow, ChartRows, ChartStyle,
-    ChartSummary, ChartValue, Column, DayBucket, MEASURE_AGENT, build_blocks, compare_activity,
-    default_blocks, format_duration_aligned, parse_blocks, render_text_chart,
+    ActivityMeasure, ActivitySpan, Author, BarGlyphs, BlockSpec, ChartBlock, ChartRow, ChartRows,
+    ChartStyle, ChartSummary, ChartValue, Column, DayBucket, MEASURE_AGENT, MEASURE_IMPORTED,
+    UNKNOWN_LANGUAGE, build_blocks, compare_activity, default_blocks, format_duration_aligned,
+    parse_blocks, render_text_chart,
 };
 
 fn block() -> ChartBlock {
@@ -242,7 +243,7 @@ fn the_blocks_a_record_can_fill_are_folded_from_its_facts() {
         &[],
     );
     let text = render_text_chart(
-        &build_blocks(&comparison, &default_blocks()),
+        &build_blocks(std::slice::from_ref(&comparison), &default_blocks()),
         &ChartStyle::default(),
     );
 
@@ -271,7 +272,10 @@ fn a_language_block_of_lines_divides_each_bar_by_author() {
         &[],
     );
     let blocks = parse_blocks("lines/languages").unwrap();
-    let text = render_text_chart(&build_blocks(&comparison, &blocks), &ChartStyle::default());
+    let text = render_text_chart(
+        &build_blocks(std::slice::from_ref(&comparison), &blocks),
+        &ChartStyle::default(),
+    );
 
     // Sixty percent of a full bar in the primary glyph, the rest in the second.
     assert!(text.contains("###############=========="), "{text}");
@@ -292,7 +296,10 @@ fn a_block_whose_data_was_never_recorded_stays_empty_rather_than_guessing() {
         &[],
     );
     let blocks = parse_blocks("tokens/models").unwrap();
-    let text = render_text_chart(&build_blocks(&comparison, &blocks), &ChartStyle::default());
+    let text = render_text_chart(
+        &build_blocks(std::slice::from_ref(&comparison), &blocks),
+        &ChartStyle::default(),
+    );
 
     assert!(text.contains("nothing recorded"), "{text}");
 }
@@ -353,11 +360,17 @@ fn a_blocks_total_is_the_total_of_what_it_shows() {
         &[],
     );
     let by_author = render_text_chart(
-        &build_blocks(&comparison, &parse_blocks("lines/authors").unwrap()),
+        &build_blocks(
+            std::slice::from_ref(&comparison),
+            &parse_blocks("lines/authors").unwrap(),
+        ),
         &ChartStyle::default(),
     );
     let by_model = render_text_chart(
-        &build_blocks(&comparison, &parse_blocks("lines/models").unwrap()),
+        &build_blocks(
+            std::slice::from_ref(&comparison),
+            &parse_blocks("lines/models").unwrap(),
+        ),
         &ChartStyle::default(),
     );
 
@@ -402,4 +415,114 @@ fn minutes_line_up_even_when_one_row_has_a_single_digit() {
 #[test]
 fn a_long_duration_groups_its_hours() {
     assert_eq!(format_duration_aligned(25_703_112), "7,139 hrs 45 mins");
+}
+
+#[test]
+fn a_block_reads_the_measure_it_names_rather_than_the_charts() {
+    let mut day = DayBucket::new("2026-08-20");
+    day.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    day.measure_mut(MEASURE_IMPORTED).seconds = 28_800;
+    let days = vec![day];
+
+    let fold = |measure: &str| {
+        compare_activity(
+            &days,
+            ActivityMeasure::new(measure),
+            [ActivitySpan::Days(30), ActivitySpan::All],
+            None,
+            12,
+            &[],
+        )
+    };
+    let folds = vec![fold(MEASURE_AGENT), fold(MEASURE_IMPORTED)];
+
+    let specs = vec![
+        BlockSpec::new(ChartValue::Time, ChartRows::Windows).of(MEASURE_AGENT),
+        BlockSpec::new(ChartValue::Time, ChartRows::Windows).of(MEASURE_IMPORTED),
+    ];
+    let text = render_text_chart(&build_blocks(&folds, &specs), &ChartStyle::default());
+
+    // Hours an agent spent and hours carried in from elsewhere overlap, so a
+    // chart may put them side by side under names that say which is which.
+    assert!(text.contains("AGENT TIME  BY SPAN"), "{text}");
+    assert!(text.contains("IMPORTED TIME  BY SPAN"), "{text}");
+    assert!(text.contains("1 hrs  0 mins"), "{text}");
+    assert!(text.contains("8 hrs  0 mins"), "{text}");
+}
+
+#[test]
+fn a_block_naming_a_measure_nobody_folded_stays_empty() {
+    let folds = vec![compare_activity(
+        &[DayBucket::new("2026-08-20")],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    )];
+    let specs = vec![BlockSpec::new(ChartValue::Time, ChartRows::Windows).of("treadmill")];
+    let text = render_text_chart(&build_blocks(&folds, &specs), &ChartStyle::default());
+
+    assert!(text.contains("TREADMILL TIME  BY SPAN"), "{text}");
+    assert!(text.contains("nothing recorded"), "{text}");
+}
+
+#[test]
+fn dropping_the_bar_does_not_drop_what_the_total_is_a_total_of() {
+    let block = ChartBlock::new("TIME  BY LANGUAGE")
+        .with_summary(ChartSummary::new(
+            "Total",
+            "9 hrs",
+            "last 30 days, 4 of 30 days",
+        ))
+        .with_rows(vec![ChartRow::new("Rust", "9 hrs", 9)], 9);
+    let bare = ChartStyle {
+        columns: vec![Column::Name, Column::Value],
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[block], &bare);
+
+    // The note usually rides in the bar's column; without one it has to trail
+    // the row rather than vanish.
+    assert!(text.contains("last 30 days, 4 of 30 days"), "{text}");
+}
+
+#[test]
+fn lines_whose_language_went_unrecorded_are_named_rather_than_dropped() {
+    let mut day = DayBucket::new("2026-08-20");
+    day.measure_mut(MEASURE_AGENT).seconds = 3_600;
+    day.add_lines("Rust", Author::Agent, "a-model", 400, 0);
+    day.add_lines(UNKNOWN_LANGUAGE, Author::Agent, "a-model", 100, 0);
+
+    let fold = compare_activity(
+        &[day],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    );
+    let specs = vec![
+        BlockSpec::new(ChartValue::Lines, ChartRows::Languages),
+        BlockSpec::new(ChartValue::Lines, ChartRows::Authors),
+    ];
+    let text = render_text_chart(
+        &build_blocks(std::slice::from_ref(&fold), &specs),
+        &ChartStyle::default(),
+    );
+
+    // A file without a telling extension still has lines in it. Leaving them out
+    // of the per-language block would make it disagree with the block beside it.
+    assert!(text.contains("unknown"), "{text}");
+    let totals = text
+        .lines()
+        .filter(|line| line.starts_with("Total"))
+        .map(|line| {
+            line.split_whitespace()
+                .nth(1)
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(totals, vec!["500", "500"], "the two totals differ\n{text}");
 }

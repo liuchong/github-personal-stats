@@ -1,6 +1,6 @@
 use github_personal_stats_core::{
-    ACTIVITY_SCHEMA, ActivitySnapshot, Author, DayBucket, LineCounts, merge_snapshots,
-    parse_activity_snapshot, summarise_activity, write_activity_snapshot,
+    ACTIVITY_SCHEMA, ActivitySnapshot, Author, DayBucket, LineCounts, UNKNOWN_LANGUAGE,
+    merge_snapshots, parse_activity_snapshot, summarise_activity, write_activity_snapshot,
 };
 
 /// A day whose time is agent time, which is what the editor's own record can
@@ -334,4 +334,49 @@ fn a_day_with_only_editor_time_still_counts_as_worked() {
 
     assert_eq!(totals.active_days, 1);
     assert_eq!(totals.measure("agent").seconds, 0);
+}
+
+#[test]
+fn a_named_language_supersedes_the_unnamed_reading_of_the_same_lines() {
+    // A day recorded before languages were kept says only that a model wrote so
+    // many lines. Reading the same day again, with languages, describes those
+    // same lines more finely, and the two readings must not be added.
+    let mut held = DayBucket::new("2026-08-21");
+    held.add_lines(UNKNOWN_LANGUAGE, Author::Agent, "claude-opus-5", 22_472, 0);
+
+    let mut fresh = DayBucket::new("2026-08-21");
+    fresh.add_lines("Rust", Author::Agent, "claude-opus-5", 20_000, 0);
+    fresh.add_lines("Markdown", Author::Agent, "claude-opus-5", 2_436, 0);
+    fresh.add_lines(UNKNOWN_LANGUAGE, Author::Agent, "claude-opus-5", 36, 0);
+
+    held.keep_fuller(&fresh);
+    let written = |language: &str| {
+        held.lines
+            .iter()
+            .filter(|fact| fact.language == language)
+            .map(|fact| fact.added)
+            .sum::<u64>()
+    };
+
+    assert_eq!(written("Rust"), 20_000);
+    assert_eq!(written("Markdown"), 2_436);
+    // What the coarse reading claimed beyond the named languages is the part of
+    // it that survives: files whose extension nobody recorded.
+    assert_eq!(written(UNKNOWN_LANGUAGE), 36);
+    assert_eq!(
+        held.lines.iter().map(|fact| fact.added).sum::<u64>(),
+        22_472
+    );
+}
+
+#[test]
+fn an_unnamed_reading_with_nothing_finer_beside_it_is_kept_whole() {
+    // The source a day came from keeps only a few weeks, so an old day may only
+    // ever have the coarse reading. Superseding it with nothing would erase it.
+    let mut held = DayBucket::new("2026-07-26");
+    held.add_lines(UNKNOWN_LANGUAGE, Author::Agent, "gpt-5.5", 770, 0);
+    held.keep_fuller(&DayBucket::new("2026-07-26"));
+
+    assert_eq!(held.lines.len(), 1);
+    assert_eq!(held.lines[0].added, 770);
 }

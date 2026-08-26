@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact,
+    ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact, language_label,
     renderer::{format_duration_aligned, format_number as thousands},
     textchart::{ChartBlock, ChartRow, ChartSummary},
 };
@@ -54,6 +54,14 @@ pub struct BlockSpec {
     pub split: bool,
     /// Heading, or empty to use the one that fits the spec.
     pub title: String,
+    /// Which measure of time this block reads, or empty for the chart's own.
+    ///
+    /// A measure belongs to the block rather than to the chart because the
+    /// interesting charts hold more than one: hours an agent spent changing code
+    /// and hours carried in from elsewhere are different quantities that overlap,
+    /// so they can be shown side by side but never added, and a chart with a
+    /// single measure could only show one of them at a time.
+    pub measure: String,
 }
 
 impl BlockSpec {
@@ -64,7 +72,14 @@ impl BlockSpec {
             limit: 6,
             split: true,
             title: String::new(),
+            measure: String::new(),
         }
+    }
+
+    /// The same block, read from a named measure.
+    pub fn of(mut self, measure: &str) -> Self {
+        self.measure = measure.to_owned();
+        self
     }
 
     /// Reads one block from `value/rows` with optional `,key=value` settings.
@@ -118,9 +133,10 @@ impl BlockSpec {
                 }
                 "split" => block.split = matches!(held.trim(), "on" | "true" | "yes" | "author"),
                 "title" => block.title = held.trim().to_owned(),
+                "measure" => block.measure = held.trim().to_owned(),
                 other => {
                     return Err(invalid(&format!(
-                        "unknown block setting {other:?}; expected limit, split, or title"
+                        "unknown block setting {other:?}; expected limit, split, title, or measure"
                     )));
                 }
             }
@@ -132,18 +148,31 @@ impl BlockSpec {
         if !self.title.is_empty() {
             return self.title.clone();
         }
+        // A block of time says which time it means when it was asked for by name,
+        // because a chart holding two measures needs to tell them apart, and one
+        // holding a single unnamed measure has nothing to tell apart.
         let value = match self.value {
+            ChartValue::Time if !self.measure.is_empty() => {
+                return format!("{}  {}", self.time_heading(), self.row_heading());
+            }
             ChartValue::Time => "TIME",
             ChartValue::Lines => "LINES",
             ChartValue::Tokens => "TOKENS",
         };
-        let rows = match self.rows {
+        format!("{value}  {}", self.row_heading())
+    }
+
+    fn time_heading(&self) -> String {
+        format!("{} TIME", self.measure.to_uppercase())
+    }
+
+    fn row_heading(&self) -> &'static str {
+        match self.rows {
             ChartRows::Languages => "BY LANGUAGE",
             ChartRows::Models => "BY MODEL",
             ChartRows::Authors => "BY AUTHOR",
             ChartRows::Windows => "BY SPAN",
-        };
-        format!("{value}  {rows}")
+        }
     }
 }
 
@@ -166,12 +195,26 @@ pub fn default_blocks() -> Vec<BlockSpec> {
     ]
 }
 
-/// Folds a comparison into blocks.
-pub fn build_blocks(comparison: &ActivityComparison, specs: &[BlockSpec]) -> Vec<ChartBlock> {
+/// Folds comparisons into blocks, each block reading the measure it named.
+///
+/// The first fold is what a block that named no measure reads. A block naming a
+/// measure that was never folded draws as empty, which is what a measure with
+/// nothing behind it means.
+pub fn build_blocks(folds: &[ActivityComparison], specs: &[BlockSpec]) -> Vec<ChartBlock> {
     specs
         .iter()
-        .map(|spec| build_block(comparison, spec))
+        .map(|spec| match pick(folds, &spec.measure) {
+            Some(comparison) => build_block(comparison, spec),
+            None => ChartBlock::new(spec.heading()),
+        })
         .collect()
+}
+
+fn pick<'a>(folds: &'a [ActivityComparison], measure: &str) -> Option<&'a ActivityComparison> {
+    if measure.is_empty() {
+        return folds.first();
+    }
+    folds.iter().find(|fold| fold.measure.as_str() == measure)
 }
 
 fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock {
@@ -264,7 +307,7 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Char
         .take(spec.limit)
         .map(|language| {
             ChartRow::new(
-                &language.name,
+                language_label(&language.name),
                 format_duration_aligned(language.recent_seconds),
                 language.recent_seconds,
             )
@@ -292,7 +335,7 @@ fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Cha
         .take(spec.limit)
         .map(|language| {
             let row = ChartRow::new(
-                &language.name,
+                language_label(&language.name),
                 thousands(language.lines.total()),
                 language.lines.total(),
             );

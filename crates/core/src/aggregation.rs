@@ -608,7 +608,12 @@ fn window(
             *totals.seconds.entry(language.clone()).or_default() += count;
         }
         for fact in &day.lines {
-            if fact.language.is_empty() || ignored(&fact.language) {
+            // Lines whose language went unrecorded are kept under the empty name
+            // they were recorded with, so that a per-language view adds up to the
+            // same figure as a view that does not ask about languages. Dropping
+            // them here would leave two blocks of the same chart disagreeing by
+            // however many lines came from files without a telling extension.
+            if ignored(&fact.language) {
                 continue;
             }
             let held = totals.lines.entry(fact.language.clone()).or_default();

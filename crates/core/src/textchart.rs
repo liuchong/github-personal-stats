@@ -315,7 +315,21 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
 
     let mut out = String::new();
     if let Some(summary) = &summary {
-        let _ = writeln!(out, "{}", pad_row(summary, &widths, style));
+        let mut line = pad_row(summary, &widths, style);
+        // The note rides in the bar's column, so a chart drawn without bars has
+        // nowhere to put it and would drop what the figures are a total of. It
+        // trails the row instead, where nothing lines up under it anyway.
+        if let (None, Some(note)) = (
+            style
+                .columns
+                .iter()
+                .position(|column| matches!(column, Column::Bar)),
+            block.summary.as_ref().map(|summary| summary.note.as_str()),
+        ) && !note.is_empty()
+        {
+            let _ = write!(line, "{}{note}", " ".repeat(GUTTER));
+        }
+        let _ = writeln!(out, "{}", line.trim_end());
         out.push('\n');
     }
     for row in &cells {

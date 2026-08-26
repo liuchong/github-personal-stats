@@ -1,11 +1,11 @@
 use github_personal_stats_core::{
-    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, ChartStyle, CodingActivityEntry,
-    Column, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS, DEFAULT_HEAT_THRESHOLD,
-    DEFAULT_LANGUAGE_ROWS, GithubData, GithubGraphqlClient, GithubStatsConfig, MAX_LANGUAGE_ROWS,
-    MAX_PADDING, MockGithubClient, OutputKind, aggregate_card_data, aggregate_coding_activity,
-    build_blocks, compare_activity, default_blocks, json::write_github_fixture, parse_blocks,
-    parse_output_kind, render_card, render_readme_section, render_text_chart, store::read_record,
-    workspace_info,
+    ActivityComparison, ActivityMeasure, ActivitySpan, BarGlyphs, BlockSpec, ChartStyle,
+    CodingActivityEntry, Column, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_BAR_CELLS,
+    DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS, GithubData, GithubGraphqlClient,
+    GithubStatsConfig, MAX_LANGUAGE_ROWS, MAX_PADDING, MockGithubClient, OutputKind,
+    aggregate_card_data, aggregate_coding_activity, build_blocks, compare_activity, default_blocks,
+    json::write_github_fixture, parse_blocks, parse_output_kind, render_card,
+    render_readme_section, render_text_chart, store::read_record, workspace_info,
 };
 use std::{env, error::Error, fs, path::PathBuf};
 
@@ -146,7 +146,9 @@ Activity options:
                           Text chart blocks, semicolon separated, each written
                           value/dimension with optional settings. Values are
                           time, lines, tokens; dimensions are languages, models,
-                          authors, windows; settings are limit, split, title
+                          authors, windows; settings are limit, split, title,
+                          measure. A block naming a measure reads that one, so
+                          one chart can hold agent hours beside imported hours
                           (default: time/languages;lines/authors;lines/models)
   --activity-columns <list>
                           Columns in order from name, value, bar, share
@@ -344,26 +346,48 @@ fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
 
 /// Reads the record, folds it, and lays out the chart described by the arguments.
 fn activity_chart(args: &[String]) -> Result<String, Box<dyn Error>> {
-    let comparison = activity_comparison(args)?;
     let blocks = match option_value(args, "--activity-blocks") {
         Some(spec) => parse_blocks(&spec)?,
         None => default_blocks(),
     };
     Ok(render_text_chart(
-        &build_blocks(&comparison, &blocks),
+        &build_blocks(&activity_folds(args, &blocks)?, &blocks),
         &chart_style(args)?,
     ))
 }
 
-fn activity_comparison(args: &[String]) -> Result<ActivityComparison, Box<dyn Error>> {
+/// One fold per measure the chart reads: the chart's own, then any a block asked
+/// for by name. The record is read once and folded repeatedly, since folding is
+/// arithmetic over days already in hand while reading is thousands of files.
+fn activity_folds(
+    args: &[String],
+    blocks: &[BlockSpec],
+) -> Result<Vec<ActivityComparison>, Box<dyn Error>> {
+    let mut measures = vec![activity_measure(args)?];
+    for block in blocks {
+        let named = block.measure.trim();
+        if !named.is_empty() && !measures.iter().any(|held| held.as_str() == named) {
+            measures.push(ActivityMeasure::new(named));
+        }
+    }
+    activity_comparisons(args, measures)
+}
+
+fn activity_measure(args: &[String]) -> Result<ActivityMeasure, Box<dyn Error>> {
+    Ok(match option_value(args, "--activity-measure") {
+        Some(name) => ActivityMeasure::new(name.trim()),
+        None => ActivityMeasure::default(),
+    })
+}
+
+fn activity_comparisons(
+    args: &[String],
+    measures: Vec<ActivityMeasure>,
+) -> Result<Vec<ActivityComparison>, Box<dyn Error>> {
     let root = option_value(args, "--activity-record")
         .ok_or("--activity-record is needed to say where the collected activity lives")?;
     let days = read_record(&PathBuf::from(root))?;
 
-    let measure = match option_value(args, "--activity-measure") {
-        Some(name) => ActivityMeasure::new(name.trim()),
-        None => ActivityMeasure::default(),
-    };
     let windows = match option_value(args, "--activity-windows") {
         Some(value) => parse_windows(&value)?,
         None => DEFAULT_ACTIVITY_WINDOWS,
@@ -374,14 +398,10 @@ fn activity_comparison(args: &[String]) -> Result<ActivityComparison, Box<dyn Er
     // own limit is what trims the chart. Trimming here instead would let a
     // language be dropped for being short on time before a block that ranks by
     // lines ever saw it.
-    Ok(compare_activity(
-        &days,
-        measure,
-        windows,
-        None,
-        FOLD_LANGUAGES,
-        &hidden,
-    ))
+    Ok(measures
+        .into_iter()
+        .map(|measure| compare_activity(&days, measure, windows, None, FOLD_LANGUAGES, &hidden))
+        .collect())
 }
 
 fn parse_windows(value: &str) -> Result<[ActivitySpan; 2], Box<dyn Error>> {

@@ -24,6 +24,20 @@ pub const MEASURE_IMPORTED: &str = "imported";
 /// Stands in for a language the source did not name.
 pub const UNKNOWN_LANGUAGE: &str = "";
 
+/// What to call a language on a card or a chart.
+///
+/// The record leaves the name empty when its source counted lines without saying
+/// what they were, which is the truthful thing to store and an unreadable thing
+/// to draw: a row with no name looks like a bug. Naming it is a presentation
+/// choice, so it is made here rather than written into the record.
+pub fn language_label(name: &str) -> &str {
+    if name == UNKNOWN_LANGUAGE {
+        "unknown"
+    } else {
+        name
+    }
+}
+
 /// Who wrote a line.
 ///
 /// This is the only split in the record that is exact. Two measures of time can
@@ -531,6 +545,46 @@ impl DayBucket {
                 Err(index) => self.lines.insert(index, fact.clone()),
             }
         }
+        self.settle_unknown_language();
+    }
+
+    /// Drops the part of an unnamed language that a named one already accounts for.
+    ///
+    /// Two readings of the same day can describe the same lines at different
+    /// grains: a day recorded before languages were kept says only that a model
+    /// wrote so many lines, and a later reading of the same day says which
+    /// languages they were. Both survive the merge because they are filed under
+    /// different keys, and the day would then count those lines twice.
+    ///
+    /// The coarse reading is not wrong, only less specific, so what it keeps is
+    /// the remainder: whatever it claimed beyond what the named languages
+    /// explain. Usually that is nothing and the row disappears; where the finer
+    /// reading is incomplete, the difference stays under an unnamed language
+    /// rather than being discarded.
+    fn settle_unknown_language(&mut self) {
+        let mut named: BTreeMap<(Author, String), (u64, u64)> = BTreeMap::new();
+        for fact in &self.lines {
+            if fact.language == UNKNOWN_LANGUAGE {
+                continue;
+            }
+            let explained = named
+                .entry((fact.author, fact.model.clone()))
+                .or_insert((0, 0));
+            explained.0 += fact.added;
+            explained.1 += fact.deleted;
+        }
+
+        for fact in &mut self.lines {
+            if fact.language != UNKNOWN_LANGUAGE {
+                continue;
+            }
+            if let Some((added, deleted)) = named.get(&(fact.author, fact.model.clone())) {
+                fact.added = fact.added.saturating_sub(*added);
+                fact.deleted = fact.deleted.saturating_sub(*deleted);
+            }
+        }
+        self.lines
+            .retain(|fact| fact.language != UNKNOWN_LANGUAGE || fact.total() > 0);
     }
 }
 
