@@ -25,6 +25,7 @@
       <a href="../pages/heat-ring.html">The heat ring</a>
       <a href="../pages/themes.html">Themes and colour</a>
       <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
   </nav>
   <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
@@ -60,14 +61,14 @@ cargo run -p github-personal-stats -- generate --fixture profile.json --card hea
 <p>For one profile of 194 repositories, the fetch took seven minutes and the fourteen tiles drawn from it took a third of a second altogether.</p>
 <p>A saved profile holds the answers to the options that shape a fetch, so those belong to <code>fetch</code>: <code>--authored-languages</code>, <code>--author-email</code>, and <code>--min-repo-language-share</code>. Passing one of them to <code>generate --fixture</code> is refused rather than quietly ignored. Everything about how a card is drawn, and <code>--hide-language</code>, still applies at render time, so one saved profile serves any number of themes, widths, and cards.</p>
 <p>In a workflow, that is one <code>fetch</code> step ahead of the render steps:</p>
-<pre data-language="yaml"><code>- uses: liuchong/github-personal-stats@v1.4.0
+<pre data-language="yaml"><code>- uses: liuchong/github-personal-stats@v1.5.0
   with:
     mode: fetch
     path: ${{ runner.temp }}/profile.json
     options: --user ${{ github.repository_owner }} --authored-languages
     token: ${{ secrets.PERSONAL_STATS_TOKEN }}
 
-- uses: liuchong/github-personal-stats@v1.4.0
+- uses: liuchong/github-personal-stats@v1.5.0
   with:
     card: stats
     path: profile/stats.svg
@@ -84,16 +85,7 @@ cargo run -p github-personal-stats -- generate --fixture profile.json --card hea
   --height auto \
   --output profile/tiles/stats.svg</code></pre>
 <p>The <code>dashboard</code> and <code>status</code> cards divide a height between sections rather than having one of their own, so they need an explicit height; asking them for <code>auto</code> is refused rather than quietly ignored.</p>
-<h3 id="the-activity-card">The activity card<a class="permalink" href="#the-activity-card" aria-label="Link to this section">#</a></h3>
-<p>Every other card is drawn from your GitHub profile. This one is drawn from the activity you collected locally, so it needs <code>--activity-record</code> pointing at the same place <code>chart</code> reads, and refuses rather than drawing an empty card without it:</p>
-<pre data-language="sh"><code>cargo run -p github-personal-stats -- generate \
-  --user your-github-login \
-  --card activity \
-  --activity-record ~/.local/state/github-personal-stats/storage/snapshots \
-  --width 900 --height auto \
-  --output profile/activity.svg</code></pre>
-<p>It takes the same <code>--activity-measure</code>, <code>--activity-windows</code> and <code>--hide-language</code> as <code>chart</code>, and shows one measure over two spans: a bar per language for the recent one, with a mark across each bar for where the longer span put it.</p>
-<p>The shares are shares of the time a language could be put to, which on a record with terminal agents in it is well short of the time measured — a source that never says what was being worked on leaves its hours with no language to be a share of. The card declares that remainder in a line beneath the bars, in the same words and to the same arithmetic as <code>chart</code>, so putting the two side by side gives one number per language rather than two.</p>
+<p>The <code>activity</code> card is the one exception to everything else on this page: it is drawn from what you collected locally rather than from your GitHub profile, needs no token, and refuses rather than drawing an empty card if it has no record to read. It takes <code>--height auto</code> like the rest, and stacks its two spans when a tile is too narrow to hold them side by side. See <a href="activity.html#coding-activity">Coding Activity</a>.</p>
 <h3 id="splitting-the-streak-card">Splitting the streak card<a class="permalink" href="#splitting-the-streak-card" aria-label="Link to this section">#</a></h3>
 <p>At a tile width the streak card gives the ring a full-width row and sits its two figures underneath, because three columns leave each figure about 90px:</p>
 <img src="../images/tiles/tile-streak.svg" alt="Streak card at 275px" width="275" />

@@ -270,6 +270,24 @@ main {
   color: var(--ink-soft);
 }
 
+/* A card wide enough to be the point of its own section, rather than one of a
+   row of three. It keeps the framing of a gallery shot without the shared band,
+   because there is nothing beside it to line a caption up with. */
+.wide-shot {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.wide-shot img,
+.wide-shot picture {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

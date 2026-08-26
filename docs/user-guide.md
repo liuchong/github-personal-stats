@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.4.0
+      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -128,13 +128,13 @@ options: --user your-github-login --theme dark
 GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
 
 ```yaml
-      - uses: liuchong/github-personal-stats@v1.4.0
+      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.4.0
+      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg
@@ -386,14 +386,14 @@ number of themes, widths, and cards.
 In a workflow, that is one `fetch` step ahead of the render steps:
 
 ```yaml
-- uses: liuchong/github-personal-stats@v1.4.0
+- uses: liuchong/github-personal-stats@v1.5.0
   with:
     mode: fetch
     path: ${{ runner.temp }}/profile.json
     options: --user ${{ github.repository_owner }} --authored-languages
     token: ${{ secrets.PERSONAL_STATS_TOKEN }}
 
-- uses: liuchong/github-personal-stats@v1.4.0
+- uses: liuchong/github-personal-stats@v1.5.0
   with:
     card: stats
     path: profile/stats.svg
@@ -427,32 +427,11 @@ The `dashboard` and `status` cards divide a height between sections rather than
 having one of their own, so they need an explicit height; asking them for `auto`
 is refused rather than quietly ignored.
 
-### The activity card
-
-Every other card is drawn from your GitHub profile. This one is drawn from the
-activity you collected locally, so it needs `--activity-record` pointing at the
-same place `chart` reads, and refuses rather than drawing an empty card without
-it:
-
-```sh
-cargo run -p github-personal-stats -- generate \
-  --user your-github-login \
-  --card activity \
-  --activity-record ~/.local/state/github-personal-stats/storage/snapshots \
-  --width 900 --height auto \
-  --output profile/activity.svg
-```
-
-It takes the same `--activity-measure`, `--activity-windows` and `--hide-language`
-as `chart`, and shows one measure over two spans: a bar per language for the
-recent one, with a mark across each bar for where the longer span put it.
-
-The shares are shares of the time a language could be put to, which on a record
-with terminal agents in it is well short of the time measured — a source that
-never says what was being worked on leaves its hours with no language to be a
-share of. The card declares that remainder in a line beneath the bars, in the same
-words and to the same arithmetic as `chart`, so putting the two side by side gives
-one number per language rather than two.
+The `activity` card is the one exception to everything else on this page: it is
+drawn from what you collected locally rather than from your GitHub profile, needs
+no token, and refuses rather than drawing an empty card if it has no record to
+read. It takes `--height auto` like the rest, and stacks its two spans when a tile
+is too narrow to hold them side by side. See [Coding Activity](#coding-activity).
 
 ### Splitting the streak card
 
@@ -637,7 +616,56 @@ cargo run -p github-personal-stats -- generate --fixture examples/showcase.json 
 cargo run -p github-personal-stats -- generate --fixture examples/streak-117.json --card streak --width 1000 --height 220 --output /tmp/long-streak.svg
 ```
 
-## Coding Activity Section
+## Coding Activity
+
+Every card above is drawn from your GitHub profile, which knows what you pushed and nothing about how it came to be. This is the other half: how long the work took, what wrote it, and which models did. It is read from records your own machine already keeps, so it needs no account with anybody and no service running in the cloud.
+
+It comes out in two shapes. A card, for a README that is mostly pictures:
+
+<p align="center">
+  <img src="images/activity/card-light.svg" alt="An activity card comparing the last thirty days with all time, ranked by language" width="100%" />
+</p>
+
+And a chart, for a README that is mostly words:
+
+```txt
+LINES BY LANGUAGE
+
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %
+TypeScript    +12,556   #########----------------   10.82 %
+Python         +8,995   #######------------------    7.75 %
+Zig            +6,585   #####--------------------    5.67 %
+```
+
+Both read the same collected record through the same fold, so they can sit on one page without disagreeing. Nothing here is fetched: the card is the only one in this project that renders with no token, no saved profile and no network at all.
+
+Every figure on this page comes from a sample record rather than anybody's real one, the same way the other cards are drawn from `examples/showcase.json`. Rebuild all of it with `python3 scripts/render-activity-samples.py`.
+
+### The card
+
+```sh
+github-personal-stats generate --card activity \
+  --activity-record ~/.local/state/github-personal-stats/record \
+  --width 900 --height auto \
+  --output profile/activity.svg
+```
+
+Two spans are named on the left, the recent one leading. Under each is how much of that span recorded anything at all, which is not decoration: a span reaching further back than your record does would otherwise read as an idle stretch rather than an unobserved one.
+
+On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see [How time is measured](#how-time-is-measured).
+
+The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because `588 hrs 45 mins` needs half again the room of `9 hrs 2 mins`:
+
+| `--width 900 --theme light` | `--width 900 --theme dark` | `--width 275` |
+| --- | --- | --- |
+| <img src="images/activity/card-light.svg" alt="Activity card, light" width="280" /> | <img src="images/activity/card-dark.svg" alt="Activity card, dark" width="280" /> | <img src="images/activity/card-tile.svg" alt="Activity card at tile width" width="150" /> |
+| A row of a dashboard | The same card on a dark surface | Spans stacked, names measured to fit |
+
+### The chart
 
 Update a marked README section:
 
@@ -646,16 +674,14 @@ Update a marked README section:
 <!--END_SECTION:activity-->
 ```
 
-Run:
-
 ```sh
-cargo run -p github-personal-stats -- update-readme --section activity --target README.md
+github-personal-stats update-readme --section activity --target README.md
 ```
 
 Print the same chart to a terminal instead, which is the quickest way to try a configuration:
 
 ```sh
-cargo run -p github-personal-stats -- chart --activity-record <your record>
+github-personal-stats chart --activity-record <your record>
 ```
 
 With nothing configured you get what was written, who wrote it, and what wrote it:
@@ -663,26 +689,31 @@ With nothing configured you get what was written, who wrote it, and what wrote i
 ```txt
 LINES BY LANGUAGE
 
-Total        +451,076   lines, 99.93% by an agent
+Total        +115,987   lines, 99.94% by an agent
 
-Markdown     +118,648   #########################   26.30 %
-Go            +91,139   ###################------   20.20 %
-Rust          +85,184   ##################-------   18.88 %
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %
+TypeScript    +12,556   #########----------------   10.82 %
+Python         +8,995   #######------------------    7.75 %
+Zig            +6,585   #####--------------------    5.67 %
 
 LINES BY AUTHOR
 
-Total          +451,076   lines, last 30 days
+Total          +115,987   lines, last 30 days
 
-agent          +450,768   #########################   99.93 %
-unattributed       +308   -------------------------    0.06 %
+agent          +115,925   #########################   99.94 %
+unattributed        +62   -------------------------    0.05 %
 
 LINES BY MODEL
 
-Total            +450,768   lines, 99.93% by an agent
+Total           +115,925   lines, 99.94% by an agent
 
-gpt-5.6-sol      +126,001   #########################   27.95 %
-claude-opus-5    +124,986   #########################   27.72 %
-gpt-5.5          +109,683   ######################---   24.33 %
+claude-opus-5    +37,499   #########################   32.34 %
+gpt-5.6-sol      +31,201   #####################----   26.91 %
+gpt-5.5          +24,243   ################---------   20.91 %
+grok-4.6         +14,972   ##########---------------   12.91 %
+unnamed           +8,010   #####--------------------    6.90 %
 
 # agent    = unattributed    - rest
 ```
@@ -699,11 +730,11 @@ Three different things can be counted, they are measured by different means, and
 
 `lines` is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.
 
-It is also why the figures are additions only, written `+451,076` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
+It is also why the figures are additions only, written `+115,987` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
 
 `unattributed` means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.
 
-For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On this record the distinction is not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.
+For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On one real record the distinction was not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.
 
 ### How time is measured
 
@@ -736,11 +767,14 @@ The remaining limitation is that most of those hours cannot be attributed to a l
 ```txt
 TIME BY LANGUAGE
 
-Total        134 hrs 49 mins   last 30 days, 243 hrs 28 mins not placed to a language
+Total        71 hrs  5 mins   last 30 days, 115 hrs 59 mins not placed to a language
 
-Markdown      35 hrs 10 mins   #########################   26.08 %
-Rust          31 hrs 45 mins   #######################--   23.55 %
-Go            25 hrs 35 mins   ##################-------   18.98 %
+Rust         20 hrs 57 mins   #########################   29.48 %
+Markdown     16 hrs 30 mins   ####################-----   23.22 %
+Go           13 hrs 24 mins   ################---------   18.85 %
+TypeScript    7 hrs 42 mins   #########----------------   10.84 %
+Python        5 hrs 31 mins   #######------------------    7.76 %
+Zig           4 hrs  2 mins   #####--------------------    5.68 %
 ```
 
 That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with `time=on`:
@@ -748,8 +782,12 @@ That is also why hours are an option on a block rather than the thing a chart le
 ```txt
 LINES BY LANGUAGE
 
-Rust         +121,554   #################========   24.69 %   31 hrs 45 mins
-Markdown     +118,978   #######################=-   24.16 %   35 hrs 10 mins
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %   20 hrs 57 mins
+Markdown      +26,925   ####################-----   23.21 %   16 hrs 30 mins
+Go            +21,869   ################---------   18.85 %   13 hrs 24 mins
+TypeScript    +12,556   #########----------------   10.82 %    7 hrs 42 mins
 ```
 
 ### Choosing what the chart says
@@ -776,14 +814,14 @@ Every bar is already divided by author, so its shape says how much of a language
 ```txt
 LINES BY LANGUAGE
 
-Total        +451,076   lines, 99.93% by an agent
+Total        +115,987   lines, 99.94% by an agent
 
-Markdown     +118,648   #########################   26.30 %    99.96% agent
-Go            +91,139   ###################------   20.20 %    99.99% agent
-Rust          +85,184   ##################-------   18.88 %    99.89% agent
-Zig           +28,527   ######-------------------    6.32 %   100.00% agent
-TypeScript    +24,649   #####--------------------    5.46 %   100.00% agent
-Python        +23,451   #####--------------------    5.19 %   100.00% agent
+Rust          +34,255   #########################   29.53 %    99.92% agent
+Markdown      +26,925   ####################-----   23.21 %    99.92% agent
+Go            +21,869   ################---------   18.85 %    99.93% agent
+TypeScript    +12,556   #########----------------   10.82 %   100.00% agent
+Python         +8,995   #######------------------    7.75 %   100.00% agent
+Zig            +6,585   #####--------------------    5.67 %   100.00% agent
 
 # agent    = unattributed    - rest
 ```
@@ -793,8 +831,26 @@ On a block of hours the same setting writes `99.89% agent lines`, naming the fig
 A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.
 
 ```sh
---activity-blocks 'time/languages;time/languages,measure=imported'
+--activity-blocks 'time/windows;time/windows,measure=imported'
 ```
+
+```txt
+TIME BY SPAN
+
+Longest        588 hrs 45 mins   spans overlap; each reads as a share of this
+
+Last 30 days   187 hrs  4 mins   ########-----------------    31.77 %
+All time       588 hrs 45 mins   #########################   100.00 %
+
+IMPORTED TIME BY SPAN
+
+Longest        254 hrs 26 mins   spans overlap; each reads as a share of this
+
+Last 30 days     0 hrs  0 mins   -------------------------     0.00 %
+All time       254 hrs 26 mins   #########################   100.00 %
+```
+
+The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 843 hours of a period that only holds 588.
 
 Two spans are compared, and both are configurable — a day count or `all`:
 
@@ -815,6 +871,79 @@ Columns are drawn in the order given, and a column that no row fills is not draw
 
 Everything is padded to a monospace grid, so the chart belongs in a fenced block. `update-readme` writes one for you.
 
+## Collecting Activity
+
+Two commands and one editor extension, none of which are needed by the cards above.
+
+```sh
+cargo install github-personal-stats-collect
+github-personal-stats-collect
+```
+
+That reads what is on this machine and writes a record. Once the configuration below is in place it needs no arguments, and a timer can run it for you:
+
+```sh
+github-personal-stats-daemon install
+```
+
+Installing the daemon registers it with `launchd` or `systemd`, so it starts with your session, rebuilds the record on a timer, and listens on loopback for the editor extension. It also serves a small panel at `http://127.0.0.1:7391` showing what it has, which is the quickest way to see whether any of this is working.
+
+The extension in `plugins/vscode` covers Cursor, VS Code and VSCodium from one build. It reports nothing but a timestamp, a date, and the kind of file open — no paths, no project names, no content — to the daemon on your own machine.
+
+### Telling whether it is working
+
+An installed plugin and a working one look identical from the extensions list, so ask instead:
+
+```sh
+github-personal-stats-daemon status
+```
+
+```
+daemon      listening on 127.0.0.1:7391
+token       /Users/you/.local/state/github-personal-stats/token
+publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
+editors     vscode - 412 pulses today, last 30s ago
+collected   100 days, agent 146h 29m, editor 3h 12m
+```
+
+Each line is something that can be separately broken. `editors no plugin has loaded` means exactly that: reload the editor window. `token missing` means no plugin can report at all, because the shared secret it needs is not there yet.
+
+A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
+
+```
+editors     vscode 1.5.0 - loaded 12m ago, nothing reported today
+```
+
+That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.
+
+Your editor's status bar says the same thing from the other side:
+
+- `$(pulse) stats` — loaded and reporting.
+- `$(pulse) stats 14` — loaded, but 14 pulses are queued because the daemon is not answering.
+- `$(circle-slash) stats` — no token found, so nothing is being sent.
+
+Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
+
+### What the plugin measures
+
+Time the editor window had focus. Not time you spent typing.
+
+The first version of the plugin measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.
+
+So the plugin sends a pulse when its window takes focus and every `pulseSeconds` while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.
+
+The one honest limitation: a window left focused while you walk away is counted until it loses focus. The daemon's idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.
+
+Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.
+
+The practical consequences:
+
+- **Working in the IDE, typing or directing an agent** — the plugin reports it, and it becomes editor time.
+- **An agent writing files while you read a browser** — the window does not have focus, so no editor time is claimed. The work lands as agent time.
+- **A terminal agent with no editor open** — no plugin is running at all, and only agent time is recorded.
+
+So `editor 0h 0m` next to a large `agent` figure now means what it says: nothing was reported from a focused editor window. Either no editor is running, or the plugin has not loaded — which `status` distinguishes.
+
 ### When the counting itself changes
 
 The record keeps whichever reading of a day saw the most, which is right while the counting stays the same, and wrong the moment it changes: a larger figure from an old rule is not a fuller reading, and nothing smaller can ever replace it. Left alone, a figure could only ever be corrected upwards.
@@ -827,9 +956,9 @@ github-personal-stats-collect --recount
 
 This replaces the hours and lines recorded for the days the current run can actually see. Each measure is replaced only where the run has something to say about it, because the sources forget at different rates: a day whose editor lines have aged out still arrives with its commits, and treating that as a reading of zero lines would delete the only copy of them. Days older than your sources remember are not touched at all, and the daemon never does this on its own.
 
-## Local Activity Storage
+## Activity Storage
 
-Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.
+The machine that has the records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.
 
 The configuration lives at `<state>/config`, which on Linux and macOS is `~/.local/state/github-personal-stats/config` unless `XDG_STATE_HOME` says otherwise. Lines are `name = value` using an option's own name without the dashes, `#` starts a comment, and a flag on the command line overrides the file.
 
@@ -905,7 +1034,7 @@ gh secret set STATS_DATA_KEY --repo your-login/your-login < /tmp/key
 rm /tmp/key /tmp/key.pub
 ```
 
-Then check the storage out alongside your profile repository:
+Then check the storage out alongside your profile repository, and point a render step at it:
 
 ```yaml
 - name: Read the storage repository
@@ -914,79 +1043,19 @@ Then check the storage out alongside your profile repository:
     repository: your-login/personal-stats-data
     ssh-key: ${{ secrets.STATS_DATA_KEY }}
     path: storage
+
+- uses: liuchong/github-personal-stats@v1.5.0
+  with:
+    card: activity
+    path: profile/activity.svg
+    options: --activity-record storage/snapshots --width 900 --height auto
 ```
+
+The activity card needs no token, so that step has none: it renders from the checkout and nothing else.
 
 Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.
 
 Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and **not** the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And `actions/checkout` fails against a repository with no commits in it, in a way that reads like a permission problem, so publish once before judging your credentials.
-
-### Telling whether it is working
-
-An installed plugin and a working one look identical from the extensions list, so ask instead:
-
-```sh
-github-personal-stats-daemon status
-```
-
-```
-daemon      listening on 127.0.0.1:7391
-token       /Users/you/.local/state/github-personal-stats/token
-publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode - 412 pulses today, last 30s ago
-collected   100 days, agent 146h 29m, editor 3h 12m
-```
-
-Each line is something that can be separately broken. `editors no plugin has loaded` means exactly that: reload the editor window. `token missing` means no plugin can report at all, because the shared secret it needs is not there yet.
-
-A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
-
-```
-editors     vscode 1.4.0 - loaded 12m ago, nothing reported today
-```
-
-That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.
-
-Your editor's status bar says the same thing from the other side:
-
-- `$(pulse) stats` — loaded and reporting.
-- `$(pulse) stats 14` — loaded, but 14 pulses are queued because the daemon is not answering.
-- `$(circle-slash) stats` — no token found, so nothing is being sent.
-
-Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
-
-### What the plugin measures
-
-Time the editor window had focus. Not time you spent typing.
-
-The first version of the plugin measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.
-
-So the plugin sends a pulse when its window takes focus and every `pulseSeconds` while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.
-
-The one honest limitation: a window left focused while you walk away is counted until it loses focus. The daemon's idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.
-
-Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.
-
-The practical consequences:
-
-- **Working in the IDE, typing or directing an agent** — the plugin reports it, and it becomes editor time.
-- **An agent writing files while you read a browser** — the window does not have focus, so no editor time is claimed. The work lands as agent time.
-- **A terminal agent with no editor open** — no plugin is running at all, and only agent time is recorded.
-
-So `editor 0h 0m` next to a large `agent` figure now means what it says: nothing was reported from a focused editor window. Either no editor is running, or the plugin has not loaded — which `status` distinguishes.
-
-### Publishing your record
-
-With the configuration in place, no arguments are needed:
-
-```sh
-github-personal-stats-collect
-```
-
-The daemon does the same thing on a timer once installed, using the same configuration:
-
-```sh
-github-personal-stats-daemon install
-```
 
 ## Visual Notes
 

@@ -22,6 +22,7 @@ Generate a polished GitHub profile dashboard as one SVG. The renderer owns the l
 - Light, dark, and transparent themes, so a profile can follow the reader's colour scheme.
 - Tiles that reflow on a phone: any single figure or the ring on its own, each fitted to its content, so a README row stacks at full size instead of shrinking.
 - One fetch behind any number of tiles: read a profile once, then draw every card, theme, and width from what was saved.
+- Coding activity read from your own machine: how long the work took, how much of it an agent wrote, and which models did — with no account anywhere and no service in the cloud.
 - Release-binary GitHub Action, local CLI, and HTTP server deployment path.
 - Fixed SVG dimensions with configurable width and height.
 - Deterministic rendering backed by fixtures and snapshot tests.
@@ -59,6 +60,31 @@ The window, day limit, shape, threshold, scale, palette, and centre label are al
 
 `--theme light`, `dark`, or `transparent`. The heat ramp re-anchors on a dark card so busy days stay the brightest thing in the ring. Generate one card per surface and reference both through `<picture>` to follow the reader's colour scheme; see [Themes](docs/user-guide.md#themes).
 
+## Coding Activity
+
+Your profile knows what you pushed and nothing about how it came to be. A collector reads that from records your machine already keeps: hours worked, lines written, which models wrote them, and what they were billed.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/images/activity/card-dark.svg" />
+    <img src="./docs/images/activity/card-light.svg" alt="Coding activity card" width="100%" />
+  </picture>
+</p>
+
+The same record reads as text for a README made of words, and the card is the only one here that renders with no token, no saved profile, and no network:
+
+```txt
+LINES BY LANGUAGE
+
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %
+```
+
+Nothing leaves your machine unless you send it: the record holds counts and durations, never a path, a project, or a line of code. See [Coding Activity](docs/user-guide.md#coding-activity) for what each figure means and [Collecting Activity](docs/user-guide.md#collecting-activity) for the collector, the daemon, and the editor plugin.
+
 ## Quick Start
 
 Use the Action from your profile repository and commit the generated dashboard back to `profile/github-personal-stats.svg`.
@@ -82,7 +108,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.4.0
+      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -180,6 +206,16 @@ has something to serve without a build step:
 python3 docs/brand/build.py   # the icon and wordmark
 python3 docs/build.py         # docs/index.html and docs/pages/
 python3 docs/check.py         # every reference reachable from docs/
+```
+
+The illustrations are generated too, each from a fixture rather than from anybody's
+real data, so every picture in the guide can be reproduced:
+
+```sh
+python3 scripts/render-ring-samples.py      # the heat ring's windows, shapes, scales, palettes
+python3 scripts/render-panel-samples.py     # what each panel reports
+python3 scripts/render-tile-samples.py      # the composable tiles
+python3 scripts/render-activity-samples.py  # the activity card, and the chart blocks the guide quotes
 ```
 
 ## License

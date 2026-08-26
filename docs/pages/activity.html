@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Coding activity · GitHub Personal Stats</title>
-<meta name="description" content="Collecting time and lines from your own machine, and where the record is kept." />
+<meta name="description" content="How long the work took, what wrote it, and which models did — as a card or a chart." />
 <link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
 <link rel="stylesheet" href="../assets/site.css" />
 </head>
@@ -25,6 +25,7 @@
       <a href="../pages/heat-ring.html">The heat ring</a>
       <a href="../pages/themes.html">Themes and colour</a>
       <a href="../pages/activity.html" class="current" aria-current="page">Coding activity</a>
+      <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
   </nav>
   <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
@@ -32,47 +33,79 @@
 <main id="content">
 <article class="doc">
 <h1>Coding activity</h1>
-<p class="lede">Collecting time and lines from your own machine, and where the record is kept.</p>
-<h2 id="coding-activity-section">Coding Activity Section<a class="permalink" href="#coding-activity-section" aria-label="Link to this section">#</a></h2>
+<p class="lede">How long the work took, what wrote it, and which models did — as a card or a chart.</p>
+<h2 id="coding-activity">Coding Activity<a class="permalink" href="#coding-activity" aria-label="Link to this section">#</a></h2>
+<p>Every card above is drawn from your GitHub profile, which knows what you pushed and nothing about how it came to be. This is the other half: how long the work took, what wrote it, and which models did. It is read from records your own machine already keeps, so it needs no account with anybody and no service running in the cloud.</p>
+<p>It comes out in two shapes. A card, for a README that is mostly pictures:</p>
+<p align="center">
+  <img src="../images/activity/card-light.svg" alt="An activity card comparing the last thirty days with all time, ranked by language" width="100%" />
+</p>
+<p>And a chart, for a README that is mostly words:</p>
+<pre data-language="txt"><code>LINES BY LANGUAGE
+
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %
+TypeScript    +12,556   #########----------------   10.82 %
+Python         +8,995   #######------------------    7.75 %
+Zig            +6,585   #####--------------------    5.67 %</code></pre>
+<p>Both read the same collected record through the same fold, so they can sit on one page without disagreeing. Nothing here is fetched: the card is the only one in this project that renders with no token, no saved profile and no network at all.</p>
+<p>Every figure on this page comes from a sample record rather than anybody&#x27;s real one, the same way the other cards are drawn from <code>examples/showcase.json</code>. Rebuild all of it with <code>python3 scripts/render-activity-samples.py</code>.</p>
+<h3 id="the-card">The card<a class="permalink" href="#the-card" aria-label="Link to this section">#</a></h3>
+<pre data-language="sh"><code>github-personal-stats generate --card activity \
+  --activity-record ~/.local/state/github-personal-stats/record \
+  --width 900 --height auto \
+  --output profile/activity.svg</code></pre>
+<p>Two spans are named on the left, the recent one leading. Under each is how much of that span recorded anything at all, which is not decoration: a span reaching further back than your record does would otherwise read as an idle stretch rather than an unobserved one.</p>
+<p>On the right, a bar is the recent window and the mark across it is where the longer span put the same language. A language you have picked up lately reads as a bar past its own mark, and one you have left behind as a bar short of it. The line underneath is the time no language could be put to, which on a real record is most of it — see <a href="activity.html#how-time-is-measured">How time is measured</a>.</p>
+<p>The card fits a tile as well as a header. Below 440px it stacks, and when two spans are too long to share a line it gives them one each, because <code>588 hrs 45 mins</code> needs half again the room of <code>9 hrs 2 mins</code>:</p>
+<div class="comparison"><figure><figcaption><code>--width 900 --theme light</code></figcaption><div class="shot"><img src="../images/activity/card-light.svg" alt="Activity card, light" width="280" /></div><p>A row of a dashboard</p></figure><figure><figcaption><code>--width 900 --theme dark</code></figcaption><div class="shot"><img src="../images/activity/card-dark.svg" alt="Activity card, dark" width="280" /></div><p>The same card on a dark surface</p></figure><figure><figcaption><code>--width 275</code></figcaption><div class="shot"><img src="../images/activity/card-tile.svg" alt="Activity card at tile width" width="150" /></div><p>Spans stacked, names measured to fit</p></figure></div>
+<h3 id="the-chart">The chart<a class="permalink" href="#the-chart" aria-label="Link to this section">#</a></h3>
 <p>Update a marked README section:</p>
 <pre data-language="md"><code>&lt;!--START_SECTION:activity--&gt;
 &lt;!--END_SECTION:activity--&gt;</code></pre>
-<p>Run:</p>
-<pre data-language="sh"><code>cargo run -p github-personal-stats -- update-readme --section activity --target README.md</code></pre>
+<pre data-language="sh"><code>github-personal-stats update-readme --section activity --target README.md</code></pre>
 <p>Print the same chart to a terminal instead, which is the quickest way to try a configuration:</p>
-<pre data-language="sh"><code>cargo run -p github-personal-stats -- chart --activity-record &lt;your record&gt;</code></pre>
+<pre data-language="sh"><code>github-personal-stats chart --activity-record &lt;your record&gt;</code></pre>
 <p>With nothing configured you get what was written, who wrote it, and what wrote it:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Total        +451,076   lines, 99.93% by an agent
+Total        +115,987   lines, 99.94% by an agent
 
-Markdown     +118,648   #########################   26.30 %
-Go            +91,139   ###################------   20.20 %
-Rust          +85,184   ##################-------   18.88 %
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %
+TypeScript    +12,556   #########----------------   10.82 %
+Python         +8,995   #######------------------    7.75 %
+Zig            +6,585   #####--------------------    5.67 %
 
 LINES BY AUTHOR
 
-Total          +451,076   lines, last 30 days
+Total          +115,987   lines, last 30 days
 
-agent          +450,768   #########################   99.93 %
-unattributed       +308   -------------------------    0.06 %
+agent          +115,925   #########################   99.94 %
+unattributed        +62   -------------------------    0.05 %
 
 LINES BY MODEL
 
-Total            +450,768   lines, 99.93% by an agent
+Total           +115,925   lines, 99.94% by an agent
 
-gpt-5.6-sol      +126,001   #########################   27.95 %
-claude-opus-5    +124,986   #########################   27.72 %
-gpt-5.5          +109,683   ######################---   24.33 %
+claude-opus-5    +37,499   #########################   32.34 %
+gpt-5.6-sol      +31,201   #####################----   26.91 %
+gpt-5.5          +24,243   ################---------   20.91 %
+grok-4.6         +14,972   ##########---------------   12.91 %
+unnamed           +8,010   #####--------------------    6.90 %
 
 # agent    = unattributed    - rest</code></pre>
 <h3 id="what-the-figures-mean">What the figures mean<a class="permalink" href="#what-the-figures-mean" aria-label="Link to this section">#</a></h3>
 <p>Three different things can be counted, they are measured by different means, and they are not interchangeable. Which one a chart leads with is worth choosing deliberately.</p>
 <div class="table-scroll"><table><thead><tr><th>Value</th><th>What it counts</th><th>Knows the language</th><th>Knows who wrote it</th></tr></thead><tbody><tr><td><code>lines</code></td><td>Lines the editor watched appear</td><td>Yes</td><td>Yes</td></tr><tr><td><code>time</code></td><td>Wall clock while an agent was working</td><td>Partly</td><td>Yes</td></tr><tr><td><code>tokens</code></td><td>Tokens the agents were billed for</td><td>No</td><td>No</td></tr></tbody></table></div>
 <p><code>lines</code> is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.</p>
-<p>It is also why the figures are additions only, written <code>+451,076</code> with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin&#x27;s job.</p>
+<p>It is also why the figures are additions only, written <code>+115,987</code> with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin&#x27;s job.</p>
 <p><code>unattributed</code> means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.</p>
-<p>For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On this record the distinction is not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.</p>
+<p>For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On one real record the distinction was not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.</p>
 <h3 id="how-time-is-measured">How time is measured<a class="permalink" href="#how-time-is-measured" aria-label="Link to this section">#</a></h3>
 <p>Time is the weakest of the figures and the one worth understanding before quoting it.</p>
 <p>There is no clock running. What exists is a set of moments — instants at which something was observed happening — and time is the space between consecutive moments, counted when the gap is shorter than the idle timeout (five minutes by default, <code>--idle-timeout</code>). A gap longer than that ends the stretch and is not counted at all. So the figure is only as good as how densely those moments were observed.</p>
@@ -85,16 +118,23 @@ gpt-5.5          +109,683   ######################---   24.33 %
 <p>The remaining limitation is that most of those hours cannot be attributed to a language. The terminal agents report when they were working without reporting what they were working on; roughly one in eight of their moments names a file at all, and a file named at one instant says nothing about the minutes around it. So a block of hours by language ranks only the hours it can place, and says how many it could not:</p>
 <pre data-language="txt"><code>TIME BY LANGUAGE
 
-Total        134 hrs 49 mins   last 30 days, 243 hrs 28 mins not placed to a language
+Total        71 hrs  5 mins   last 30 days, 115 hrs 59 mins not placed to a language
 
-Markdown      35 hrs 10 mins   #########################   26.08 %
-Rust          31 hrs 45 mins   #######################--   23.55 %
-Go            25 hrs 35 mins   ##################-------   18.98 %</code></pre>
+Rust         20 hrs 57 mins   #########################   29.48 %
+Markdown     16 hrs 30 mins   ####################-----   23.22 %
+Go           13 hrs 24 mins   ################---------   18.85 %
+TypeScript    7 hrs 42 mins   #########----------------   10.84 %
+Python        5 hrs 31 mins   #######------------------    7.76 %
+Zig           4 hrs  2 mins   #####--------------------    5.68 %</code></pre>
 <p>That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with <code>time=on</code>:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Rust         +121,554   #################========   24.69 %   31 hrs 45 mins
-Markdown     +118,978   #######################=-   24.16 %   35 hrs 10 mins</code></pre>
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %   20 hrs 57 mins
+Markdown      +26,925   ####################-----   23.21 %   16 hrs 30 mins
+Go            +21,869   ################---------   18.85 %   13 hrs 24 mins
+TypeScript    +12,556   #########----------------   10.82 %    7 hrs 42 mins</code></pre>
 <h3 id="choosing-what-the-chart-says">Choosing what the chart says<a class="permalink" href="#choosing-what-the-chart-says" aria-label="Link to this section">#</a></h3>
 <p>A chart is a list of blocks separated by semicolons. Each block is written <code>value/dimension</code> with optional <code>,setting=value</code> pairs:</p>
 <pre data-language="sh"><code>--activity-blocks &#x27;lines/languages,limit=8,time=on;lines/authors;tokens/models&#x27;</code></pre>
@@ -103,19 +143,33 @@ Markdown     +118,978   #######################=-   24.16 %   35 hrs 10 mins</co
 <p>Every bar is already divided by author, so its shape says how much of a language an agent wrote. <code>authors=on</code> writes the number beside it, for when the difference between rows is too small to read off twenty-five characters of glyph:</p>
 <pre data-language="txt"><code>LINES BY LANGUAGE
 
-Total        +451,076   lines, 99.93% by an agent
+Total        +115,987   lines, 99.94% by an agent
 
-Markdown     +118,648   #########################   26.30 %    99.96% agent
-Go            +91,139   ###################------   20.20 %    99.99% agent
-Rust          +85,184   ##################-------   18.88 %    99.89% agent
-Zig           +28,527   ######-------------------    6.32 %   100.00% agent
-TypeScript    +24,649   #####--------------------    5.46 %   100.00% agent
-Python        +23,451   #####--------------------    5.19 %   100.00% agent
+Rust          +34,255   #########################   29.53 %    99.92% agent
+Markdown      +26,925   ####################-----   23.21 %    99.92% agent
+Go            +21,869   ################---------   18.85 %    99.93% agent
+TypeScript    +12,556   #########----------------   10.82 %   100.00% agent
+Python         +8,995   #######------------------    7.75 %   100.00% agent
+Zig            +6,585   #####--------------------    5.67 %   100.00% agent
 
 # agent    = unattributed    - rest</code></pre>
 <p>On a block of hours the same setting writes <code>99.89% agent lines</code>, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.</p>
 <p>A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.</p>
-<pre data-language="sh"><code>--activity-blocks &#x27;time/languages;time/languages,measure=imported&#x27;</code></pre>
+<pre data-language="sh"><code>--activity-blocks &#x27;time/windows;time/windows,measure=imported&#x27;</code></pre>
+<pre data-language="txt"><code>TIME BY SPAN
+
+Longest        588 hrs 45 mins   spans overlap; each reads as a share of this
+
+Last 30 days   187 hrs  4 mins   ########-----------------    31.77 %
+All time       588 hrs 45 mins   #########################   100.00 %
+
+IMPORTED TIME BY SPAN
+
+Longest        254 hrs 26 mins   spans overlap; each reads as a share of this
+
+Last 30 days     0 hrs  0 mins   -------------------------     0.00 %
+All time       254 hrs 26 mins   #########################   100.00 %</code></pre>
+<p>The imported measure in that sample stops a month ago, which is what a tracker you have moved away from looks like. Adding the two totals would claim 843 hours of a period that only holds 588.</p>
 <p>Two spans are compared, and both are configurable — a day count or <code>all</code>:</p>
 <pre data-language="sh"><code>--activity-windows 30,90</code></pre>
 <h3 id="choosing-how-it-looks">Choosing how it looks<a class="permalink" href="#choosing-how-it-looks" aria-label="Link to this section">#</a></h3>
@@ -125,90 +179,7 @@ Python        +23,451   #####--------------------    5.19 %   100.00% agent
 --activity-bar-basis largest</code></pre>
 <p>Columns are drawn in the order given, and a column that no row fills is not drawn at all. <code>--activity-bar</code> takes two or three characters: the agent&#x27;s share, the share nothing watched an agent write, and the remainder. <code>--activity-bar-basis</code> decides whether a bar&#x27;s length is measured against the largest row or against the block&#x27;s total.</p>
 <p>Everything is padded to a monospace grid, so the chart belongs in a fenced block. <code>update-readme</code> writes one for you.</p>
-<h3 id="when-the-counting-itself-changes">When the counting itself changes<a class="permalink" href="#when-the-counting-itself-changes" aria-label="Link to this section">#</a></h3>
-<p>The record keeps whichever reading of a day saw the most, which is right while the counting stays the same, and wrong the moment it changes: a larger figure from an old rule is not a fuller reading, and nothing smaller can ever replace it. Left alone, a figure could only ever be corrected upwards.</p>
-<p>So a change of rule can be asked for explicitly:</p>
-<pre data-language="sh"><code>github-personal-stats-collect --recount</code></pre>
-<p>This replaces the hours and lines recorded for the days the current run can actually see. Each measure is replaced only where the run has something to say about it, because the sources forget at different rates: a day whose editor lines have aged out still arrives with its commits, and treating that as a reading of zero lines would delete the only copy of them. Days older than your sources remember are not touched at all, and the daemon never does this on its own.</p>
-<h2 id="local-activity-storage">Local Activity Storage<a class="permalink" href="#local-activity-storage" aria-label="Link to this section">#</a></h2>
-<p>Time spent and lines written are read from records your editor already keeps on your own machine. The machine that has those records is not the machine that renders your cards, so the record has to travel. There are three ways to move it, and which one you use is written in a configuration file rather than chosen on every command.</p>
-<p>The configuration lives at <code>&lt;state&gt;/config</code>, which on Linux and macOS is <code>~/.local/state/github-personal-stats/config</code> unless <code>XDG_STATE_HOME</code> says otherwise. Lines are <code>name = value</code> using an option&#x27;s own name without the dashes, <code>#</code> starts a comment, and a flag on the command line overrides the file.</p>
-<h3 id="how-your-history-is-kept">How your history is kept<a class="permalink" href="#how-your-history-is-kept" aria-label="Link to this section">#</a></h3>
-<p>This is worth understanding before choosing a backend, because it is the reason the record is shaped the way it is.</p>
-<p>Your editor does not keep its detail forever. Cursor holds roughly the last thirty days, so a collection run today can tell you a great deal about this week and nothing whatsoever about April. Run the collector and it will report April as zero hours — not because you did not work, but because nothing on your machine remembers.</p>
-<p>So a collection is never written out as your history. It is merged into it. Each day is kept in its own file, and a day&#x27;s file is replaced only when a later reading of *that same day* saw more than the one before. A day that has aged out of your editor&#x27;s store keeps the figures it was recorded with, which means your history grows longer than any source it was read from:</p>
-<pre><code>snapshots/m-1a2b3c4d/manifest.json
-snapshots/m-1a2b3c4d/2026-05-12.json
-snapshots/m-1a2b3c4d/2026-08-25.json
-snapshots/m-1a2b3c4d/2026-08-26.json</code></pre>
-<p>Two practical consequences. Running the collector twice in an hour is harmless — it changes nothing, so there is nothing to commit. And <strong>the record is the only copy</strong> of anything older than about a month: deleting a day&#x27;s file does not free up something that can be collected again, it forgets that day permanently. The one time you would want to delete one is if a day was recorded wrongly, since a smaller correction cannot otherwise replace a larger figure already written.</p>
-<p>The manifest holds an index of the days and a running total of all of them, so anything that just wants your lifetime hours reads one small file rather than your whole history.</p>
-<h3 id="file">File<a class="permalink" href="#file" aria-label="Link to this section">#</a></h3>
-<p>The default. Everything under one directory. This is what you want if the machine that collects also renders.</p>
-<pre><code>sink = file
-output = /Users/you/.local/state/github-personal-stats/record</code></pre>
-<h3 id="git">Git<a class="permalink" href="#git" aria-label="Link to this section">#</a></h3>
-<p>A git repository as storage. This is the one to use when your cards are rendered by a scheduled GitHub Actions run, because CI has no way to read your laptop.</p>
-<pre><code>sink = git
-origin = git@github.com:your-login/personal-stats-data.git
-repo = /Users/you/.local/state/github-personal-stats/storage
-branch = master</code></pre>
-<p><code>repo</code> is a working checkout the collector owns: it clones it if it is not there, brings it up to date before each commit, and you can delete it whenever you like. Keep it in the state directory rather than among your projects — it is storage, not somewhere to work.</p>
-<p>Each machine writes into <code>snapshots/&lt;machine&gt;/</code> under its own random identifier, so several machines can share one repository with nothing to merge. Whoever renders the cards adds the days up.</p>
-<p>Because a run only rewrites the days it learned something about, the history reads as a log of your work rather than a wall of identical commits:</p>
-<pre><code>Record activity for 2026-08-26
-Record activity for 3 days, 2026-08-24 to 2026-08-26</code></pre>
-<p>A collection that finds nothing new commits nothing, so a collector on a timer does not fill the history with noise, and a remote you cannot reach right now leaves the commit waiting locally for the next run.</p>
-<p>Nothing here is specific to GitHub. Any git remote both your machine and your renderer can reach will do, including one on a server of your own that the public internet cannot see.</p>
-<h3 id="http">HTTP<a class="permalink" href="#http" aria-label="Link to this section">#</a></h3>
-<p>For sending snapshots to a service that collects from many people. The interface exists; the implementation does not, because the protocol and what counts as an identity are decisions for whoever runs such a service.</p>
-<h3 id="reading-private-storage-from-your-profile-workflow">Reading private storage from your profile workflow<a class="permalink" href="#reading-private-storage-from-your-profile-workflow" aria-label="Link to this section">#</a></h3>
-<p>If the storage repository is private — and per-day detail is a good reason to keep it private — your profile repository&#x27;s workflow needs permission to read it. The built-in <code>GITHUB_TOKEN</code> cannot: it is scoped to the repository the workflow runs in.</p>
-<p>This needs no personal access token. A read-only deploy key is narrower and enough:</p>
-<pre data-language="sh"><code>ssh-keygen -t ed25519 -N &quot;&quot; -C &quot;stats renderer&quot; -f /tmp/key
-gh repo deploy-key add /tmp/key.pub --title &quot;stats renderer (read-only)&quot; \
-  --repo your-login/personal-stats-data
-gh secret set STATS_DATA_KEY --repo your-login/your-login &lt; /tmp/key
-rm /tmp/key /tmp/key.pub</code></pre>
-<p>Then check the storage out alongside your profile repository:</p>
-<pre data-language="yaml"><code>- name: Read the storage repository
-  uses: actions/checkout@v4
-  with:
-    repository: your-login/personal-stats-data
-    ssh-key: ${{ secrets.STATS_DATA_KEY }}
-    path: storage</code></pre>
-<p>Rendered SVGs are then committed back into your profile repository with the built-in token, so the images are public while the day-by-day record is not. A token is only needed to write to a repository other than the one the workflow runs in.</p>
-<p>Two things are worth knowing before you conclude a key is broken. A deploy key authenticates git transport and <strong>not</strong> the GitHub REST API, so reading the storage through the API would need a personal access token — that is the reason this design speaks git instead. And <code>actions/checkout</code> fails against a repository with no commits in it, in a way that reads like a permission problem, so publish once before judging your credentials.</p>
-<h3 id="telling-whether-it-is-working">Telling whether it is working<a class="permalink" href="#telling-whether-it-is-working" aria-label="Link to this section">#</a></h3>
-<p>An installed plugin and a working one look identical from the extensions list, so ask instead:</p>
-<pre data-language="sh"><code>github-personal-stats-daemon status</code></pre>
-<pre><code>daemon      listening on 127.0.0.1:7391
-token       /Users/you/.local/state/github-personal-stats/token
-publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode - 412 pulses today, last 30s ago
-collected   100 days, agent 146h 29m, editor 3h 12m</code></pre>
-<p>Each line is something that can be separately broken. <code>editors no plugin has loaded</code> means exactly that: reload the editor window. <code>token missing</code> means no plugin can report at all, because the shared secret it needs is not there yet.</p>
-<p>A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:</p>
-<pre><code>editors     vscode 1.4.0 - loaded 12m ago, nothing reported today</code></pre>
-<p>That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.</p>
-<p>Your editor&#x27;s status bar says the same thing from the other side:</p>
-<ul><li><code>$(pulse) stats</code> — loaded and reporting.</li><li><code>$(pulse) stats 14</code> — loaded, but 14 pulses are queued because the daemon is not answering.</li><li><code>$(circle-slash) stats</code> — no token found, so nothing is being sent.</li></ul>
-<p>Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as <code>editor 0h 0m</code> until then.</p>
-<h3 id="what-the-plugin-measures">What the plugin measures<a class="permalink" href="#what-the-plugin-measures" aria-label="Link to this section">#</a></h3>
-<p>Time the editor window had focus. Not time you spent typing.</p>
-<p>The first version of the plugin measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.</p>
-<p>So the plugin sends a pulse when its window takes focus and every <code>pulseSeconds</code> while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.</p>
-<p>The one honest limitation: a window left focused while you walk away is counted until it loses focus. The daemon&#x27;s idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.</p>
-<p>Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor&#x27;s own record of what it generated, which is read directly. This is why each day keeps <code>editor</code> and <code>agent</code> as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.</p>
-<p>The practical consequences:</p>
-<ul><li><strong>Working in the IDE, typing or directing an agent</strong> — the plugin reports it, and it becomes editor time.</li><li><strong>An agent writing files while you read a browser</strong> — the window does not have focus, so no editor time is claimed. The work lands as agent time.</li><li><strong>A terminal agent with no editor open</strong> — no plugin is running at all, and only agent time is recorded.</li></ul>
-<p>So <code>editor 0h 0m</code> next to a large <code>agent</code> figure now means what it says: nothing was reported from a focused editor window. Either no editor is running, or the plugin has not loaded — which <code>status</code> distinguishes.</p>
-<h3 id="publishing-your-record">Publishing your record<a class="permalink" href="#publishing-your-record" aria-label="Link to this section">#</a></h3>
-<p>With the configuration in place, no arguments are needed:</p>
-<pre data-language="sh"><code>github-personal-stats-collect</code></pre>
-<p>The daemon does the same thing on a timer once installed, using the same configuration:</p>
-<pre data-language="sh"><code>github-personal-stats-daemon install</code></pre>
-<nav class="steps"><a class="prev" href="themes.html"><span>Previous</span>Themes and colour</a><a class="next" href="private-data.html"><span>Next</span>Private repository data</a></nav>
+<nav class="steps"><a class="prev" href="themes.html"><span>Previous</span>Themes and colour</a><a class="next" href="collecting.html"><span>Next</span>Collecting it</a></nav>
 </article>
 </main>
 <footer class="footer">

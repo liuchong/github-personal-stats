@@ -65,8 +65,14 @@ PAGES = [
     (
         "activity",
         "Coding activity",
-        "Collecting time and lines from your own machine, and where the record is kept.",
-        ["Coding Activity Section", "Local Activity Storage"],
+        "How long the work took, what wrote it, and which models did — as a card or a chart.",
+        ["Coding Activity"],
+    ),
+    (
+        "collecting",
+        "Collecting it",
+        "The collector, the daemon, the editor extension, and where your record is kept.",
+        ["Collecting Activity", "Activity Storage"],
     ),
     (
         "private-data",
@@ -406,6 +412,33 @@ def landing():
     <figure><div class="shot"><img src="examples/stats.svg" alt="Stats card" /></div><figcaption>Stats</figcaption></figure>
     <figure><div class="shot"><img src="examples/languages.svg" alt="Languages card" /></div><figcaption>Languages</figcaption></figure>
     <figure><div class="shot"><img src="examples/streak.svg" alt="Streak card with a heat ring" /></div><figcaption>Streak, with the heat ring</figcaption></figure>
+  </div>
+</section>
+
+<section class="section">
+  <h2>And how the work was actually done</h2>
+  <p class="prose">Your profile knows what you pushed and nothing about how it came to
+  be. A second half reads that from records your own machine already keeps: how long
+  the work took, how much of it an agent wrote, and which models did. No account with
+  anybody, no service in the cloud, and no token to render it.</p>
+  <div class="wide-shot">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="images/activity/card-dark.svg" />
+      <img src="images/activity/card-light.svg" alt="An activity card comparing the last thirty days with all time, ranked by language" />
+    </picture>
+  </div>
+  <p class="prose">The same record reads as text, for a README made of words rather
+  than pictures:</p>
+  <pre><code>LINES BY LANGUAGE
+
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %</code></pre>
+  <div class="actions">
+    <a class="button" href="pages/activity.html">What it measures</a>
+    <a class="button" href="pages/collecting.html">How to collect it</a>
   </div>
 </section>
 

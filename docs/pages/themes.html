@@ -25,6 +25,7 @@
       <a href="../pages/heat-ring.html">The heat ring</a>
       <a href="../pages/themes.html" class="current" aria-current="page">Themes and colour</a>
       <a href="../pages/activity.html">Coding activity</a>
+      <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
   </nav>
   <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
@@ -39,13 +40,13 @@
 <p><code>transparent</code> drops the background but keeps the dark text of the light palette, so it belongs on a light surface. For a dark surface use <code>dark</code>.</p>
 <h3 id="following-the-readers-colour-scheme">Following the reader&#x27;s colour scheme<a class="permalink" href="#following-the-readers-colour-scheme" aria-label="Link to this section">#</a></h3>
 <p>GitHub honours <code>&lt;picture&gt;</code> in a README, so generate one card per surface and let the browser choose. Add a second generate step:</p>
-<pre data-language="yaml"><code>      - uses: liuchong/github-personal-stats@v1.4.0
+<pre data-language="yaml"><code>      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.4.0
+      - uses: liuchong/github-personal-stats@v1.5.0
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg

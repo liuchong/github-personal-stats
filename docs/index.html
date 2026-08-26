@@ -25,6 +25,7 @@
       <a href="pages/heat-ring.html">The heat ring</a>
       <a href="pages/themes.html">Themes and colour</a>
       <a href="pages/activity.html">Coding activity</a>
+      <a href="pages/collecting.html">Collecting it</a>
       <a href="pages/private-data.html">Private repository data</a>
   </nav>
   <a class="repo" href="https://github.com/liuchong/github-personal-stats">GitHub</a>
@@ -58,6 +59,33 @@
 </section>
 
 <section class="section">
+  <h2>And how the work was actually done</h2>
+  <p class="prose">Your profile knows what you pushed and nothing about how it came to
+  be. A second half reads that from records your own machine already keeps: how long
+  the work took, how much of it an agent wrote, and which models did. No account with
+  anybody, no service in the cloud, and no token to render it.</p>
+  <div class="wide-shot">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="images/activity/card-dark.svg" />
+      <img src="images/activity/card-light.svg" alt="An activity card comparing the last thirty days with all time, ranked by language" />
+    </picture>
+  </div>
+  <p class="prose">The same record reads as text, for a README made of words rather
+  than pictures:</p>
+  <pre><code>LINES BY LANGUAGE
+
+Total        +115,987   lines, 99.94% by an agent
+
+Rust          +34,255   #########################   29.53 %
+Markdown      +26,925   ####################-----   23.21 %
+Go            +21,869   ################---------   18.85 %</code></pre>
+  <div class="actions">
+    <a class="button" href="pages/activity.html">What it measures</a>
+    <a class="button" href="pages/collecting.html">How to collect it</a>
+  </div>
+</section>
+
+<section class="section">
   <h2>Documentation</h2>
   <div class="cards">
     <a class="card" href="pages/getting-started.html"><h3>Getting started</h3><p>Install it as an action, a command, or a service, and see a card.</p></a>
@@ -65,7 +93,8 @@
     <a class="card" href="pages/configuration.html"><h3>Configuration</h3><p>What each panel reports, and which repositories count towards a language.</p></a>
     <a class="card" href="pages/heat-ring.html"><h3>The heat ring</h3><p>The window it covers, the shape it takes, how it is scaled, and what sits in the middle.</p></a>
     <a class="card" href="pages/themes.html"><h3>Themes and colour</h3><p>Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged.</p></a>
-    <a class="card" href="pages/activity.html"><h3>Coding activity</h3><p>Collecting time and lines from your own machine, and where the record is kept.</p></a>
+    <a class="card" href="pages/activity.html"><h3>Coding activity</h3><p>How long the work took, what wrote it, and which models did — as a card or a chart.</p></a>
+    <a class="card" href="pages/collecting.html"><h3>Collecting it</h3><p>The collector, the daemon, the editor extension, and where your record is kept.</p></a>
     <a class="card" href="pages/private-data.html"><h3>Private repository data</h3><p>Counting work that is not public, with a token scoped to just that.</p></a>
   </div>
 </section>
