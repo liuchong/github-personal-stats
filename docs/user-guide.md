@@ -990,6 +990,8 @@ The one honest limitation: a window left focused while you walk away is counted 
 
 The Emacs mode adds a cutoff there, and this is the only place the two plugins differ. It stops counting after ten minutes without input, because Emacs is habitually left in front of you for days at a time and a focused frame alone would report sleep as work. Reading, scrolling and directing an agent all produce input, so the grace period costs nothing real; `github-personal-stats-idle-seconds` changes it.
 
+In a terminal, that cutoff is the whole test. A tty — and anything under tmux or screen — may never report focus, and Emacs then answers "definitely not focused" for ever, so requiring focus would record a day at the terminal as no work at all. Where focus can be known it is believed; where it cannot, whether Emacs was given anything to do is the only signal there is.
+
 Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.
 
 The practical consequences:

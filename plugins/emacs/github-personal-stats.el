@@ -193,15 +193,21 @@ than being dropped: you were at the editor either way."
       "")))
 
 (defun github-personal-stats--focused-p ()
-  "Whether any frame has the window system's focus.
+  "Whether any frame is one you could be sitting in front of.
 
-A terminal frame cannot answer this, and neither can a frame of a
-daemon nobody has connected to; both report `unknown', which is
-taken as focused and left to the idle cutoff to bound."
+Only asked of graphical frames. A terminal frame's focus depends on
+the terminal reporting it, which a plain tty, tmux or screen may
+never do, and Emacs then answers `nil' — \"definitely not
+focused\" — for ever. Requiring focus there would report a day at
+the terminal as no work at all, which is the failure this measure
+exists to avoid, so a terminal frame is left to the idle cutoff
+alone: whether Emacs was given anything to do is the only signal
+that is actually available."
   (or (not (fboundp 'frame-focus-state))
       (let ((focused nil))
         (dolist (frame (frame-list))
-          (when (frame-focus-state frame)
+          (when (or (not (display-graphic-p frame))
+                    (frame-focus-state frame))
             (setq focused t)))
         focused)))
 

@@ -29,6 +29,12 @@ a pulse is filed every `github-personal-stats-pulse-seconds`. Each is filed unde
 the kind of file in the selected window; a shell, a magit buffer or a help window
 still counts as time, filed under no language, because you were there either way.
 
+In a terminal, focus is not part of that test. A tty — and anything under tmux or
+screen — may never report focus, and Emacs then answers "definitely not focused"
+for ever; requiring it would report a day's work at the terminal as nothing at
+all. So a terminal frame is left to the idle cutoff alone, which is the only
+signal actually available there.
+
 The cutoff is where this differs from the VS Code extension, which counts a
 focused window whether or not anything is happening in it. Emacs is habitually
 left in front of you for days, and counting that would report sleep as work.

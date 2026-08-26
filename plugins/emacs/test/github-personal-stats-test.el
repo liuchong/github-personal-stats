@@ -121,6 +121,25 @@ overnight would report the night."
             ((symbol-function 'github-personal-stats--idle-seconds) (lambda () 0)))
     (should-not (github-personal-stats--present-p))))
 
+(ert-deftest github-personal-stats-test-a-terminal-is-not-called-absent-for-being-a-terminal ()
+  "A tty, and anything under tmux or screen, may never report focus at
+all, and Emacs then says `nil' for ever. Requiring focus there
+would report a day at the terminal as no work, which is exactly
+the silent zero this measure exists to avoid. This test runs in
+batch, where the frame is a terminal frame and focus reads nil."
+  (should-not (display-graphic-p (selected-frame)))
+  (should (null (frame-focus-state (selected-frame))))
+  (should (github-personal-stats--focused-p)))
+
+(ert-deftest github-personal-stats-test-a-graphical-window-in-the-background-is-absent ()
+  "Where focus can be known, it is believed."
+  (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) t))
+            ((symbol-function 'frame-focus-state) (lambda (&optional _) nil)))
+    (should-not (github-personal-stats--focused-p)))
+  (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) t))
+            ((symbol-function 'frame-focus-state) (lambda (&optional _) t)))
+    (should (github-personal-stats--focused-p))))
+
 (ert-deftest github-personal-stats-test-beating-queues-only-while-present ()
   "A beat while away leaves the queue alone."
   (github-personal-stats-test--in-state
