@@ -12,7 +12,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact, language_label,
+    ActivityComparison, ActivityWindow, Author, AuthorShare, GithubStatsError, LineFact,
+    language_label,
     renderer::{format_duration_aligned, format_number as thousands},
     textchart::{ChartBlock, ChartRow, ChartSummary},
 };
@@ -62,6 +63,17 @@ pub struct BlockSpec {
     /// so they can be shown side by side but never added, and a chart with a
     /// single measure could only show one of them at a time.
     pub measure: String,
+    /// Whether each row should say who wrote its lines.
+    ///
+    /// A block of hours cannot answer that from its own figures: the hours it
+    /// divides are hours an agent was seen working, and on a record where an
+    /// agent does nearly all of it the division is a rounding error and draws as
+    /// nothing. Lines do answer it, and they answer it per language, so a block
+    /// of hours can carry that answer beside each language as long as it says
+    /// that is what it is. The two are never added or drawn in the same bar,
+    /// since a bar whose length is time and whose parts are lines would invite
+    /// exactly the wrong reading.
+    pub authors: bool,
 }
 
 impl BlockSpec {
@@ -71,6 +83,7 @@ impl BlockSpec {
             rows,
             limit: 6,
             split: true,
+            authors: false,
             title: String::new(),
             measure: String::new(),
         }
@@ -132,11 +145,13 @@ impl BlockSpec {
                     })?;
                 }
                 "split" => block.split = matches!(held.trim(), "on" | "true" | "yes" | "author"),
+                "authors" => block.authors = matches!(held.trim(), "on" | "true" | "yes"),
                 "title" => block.title = held.trim().to_owned(),
                 "measure" => block.measure = held.trim().to_owned(),
                 other => {
                     return Err(invalid(&format!(
-                        "unknown block setting {other:?}; expected limit, split, title, or measure"
+                        "unknown block setting {other:?}; \
+                         expected limit, split, authors, title, or measure"
                     )));
                 }
             }
@@ -329,14 +344,30 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Char
             // A source that could not say who spent the time leaves both parts
             // at zero, and the bar is drawn whole rather than pretending the
             // whole of it was unattributed.
-            if spec.split {
+            let row = if spec.split {
                 row.divided(language.attributed.agent, language.attributed.human)
+            } else {
+                row
+            };
+            if spec.authors {
+                row.with_aside(authorship(&language.lines))
             } else {
                 row
             }
         })
         .collect();
     (rows, total)
+}
+
+/// How a language's lines divide, for a row whose figure is not lines.
+///
+/// It names what it counted. On a block of hours the reader has every reason to
+/// assume a percentage refers to the hours, and this one does not.
+fn authorship(lines: &AuthorShare) -> String {
+    if lines.total() == 0 {
+        return String::new();
+    }
+    format!("{} agent lines", percent(lines.ai_share_basis_points()))
 }
 
 fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<ChartRow>, u64) {

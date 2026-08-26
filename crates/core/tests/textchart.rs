@@ -608,3 +608,67 @@ fn time_from_a_source_that_names_no_author_is_drawn_in_one_piece() {
     assert!(!text.contains("="), "{text}");
     assert!(!text.contains("# agent"), "{text}");
 }
+
+#[test]
+fn a_block_of_hours_can_say_who_wrote_each_languages_lines() {
+    let mut day = DayBucket::new("2026-08-20");
+    let bucket = day.measure_mut(MEASURE_AGENT);
+    bucket.seconds = 3_600;
+    bucket.languages.insert("Rust".to_owned(), 3_600);
+    day.add_lines("Rust", Author::Agent, "a-model", 700, 0);
+    day.add_lines("Rust", Author::Human, "", 300, 0);
+
+    let fold = compare_activity(
+        &[day],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&fold),
+            &parse_blocks("time/languages,authors=on").unwrap(),
+        ),
+        &ChartStyle::default(),
+    );
+
+    // The row's figure is an hour and the remark is about lines, so it says which
+    // it counted: a reader of a block of hours would otherwise take the
+    // percentage for a share of the hours.
+    assert!(text.contains("1 hrs  0 mins"), "{text}");
+    assert!(text.contains("70.00% agent lines"), "{text}");
+}
+
+#[test]
+fn a_column_no_row_fills_is_not_drawn() {
+    let mut day = DayBucket::new("2026-08-20");
+    let bucket = day.measure_mut(MEASURE_AGENT);
+    bucket.seconds = 3_600;
+    bucket.languages.insert("Rust".to_owned(), 3_600);
+
+    let fold = compare_activity(
+        &[day],
+        ActivityMeasure::new(MEASURE_AGENT),
+        [ActivitySpan::Days(30), ActivitySpan::All],
+        None,
+        12,
+        &[],
+    );
+    let text = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&fold),
+            &parse_blocks("time/languages").unwrap(),
+        ),
+        &ChartStyle::default(),
+    );
+
+    // Asking for no remarks leaves no room for them: an empty column would put a
+    // gutter and a run of spaces on the end of every row.
+    assert!(
+        text.lines().all(|line| line == line.trim_end()),
+        "a line ends in spaces\n{text:?}"
+    );
+    assert!(!text.contains("agent lines"), "{text}");
+}

@@ -145,13 +145,16 @@ Activity options:
                           Text chart blocks, semicolon separated, each written
                           value/dimension with optional settings. Values are
                           time, lines, tokens; dimensions are languages, models,
-                          authors, windows; settings are limit, split, title,
-                          measure. A block naming a measure reads that one, so
-                          one chart can hold agent hours beside imported hours
+                          authors, windows; settings are limit, split, authors,
+                          title, measure. A block naming a measure reads that
+                          one, so one chart can hold agent hours beside imported
+                          hours; authors=on makes a block of hours say who wrote
+                          each language's lines
                           (default: time/languages;lines/authors;lines/models)
   --activity-columns <list>
-                          Columns in order from name, value, bar, share
-                          (default: name,value,bar,share)
+                          Columns in order from name, value, bar, share, aside
+                          (default: name,value,bar,share,aside; a column no row
+                          fills is not drawn)
   --activity-bar <chars>  Two or three characters for the agent's share, the
                           share no agent wrote, and empty (default: #=-)
   --activity-bar-width <cells>

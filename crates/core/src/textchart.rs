@@ -75,6 +75,12 @@ pub enum Column {
     Bar,
     /// The row's share of the block, as a percentage.
     Share,
+    /// A remark the fold attached to the row, such as who wrote its lines.
+    ///
+    /// The layout does not know what it says and does not need to: whoever built
+    /// the row worded it, because only they know what it is a remark about. A
+    /// chart where no row has one does not draw the column.
+    Aside,
 }
 
 impl Column {
@@ -84,14 +90,21 @@ impl Column {
             "value" => Ok(Self::Value),
             "bar" => Ok(Self::Bar),
             "share" => Ok(Self::Share),
+            "aside" => Ok(Self::Aside),
             other => Err(format!(
-                "unknown column {other:?}; expected name, value, bar, or share"
+                "unknown column {other:?}; expected name, value, bar, share, or aside"
             )),
         }
     }
 }
 
-pub const DEFAULT_COLUMNS: [Column; 4] = [Column::Name, Column::Value, Column::Bar, Column::Share];
+pub const DEFAULT_COLUMNS: [Column; 5] = [
+    Column::Name,
+    Column::Value,
+    Column::Bar,
+    Column::Share,
+    Column::Aside,
+];
 pub const DEFAULT_BAR_CELLS: usize = 25;
 const GUTTER: usize = 3;
 
@@ -140,6 +153,9 @@ pub struct ChartRow {
     pub weight: u64,
     pub primary: u64,
     pub secondary: u64,
+    /// A remark to print after the row, worded by whoever built it. Empty means
+    /// there is nothing to remark on, and then no such column is drawn.
+    pub aside: String,
 }
 
 impl ChartRow {
@@ -150,7 +166,14 @@ impl ChartRow {
             weight,
             primary: 0,
             secondary: 0,
+            aside: String::new(),
         }
+    }
+
+    /// Attaches a remark to print after the row.
+    pub fn with_aside(mut self, aside: impl Into<String>) -> Self {
+        self.aside = aside.into();
+        self
     }
 
     /// Divides the row between two authors.
@@ -297,6 +320,7 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
                     Column::Value => row.value.clone(),
                     Column::Bar => bar(row, block, style),
                     Column::Share => share(row.weight, block.total),
+                    Column::Aside => row.aside.clone(),
                 })
                 .collect::<Vec<_>>()
         })
@@ -312,10 +336,16 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
                 Column::Name => summary.label.clone(),
                 Column::Value => summary.value.clone(),
                 Column::Bar => summary.note.clone(),
-                Column::Share => String::new(),
+                Column::Share | Column::Aside => String::new(),
             })
             .collect::<Vec<_>>()
     });
+    let drawn = (0..style.columns.len())
+        .filter(|index| {
+            cells.iter().any(|row| !row[*index].is_empty())
+                || summary.iter().any(|summary| !summary[*index].is_empty())
+        })
+        .collect::<Vec<_>>();
     let widths = (0..style.columns.len())
         .map(|index| {
             // The total's label and figure are measured with the rows, so they
@@ -335,7 +365,7 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
 
     let mut out = String::new();
     if let Some(summary) = &summary {
-        let mut line = pad_row(summary, &widths, style);
+        let mut line = pad_row(summary, &widths, style, &drawn);
         // The note rides in the bar's column, so a chart drawn without bars has
         // nowhere to put it and would drop what the figures are a total of. It
         // trails the row instead, where nothing lines up under it anyway.
@@ -353,15 +383,16 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
         out.push('\n');
     }
     for row in &cells {
-        let _ = writeln!(out, "{}", pad_row(row, &widths, style));
+        let _ = writeln!(out, "{}", pad_row(row, &widths, style, &drawn));
     }
     out
 }
 
-fn pad_row(row: &[String], widths: &[usize], style: &ChartStyle) -> String {
+fn pad_row(row: &[String], widths: &[usize], style: &ChartStyle, drawn: &[usize]) -> String {
     let mut line = String::new();
-    for (index, column) in style.columns.iter().enumerate() {
-        if index > 0 {
+    for (position, &index) in drawn.iter().enumerate() {
+        let column = &style.columns[index];
+        if position > 0 {
             line.push_str(&" ".repeat(GUTTER));
         }
         let text = &row[index];
