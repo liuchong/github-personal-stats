@@ -183,7 +183,6 @@ impl Daemon {
                 at: 1,
                 day: "1970-01-01".to_owned(),
                 ext: String::new(),
-                write: false,
             }],
         };
         if let Err(CollectError::Rejected { message }) = batch.validate() {

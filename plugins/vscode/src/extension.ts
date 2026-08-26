@@ -15,8 +15,8 @@ const STATE_DIR = "github-personal-stats";
 const TOKEN_FILE = "token";
 const DEFAULT_URL = "http://127.0.0.1:7391";
 
-/** How often work in progress turns into a pulse. Must be well under the
- *  daemon's idle timeout, or time between pulses stops counting as work. */
+/** How often presence turns into a pulse. Must be well under the daemon's idle
+ *  timeout, or the gap between pulses stops counting as time at the editor. */
 const DEFAULT_PULSE_SECONDS = 30;
 
 /** How often queued pulses are sent. Sending is batched so typing does not
@@ -33,14 +33,13 @@ interface Pulse {
   at: number;
   day: string;
   ext: string;
-  write: boolean;
 }
 
 let queue: Pulse[] = [];
-let lastPulseAt = 0;
 let token: string | undefined;
 let status: vscode.StatusBarItem;
 let flushTimer: ReturnType<typeof setInterval> | undefined;
+let beatTimer: ReturnType<typeof setInterval> | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 0);
@@ -49,32 +48,34 @@ export function activate(context: vscode.ExtensionContext): void {
   token = readToken();
   showState();
 
-  const seen = (write: boolean) => (subject: unknown) => {
-    if (!enabled()) {
-      return;
-    }
-    const document = documentOf(subject);
-    if (document) {
-      record(document, write);
-    }
-  };
-
-  // What counts as the editor being worked in, and what deliberately does not.
+  // What this measures, and why it is measured this way.
   //
-  // `onDidChangeTextDocument` is missing here on purpose. It fires for every
-  // edit whatever made it, so an agent writing a file while its author reads
-  // something else would be recorded as the author sitting at the editor. That
-  // is the one thing this measure exists to exclude: agent work is counted
-  // separately, from the editor's own record of what it generated.
+  // The question is whether you were at the editor, which is not the same as
+  // whether you were typing in it. An earlier version asked the document API —
+  // saves, tab switches, caret movements — and over thirty-seven hours of real
+  // work it reported nothing at all, because a day spent directing an agent
+  // touches none of those: the prompt goes into a panel that is not a document,
+  // and the edits come back from something that is not you.
   //
-  // Typing is still caught, because it moves the caret and so raises a
-  // selection change. What is lost is an edit that changes a document without
-  // moving the caret, such as a replace across files, which is a small price
-  // for not confusing the two measures.
+  // Window focus is the one signal that is true of every way of working. While
+  // this window has focus you are here, whoever is typing; when it does not,
+  // nothing is claimed. That leaves one honest gap, a window left focused while
+  // you walk away, which the daemon's idle timeout bounds but cannot see. It is
+  // documented rather than papered over, and it is a far smaller error than
+  // reporting zero.
+  //
+  // Agent time is a separate measure taken from a separate source, so an agent
+  // working while you are away is counted there and not here. Nothing sums them.
   context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument(seen(true)),
-    vscode.window.onDidChangeActiveTextEditor(seen(false)),
-    vscode.window.onDidChangeTextEditorSelection(seen(false)),
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) {
+        beat();
+        startBeating();
+      } else {
+        stopBeating();
+        void flush();
+      }
+    }),
     vscode.commands.registerCommand("githubPersonalStats.sendNow", async () => {
       token = readToken();
       await flush();
@@ -87,65 +88,76 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Say hello before any work happens. A window nobody is typing in produces no
+  // Say hello before any work happens. A window in the background produces no
   // pulses, which is indistinguishable from a plugin that never loaded, and the
   // difference is the first thing anyone wants to know.
   void announce();
 
+  // A window that already has focus when the plugin loads is a window being
+  // worked in, and waiting for it to be focused again would lose the session
+  // that installed the plugin.
+  if (vscode.window.state.focused) {
+    beat();
+    startBeating();
+  }
+
   flushTimer = setInterval(() => void flush(), FLUSH_SECONDS * 1000);
-  context.subscriptions.push({
-    dispose: () => {
-      if (flushTimer) {
-        clearInterval(flushTimer);
-      }
-      void flush();
-    },
-  });
+  context.subscriptions.push({ dispose: stop });
 }
 
 export function deactivate(): void {
+  stop();
+}
+
+function stop(): void {
+  stopBeating();
   if (flushTimer) {
     clearInterval(flushTimer);
+    flushTimer = undefined;
   }
   void flush();
 }
 
-function documentOf(subject: unknown): vscode.TextDocument | undefined {
-  if (!subject || typeof subject !== "object") {
-    return undefined;
+function startBeating(): void {
+  if (!beatTimer) {
+    beatTimer = setInterval(beat, pulseSeconds() * 1000);
   }
-  const candidate = subject as {
-    document?: vscode.TextDocument;
-    textEditor?: { document?: vscode.TextDocument };
-    uri?: vscode.Uri;
-  };
-  if (candidate.textEditor?.document) {
-    return candidate.textEditor.document;
-  }
-  if (candidate.document) {
-    return candidate.document;
-  }
-  return candidate.uri ? (subject as vscode.TextDocument) : undefined;
 }
 
-function record(document: vscode.TextDocument, write: boolean): void {
-  // Only real files on disk. Output panels, diff views and settings editors are
-  // not work on a project and would inflate the record.
-  if (document.uri.scheme !== "file") {
+function stopBeating(): void {
+  if (beatTimer) {
+    clearInterval(beatTimer);
+    beatTimer = undefined;
+  }
+}
+
+/// One instant of being at the editor, filed under whatever is open.
+function beat(): void {
+  if (!enabled() || !vscode.window.state.focused) {
     return;
   }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (now - lastPulseAt < pulseSeconds()) {
-    return;
-  }
-  lastPulseAt = now;
-
-  queue.push({ at: now, day: today(), ext: extensionOf(document.uri.fsPath), write });
+  queue.push({
+    at: Math.floor(Date.now() / 1000),
+    day: today(),
+    ext: openExtension(),
+  });
   if (queue.length > MAX_QUEUED) {
     queue = queue.slice(queue.length - MAX_QUEUED);
   }
   showState();
+}
+
+/// The kind of file in front of you, if it is a file at all.
+///
+/// Output panels, diff views and settings editors are not work on a project, and
+/// a window showing one still counts as time — it is filed under no language
+/// rather than being dropped, because you were there either way.
+function openExtension(): string {
+  const document = vscode.window.activeTextEditor?.document;
+  if (!document || document.uri.scheme !== "file") {
+    return "";
+  }
+  return extensionOf(document.uri.fsPath);
 }
 
 /** The local date, as this machine sees it. The daemon records the day the
@@ -242,6 +254,13 @@ function post(body: string, path = "/v1/pulses"): Promise<void> {
         // rather than retried for ever. Anything else is worth trying again.
         if (status >= 200 && status < 300) {
           resolve();
+        } else if (status === 401) {
+          // The token is rotated when the daemon's state is rebuilt, and a
+          // cached one then fails for ever. Forgetting it means the next
+          // attempt reads the file again, and rejecting keeps the pulses for
+          // that attempt rather than throwing away the morning.
+          token = undefined;
+          reject(new Error("daemon rejected the token"));
         } else if (status >= 400 && status < 500) {
           console.warn(`github-personal-stats: daemon refused ${path} (${status})`);
           resolve();

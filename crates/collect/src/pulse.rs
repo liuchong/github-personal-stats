@@ -36,12 +36,10 @@ pub struct Pulse {
     /// The local date the pulse belongs to, as the editor saw it.
     pub day: String,
     /// A file extension with no leading dot, lowercased. Empty is allowed and
-    /// counts as an unknown kind of file.
+    /// counts as an unknown kind of file: a window showing something that is not
+    /// a file is still a window somebody is at.
     #[serde(default)]
     pub ext: String,
-    /// Whether the file was being changed rather than only read.
-    #[serde(default)]
-    pub write: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,8 +55,6 @@ struct Entry {
     editor: String,
     #[serde(default)]
     ext: String,
-    #[serde(default)]
-    write: bool,
 }
 
 impl PulseBatch {
@@ -152,7 +148,6 @@ pub fn append(state_dir: &Path, batch: &PulseBatch) -> Result<usize, CollectErro
             at: pulse.at,
             editor: batch.editor.clone(),
             ext: pulse.ext.clone(),
-            write: pulse.write,
         };
         let line = serde_json::to_string(&entry)
             .map_err(|error| rejected(format!("a pulse could not be written down: {error}")))?;

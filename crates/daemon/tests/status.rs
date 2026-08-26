@@ -54,7 +54,7 @@ fn a_loaded_plugin_with_nothing_to_report_is_not_shown_as_a_fault() {
 
     assert!(report.contains("vscode 1.4.0"), "{report}");
     assert!(report.contains("loaded 12m ago"), "{report}");
-    assert!(report.contains("nothing typed today"), "{report}");
+    assert!(report.contains("nothing reported today"), "{report}");
     assert!(!report.contains("no plugin has loaded"), "{report}");
 }
 

@@ -914,10 +914,10 @@ Each line is something that can be separately broken. `editors no plugin has loa
 A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
 
 ```
-editors     vscode 1.4.0 - loaded 12m ago, nothing typed today
+editors     vscode 1.4.0 - loaded 12m ago, nothing reported today
 ```
 
-That line is the normal state of a window you are not typing in, including one where an agent is doing all the writing. It is not a fault.
+That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.
 
 Your editor's status bar says the same thing from the other side:
 
@@ -927,20 +927,25 @@ Your editor's status bar says the same thing from the other side:
 
 Editor time appears in the record only after the next rebuild, so a few minutes of reported work shows up as `editor 0h 0m` until then.
 
-### What the plugin does and does not see
+### What the plugin measures
 
-The plugin measures a person being at the editor, so it watches the things only a person does: moving the caret, switching file, saving. It deliberately does not watch documents changing. A document change says text moved, not who moved it — an agent editing an open file raises it exactly as typing does — so counting those would put agent work into the figure meant to describe you being at the keyboard. Typing is still caught, because typing moves the caret.
+Time the editor window had focus. Not time you spent typing.
 
-Work done by an agent is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: a day can be long in one and empty in the other, and adding them would count neither honestly.
+The first version of the plugin measured typing, by watching the things only a person does: moving the caret, switching file, saving. It is a more precise question and it turned out to be the wrong one. Over thirty-seven hours of real work it reported nothing at all, because a day spent directing an agent raises none of those events — the prompt goes into a panel that is not a document, and the edits come back from something that is not you.
+
+So the plugin sends a pulse when its window takes focus and every `pulseSeconds` while it keeps focus, whoever is typing. Each pulse is filed under the kind of file open at the time; a window showing an output panel or a settings page still counts, filed under no language, because you were there either way.
+
+The one honest limitation: a window left focused while you walk away is counted until it loses focus. The daemon's idle timeout bounds how far that can run and cannot detect it. Reporting a little too much for a coffee break is a smaller error than reporting nothing for a working day.
+
+Agent time is measured separately and does not need the plugin at all. Lines an AI wrote, which models wrote them, and the time spent changing code come from the editor's own record of what it generated, which is read directly. This is why each day keeps `editor` and `agent` as two numbers rather than one: they overlap by design, a day can be long in one and empty in the other, and adding them would count neither honestly.
 
 The practical consequences:
 
-- **Typing in the IDE** — the plugin reports it, and it becomes editor time.
-- **An agent in the IDE writing files** — not counted as editor time, because the plugin ignores document changes on purpose. The work lands as agent time instead.
+- **Working in the IDE, typing or directing an agent** — the plugin reports it, and it becomes editor time.
+- **An agent writing files while you read a browser** — the window does not have focus, so no editor time is claimed. The work lands as agent time.
 - **A terminal agent with no editor open** — no plugin is running at all, and only agent time is recorded.
-- **A replace across files** — changes documents without moving the caret, so it goes unreported. This is the cost of the rule above, accepted so that the two measures stay separate.
 
-So `editor 0h 0m` next to a large `agent` figure is not a broken plugin. It is an accurate description of a day spent directing an agent rather than typing.
+So `editor 0h 0m` next to a large `agent` figure now means what it says: nothing was reported from a focused editor window. Either no editor is running, or the plugin has not loaded — which `status` distinguishes.
 
 ### Publishing your record
 

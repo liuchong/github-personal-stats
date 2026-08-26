@@ -17,7 +17,6 @@ fn pulse(day: &str, at: i64, ext: &str) -> Pulse {
         at,
         day: day.to_owned(),
         ext: ext.to_owned(),
-        write: true,
     }
 }
 
@@ -30,7 +29,6 @@ fn batch(pulses: Vec<(i64, &str)>) -> PulseBatch {
                 at: NOON + offset,
                 day: DAY.to_owned(),
                 ext: ext.to_owned(),
-                write: true,
             })
             .collect(),
     }
@@ -141,7 +139,6 @@ fn each_day_is_its_own_file_so_two_days_never_collide() {
         at: NOON + 86_400,
         day: "2026-08-25".to_owned(),
         ext: "rs".to_owned(),
-        write: true,
     });
 
     pulse::append(&root, &spanning).unwrap();

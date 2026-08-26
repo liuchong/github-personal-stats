@@ -94,7 +94,7 @@ fn editors(reading: &Reading) -> Vec<String> {
             // back does not. Saying so keeps a correct state from reading as a
             // fault.
             None => lines.push(format!(
-                "editors     {named} — loaded {} ago, nothing typed today",
+                "editors     {named} — loaded {} ago, nothing reported today",
                 ago(reading.at - announcement.at)
             )),
         }
