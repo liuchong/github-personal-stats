@@ -10,6 +10,7 @@ pub mod random;
 pub mod records;
 pub mod sessions;
 pub mod sink;
+pub mod transcripts;
 
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -60,6 +61,11 @@ pub fn collect(settings: &Settings) -> Result<ActivitySnapshot, CollectError> {
             .or_insert_with(|| DayBucket::new(&date))
             .measure_mut(MEASURE_EDITOR) = editor;
     }
+
+    // Terminal agents keep their own records and report tokens nothing else can
+    // see. They add to the same days without touching either measure of time,
+    // since what they answer is how much was spent rather than how long it took.
+    transcripts::read(&settings.home, &mut days)?;
 
     let mut snapshot = ActivitySnapshot::new(machine, clock::utc_timestamp(clock::now()));
     snapshot.days = days.into_values().collect();
