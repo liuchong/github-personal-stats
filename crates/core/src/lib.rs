@@ -7,6 +7,7 @@ pub mod config;
 pub mod data;
 pub mod error;
 pub mod json;
+pub mod remote;
 pub mod renderer;
 pub mod store;
 pub mod textchart;
@@ -28,7 +29,7 @@ pub use aggregation::{
     StreakMode, StreakSummary, aggregate_card_data, aggregate_coding_activity, aggregate_languages,
     aggregate_stats, calculate_streak, compare_activity,
 };
-pub use client::{GithubClient, GithubGraphqlClient, GithubGraphqlRequest, MockGithubClient};
+pub use client::{GithubClient, GithubGraphqlRequest, MockGithubClient};
 pub use color::{HEAT_RAMP_STEPS, HeatRamp, named_ramps};
 pub use config::{
     CardSelection, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS,
@@ -38,6 +39,7 @@ pub use config::{
 };
 pub use data::{ContributionDay, GithubData, GithubProfile, RepositoryLanguage, UserStats};
 pub use error::{GithubStatsError, RemoteErrorKind};
+pub use remote::GithubGraphqlClient;
 pub use renderer::{
     RenderTheme, format_duration, format_duration_aligned, format_number, render_card,
     render_readme_section,

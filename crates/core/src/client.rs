@@ -1,18 +1,15 @@
+//! What a profile is, and how what GitHub sends back becomes one.
+//!
+//! Reading the network lives in `remote`, which cannot be tested locally. This
+//! file holds the parts that can: the request that would be sent, the shapes of
+//! the replies, and every decision made about them once they arrive.
+
 use crate::{
     ContributionDay, GithubData, GithubProfile, GithubStatsConfig, GithubStatsError, LanguageScope,
     RemoteErrorKind, RepositoryLanguage, UserStats, json::parse_github_fixture,
 };
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::{
-    Method, Request,
-    header::{AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
-};
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GithubGraphqlRequest {
@@ -23,351 +20,6 @@ pub struct GithubGraphqlRequest {
 
 pub trait GithubClient {
     fn fetch_user_data(&self, config: &GithubStatsConfig) -> Result<GithubData, GithubStatsError>;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GithubGraphqlClient {
-    endpoint: String,
-}
-
-impl GithubGraphqlClient {
-    pub fn new(endpoint: impl Into<String>) -> Self {
-        Self {
-            endpoint: endpoint.into(),
-        }
-    }
-
-    pub fn build_user_data_request(&self, config: &GithubStatsConfig) -> GithubGraphqlRequest {
-        GithubGraphqlRequest {
-            endpoint: self.endpoint.clone(),
-            token_env: config.token_env.clone(),
-            body: PROFILE_QUERY.to_owned(),
-        }
-    }
-
-    fn token(&self, config: &GithubStatsConfig) -> Result<String, GithubStatsError> {
-        env::var(&config.token_env).map_err(|_| GithubStatsError::Remote {
-            kind: RemoteErrorKind::Authentication,
-            message: format!("missing token environment variable {}", config.token_env),
-        })
-    }
-
-    async fn post<T: for<'de> Deserialize<'de>, V: Serialize>(
-        &self,
-        token: &str,
-        query: &str,
-        variables: V,
-    ) -> Result<T, GithubStatsError> {
-        let body = Bytes::from(
-            serde_json::to_vec(&GraphqlRequest { query, variables }).map_err(|error| {
-                GithubStatsError::InvalidResponse {
-                    message: error.to_string(),
-                }
-            })?,
-        );
-        let mut last_error = None;
-        for attempt in 0..3 {
-            let request = Request::builder()
-                .method(Method::POST)
-                .uri(&self.endpoint)
-                .header(AUTHORIZATION, format!("Bearer {token}"))
-                .header(CONTENT_TYPE, "application/json")
-                .header(USER_AGENT, "github-personal-stats")
-                .body(Full::new(body.clone()))
-                .map_err(|error| GithubStatsError::InvalidResponse {
-                    message: error.to_string(),
-                })?;
-            let Some(body) = self.request_body(request).await? else {
-                retry_delay(attempt).await;
-                continue;
-            };
-            if let Err(error) = ensure_success_body(&body) {
-                if retryable_body(&error) && attempt < 2 {
-                    last_error = Some(error);
-                    retry_delay(attempt).await;
-                    continue;
-                }
-                return Err(error);
-            }
-            let payload = serde_json::from_str::<GraphqlResponse<T>>(&body).map_err(|error| {
-                GithubStatsError::InvalidResponse {
-                    message: error.to_string(),
-                }
-            })?;
-            if let Some(errors) = payload.errors {
-                return Err(graphql_error(errors));
-            }
-            return payload
-                .data
-                .ok_or_else(|| GithubStatsError::InvalidResponse {
-                    message: "missing GraphQL data".to_owned(),
-                });
-        }
-        Err(last_error.unwrap_or_else(|| GithubStatsError::Remote {
-            kind: RemoteErrorKind::UpstreamUnavailable,
-            message: "request failed after retries".to_owned(),
-        }))
-    }
-
-    async fn request_body(
-        &self,
-        request: Request<Full<Bytes>>,
-    ) -> Result<Option<String>, GithubStatsError> {
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_only()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        let client = Client::builder(TokioExecutor::new()).build(connector);
-        let response = match client.request(request).await {
-            Ok(response) => response,
-            Err(_) => return Ok(None),
-        };
-        let status = response.status();
-        let body = response
-            .into_body()
-            .collect()
-            .await
-            .map_err(|error| GithubStatsError::Remote {
-                kind: RemoteErrorKind::UpstreamUnavailable,
-                message: error.to_string(),
-            })?
-            .to_bytes();
-        let body = String::from_utf8(body.to_vec()).map_err(|error| {
-            GithubStatsError::InvalidResponse {
-                message: error.to_string(),
-            }
-        })?;
-        if !status.is_success() {
-            return Ok(Some(format!("{}\n{}", status.as_u16(), body)));
-        }
-        Ok(Some(body))
-    }
-
-    async fn get_json<T: for<'de> Deserialize<'de>>(
-        &self,
-        token: &str,
-        url: &str,
-    ) -> Result<T, GithubStatsError> {
-        let mut last_error = None;
-        for attempt in 0..3 {
-            let request = Request::builder()
-                .method(Method::GET)
-                .uri(url)
-                .header(AUTHORIZATION, format!("Bearer {token}"))
-                .header(USER_AGENT, "github-personal-stats")
-                .body(Full::new(Bytes::new()))
-                .map_err(|error| GithubStatsError::InvalidResponse {
-                    message: error.to_string(),
-                })?;
-            let Some(body) = self.request_body(request).await? else {
-                retry_delay(attempt).await;
-                continue;
-            };
-            if let Err(error) = ensure_success_body(&body) {
-                if retryable_body(&error) && attempt < 2 {
-                    last_error = Some(error);
-                    retry_delay(attempt).await;
-                    continue;
-                }
-                return Err(error);
-            }
-            return serde_json::from_str::<T>(&body).map_err(|error| {
-                GithubStatsError::InvalidResponse {
-                    message: error.to_string(),
-                }
-            });
-        }
-        Err(last_error.unwrap_or_else(|| GithubStatsError::Remote {
-            kind: RemoteErrorKind::UpstreamUnavailable,
-            message: "request failed after retries".to_owned(),
-        }))
-    }
-
-    async fn fetch_user_data_async(
-        &self,
-        config: &GithubStatsConfig,
-    ) -> Result<GithubData, GithubStatsError> {
-        let token = self.token(config)?;
-        let profile = self
-            .post::<ProfileData, _>(
-                &token,
-                PROFILE_QUERY,
-                LoginVariables {
-                    login: config.username.as_str(),
-                },
-            )
-            .await?;
-        let mut user = profile.user.ok_or_else(|| GithubStatsError::Remote {
-            kind: RemoteErrorKind::NotFound,
-            message: format!("user {} not found", config.username),
-        })?;
-        let repositories = self
-            .fetch_owned_repositories(&token, config, std::mem::take(&mut user.repositories))
-            .await?;
-        let mut contributions = BTreeMap::<String, u32>::new();
-        let authored_repository_ids = self
-            .fetch_authored_repository_ids(&token, config, &repositories.nodes)
-            .await?;
-        for year in user.contributions_collection.contribution_years.iter() {
-            let calendar = self
-                .post::<CalendarData, _>(
-                    &token,
-                    CALENDAR_QUERY,
-                    CalendarVariables {
-                        login: config.username.as_str(),
-                        from: format!("{year}-01-01T00:00:00Z"),
-                        to: format!("{year}-12-31T23:59:59Z"),
-                    },
-                )
-                .await?;
-            let Some(calendar_user) = calendar.user else {
-                continue;
-            };
-            for week in calendar_user
-                .contributions_collection
-                .contribution_calendar
-                .weeks
-            {
-                for day in week.contribution_days {
-                    contributions.insert(day.date, day.contribution_count);
-                }
-            }
-        }
-        Ok(assemble_github_data(
-            config,
-            user,
-            repositories,
-            authored_repository_ids.as_ref(),
-            contributions,
-        ))
-    }
-
-    async fn fetch_owned_repositories(
-        &self,
-        token: &str,
-        config: &GithubStatsConfig,
-        mut repositories: RepositoryConnection,
-    ) -> Result<RepositoryConnection, GithubStatsError> {
-        let mut after = repositories.page_info.end_cursor.clone();
-        while repositories.page_info.has_next_page {
-            let page = self
-                .post::<OwnedRepositoriesData, _>(
-                    token,
-                    OWNED_REPOSITORIES_QUERY,
-                    OwnedRepositoriesVariables {
-                        login: config.username.as_str(),
-                        after: after.as_deref(),
-                    },
-                )
-                .await?;
-            let Some(user) = page.user else {
-                break;
-            };
-            after = user.repositories.page_info.end_cursor.clone();
-            repositories.page_info = user.repositories.page_info;
-            repositories.nodes.extend(user.repositories.nodes);
-        }
-        Ok(repositories)
-    }
-
-    async fn fetch_authored_repository_ids(
-        &self,
-        token: &str,
-        config: &GithubStatsConfig,
-        owned_repositories: &[RepositoryNode],
-    ) -> Result<Option<BTreeSet<String>>, GithubStatsError> {
-        if config.language_scope == LanguageScope::Owned {
-            return Ok(None);
-        }
-
-        let mut repository_ids = BTreeSet::<String>::new();
-        let mut after = None::<String>;
-        loop {
-            let page = self
-                .post::<AuthoredRepositoriesData, _>(
-                    token,
-                    AUTHORED_REPOSITORIES_QUERY,
-                    AuthoredRepositoriesVariables {
-                        login: config.username.as_str(),
-                        after: after.as_deref(),
-                    },
-                )
-                .await?;
-            let Some(user) = page.user else {
-                return Ok(Some(repository_ids));
-            };
-            for repository in user.repositories_contributed_to.nodes {
-                repository_ids.insert(repository.id);
-            }
-            if !user.repositories_contributed_to.page_info.has_next_page {
-                self.add_commit_author_matches(
-                    token,
-                    config,
-                    owned_repositories,
-                    &mut repository_ids,
-                )
-                .await?;
-                return Ok(Some(repository_ids));
-            }
-            after = user.repositories_contributed_to.page_info.end_cursor;
-        }
-    }
-
-    async fn add_commit_author_matches(
-        &self,
-        token: &str,
-        config: &GithubStatsConfig,
-        owned_repositories: &[RepositoryNode],
-        repository_ids: &mut BTreeSet<String>,
-    ) -> Result<(), GithubStatsError> {
-        let mut authors = vec![config.username.clone()];
-        authors.extend(config.author_emails.iter().cloned());
-        for repository in owned_repositories {
-            if repository.is_fork || repository_ids.contains(&repository.id) {
-                continue;
-            }
-            for author in &authors {
-                if self
-                    .repository_has_author_commit(token, &repository.name_with_owner, author)
-                    .await?
-                {
-                    repository_ids.insert(repository.id.clone());
-                    break;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    async fn repository_has_author_commit(
-        &self,
-        token: &str,
-        name_with_owner: &str,
-        author: &str,
-    ) -> Result<bool, GithubStatsError> {
-        let url = repository_commits_url(name_with_owner, author);
-        match self.get_json::<Vec<serde_json::Value>>(token, &url).await {
-            Ok(commits) => Ok(!commits.is_empty()),
-            Err(GithubStatsError::Remote {
-                kind: RemoteErrorKind::NotFound,
-                ..
-            }) => Ok(false),
-            Err(error) => Err(error),
-        }
-    }
-}
-
-impl GithubClient for GithubGraphqlClient {
-    fn fetch_user_data(&self, config: &GithubStatsConfig) -> Result<GithubData, GithubStatsError> {
-        tokio::runtime::Runtime::new()
-            .map_err(|error| GithubStatsError::Remote {
-                kind: RemoteErrorKind::UnsupportedConfiguration,
-                message: error.to_string(),
-            })?
-            .block_on(self.fetch_user_data_async(config))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -398,7 +50,7 @@ impl GithubClient for MockGithubClient {
     }
 }
 
-fn aggregate_repository_languages(
+pub(crate) fn aggregate_repository_languages(
     config: &GithubStatsConfig,
     repositories: &[RepositoryNode],
     authored_repository_ids: Option<&BTreeSet<String>>,
@@ -433,7 +85,7 @@ fn aggregate_repository_languages(
         .collect()
 }
 
-fn assemble_github_data(
+pub(crate) fn assemble_github_data(
     config: &GithubStatsConfig,
     user: ProfileUser,
     repositories: RepositoryConnection,
@@ -473,7 +125,7 @@ fn assemble_github_data(
     }
 }
 
-fn http_error_kind(status: u16, body: &str) -> RemoteErrorKind {
+pub(crate) fn http_error_kind(status: u16, body: &str) -> RemoteErrorKind {
     if status == 401 || body.contains("Bad credentials") {
         RemoteErrorKind::Authentication
     } else if status == 403 && body.to_ascii_lowercase().contains("rate limit") {
@@ -487,7 +139,7 @@ fn http_error_kind(status: u16, body: &str) -> RemoteErrorKind {
     }
 }
 
-fn ensure_success_body(body: &str) -> Result<(), GithubStatsError> {
+pub(crate) fn ensure_success_body(body: &str) -> Result<(), GithubStatsError> {
     let Some((status, response_body)) = body.split_once('\n') else {
         return Ok(());
     };
@@ -500,7 +152,7 @@ fn ensure_success_body(body: &str) -> Result<(), GithubStatsError> {
     })
 }
 
-fn retryable_body(error: &GithubStatsError) -> bool {
+pub(crate) fn retryable_body(error: &GithubStatsError) -> bool {
     matches!(
         error,
         GithubStatsError::Remote {
@@ -510,11 +162,11 @@ fn retryable_body(error: &GithubStatsError) -> bool {
     )
 }
 
-async fn retry_delay(attempt: usize) {
+pub(crate) async fn retry_delay(attempt: usize) {
     tokio::time::sleep(std::time::Duration::from_millis(300 * (attempt as u64 + 1))).await;
 }
 
-fn repository_commits_url(name_with_owner: &str, author: &str) -> String {
+pub(crate) fn repository_commits_url(name_with_owner: &str, author: &str) -> String {
     let path = name_with_owner
         .split('/')
         .map(percent_encode_component)
@@ -538,7 +190,7 @@ fn percent_encode_component(value: &str) -> String {
     encoded
 }
 
-fn graphql_error(errors: Vec<GraphqlError>) -> GithubStatsError {
+pub(crate) fn graphql_error(errors: Vec<GraphqlError>) -> GithubStatsError {
     let message = errors
         .first()
         .map(|error| error.message.clone())
@@ -564,198 +216,198 @@ fn graphql_error(errors: Vec<GraphqlError>) -> GithubStatsError {
 }
 
 #[derive(Debug, Serialize)]
-struct GraphqlRequest<'a, V> {
-    query: &'a str,
-    variables: V,
+pub(crate) struct GraphqlRequest<'a, V> {
+    pub(crate) query: &'a str,
+    pub(crate) variables: V,
 }
 
 #[derive(Debug, Serialize)]
-struct LoginVariables<'a> {
-    login: &'a str,
+pub(crate) struct LoginVariables<'a> {
+    pub(crate) login: &'a str,
 }
 
 #[derive(Debug, Serialize)]
-struct CalendarVariables<'a> {
-    login: &'a str,
-    from: String,
-    to: String,
+pub(crate) struct CalendarVariables<'a> {
+    pub(crate) login: &'a str,
+    pub(crate) from: String,
+    pub(crate) to: String,
 }
 
 #[derive(Debug, Serialize)]
-struct AuthoredRepositoriesVariables<'a> {
-    login: &'a str,
-    after: Option<&'a str>,
+pub(crate) struct AuthoredRepositoriesVariables<'a> {
+    pub(crate) login: &'a str,
+    pub(crate) after: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
-struct OwnedRepositoriesVariables<'a> {
-    login: &'a str,
-    after: Option<&'a str>,
+pub(crate) struct OwnedRepositoriesVariables<'a> {
+    pub(crate) login: &'a str,
+    pub(crate) after: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GraphqlResponse<T> {
-    data: Option<T>,
-    errors: Option<Vec<GraphqlError>>,
+pub(crate) struct GraphqlResponse<T> {
+    pub(crate) data: Option<T>,
+    pub(crate) errors: Option<Vec<GraphqlError>>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GraphqlError {
-    message: String,
-    extensions: Option<GraphqlErrorExtensions>,
+pub(crate) struct GraphqlError {
+    pub(crate) message: String,
+    pub(crate) extensions: Option<GraphqlErrorExtensions>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GraphqlErrorExtensions {
-    code: Option<String>,
+pub(crate) struct GraphqlErrorExtensions {
+    pub(crate) code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ProfileData {
-    user: Option<ProfileUser>,
+pub(crate) struct ProfileData {
+    pub(crate) user: Option<ProfileUser>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OwnedRepositoriesData {
-    user: Option<OwnedRepositoriesUser>,
+pub(crate) struct OwnedRepositoriesData {
+    pub(crate) user: Option<OwnedRepositoriesUser>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OwnedRepositoriesUser {
-    repositories: RepositoryConnection,
+pub(crate) struct OwnedRepositoriesUser {
+    pub(crate) repositories: RepositoryConnection,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProfileUser {
-    login: String,
-    name: Option<String>,
-    followers: TotalCount,
-    repositories: RepositoryConnection,
-    pull_requests: TotalCount,
-    issues: TotalCount,
-    repositories_contributed_to: TotalCount,
-    contributions_collection: ContributionsCollection,
+pub(crate) struct ProfileUser {
+    pub(crate) login: String,
+    pub(crate) name: Option<String>,
+    pub(crate) followers: TotalCount,
+    pub(crate) repositories: RepositoryConnection,
+    pub(crate) pull_requests: TotalCount,
+    pub(crate) issues: TotalCount,
+    pub(crate) repositories_contributed_to: TotalCount,
+    pub(crate) contributions_collection: ContributionsCollection,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ContributionsCollection {
-    contribution_years: Vec<i32>,
-    total_commit_contributions: u64,
-    total_pull_request_review_contributions: u64,
+pub(crate) struct ContributionsCollection {
+    pub(crate) contribution_years: Vec<i32>,
+    pub(crate) total_commit_contributions: u64,
+    pub(crate) total_pull_request_review_contributions: u64,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TotalCount {
-    total_count: u64,
+pub(crate) struct TotalCount {
+    pub(crate) total_count: u64,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RepositoryConnection {
-    total_count: u64,
-    nodes: Vec<RepositoryNode>,
+pub(crate) struct RepositoryConnection {
+    pub(crate) total_count: u64,
+    pub(crate) nodes: Vec<RepositoryNode>,
     #[serde(default)]
-    page_info: PageInfo,
+    pub(crate) page_info: PageInfo,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RepositoryNode {
-    id: String,
-    name_with_owner: String,
-    is_fork: bool,
-    stargazer_count: u64,
-    languages: LanguageConnection,
+pub(crate) struct RepositoryNode {
+    pub(crate) id: String,
+    pub(crate) name_with_owner: String,
+    pub(crate) is_fork: bool,
+    pub(crate) stargazer_count: u64,
+    pub(crate) languages: LanguageConnection,
 }
 
 #[derive(Debug, Deserialize)]
-struct AuthoredRepositoriesData {
-    user: Option<AuthoredRepositoriesUser>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AuthoredRepositoriesUser {
-    repositories_contributed_to: AuthoredRepositoryConnection,
+pub(crate) struct AuthoredRepositoriesData {
+    pub(crate) user: Option<AuthoredRepositoriesUser>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AuthoredRepositoryConnection {
-    nodes: Vec<AuthoredRepositoryNode>,
+pub(crate) struct AuthoredRepositoriesUser {
+    pub(crate) repositories_contributed_to: AuthoredRepositoryConnection,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AuthoredRepositoryConnection {
+    pub(crate) nodes: Vec<AuthoredRepositoryNode>,
     #[serde(default)]
-    page_info: PageInfo,
+    pub(crate) page_info: PageInfo,
 }
 
 #[derive(Debug, Deserialize)]
-struct AuthoredRepositoryNode {
-    id: String,
+pub(crate) struct AuthoredRepositoryNode {
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PageInfo {
-    has_next_page: bool,
-    end_cursor: Option<String>,
+pub(crate) struct PageInfo {
+    pub(crate) has_next_page: bool,
+    pub(crate) end_cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct LanguageConnection {
+pub(crate) struct LanguageConnection {
     #[serde(rename = "totalSize")]
-    total_size: u64,
-    edges: Vec<LanguageEdge>,
+    pub(crate) total_size: u64,
+    pub(crate) edges: Vec<LanguageEdge>,
 }
 
 #[derive(Debug, Deserialize)]
-struct LanguageEdge {
-    size: u64,
-    node: LanguageNode,
+pub(crate) struct LanguageEdge {
+    pub(crate) size: u64,
+    pub(crate) node: LanguageNode,
 }
 
 #[derive(Debug, Deserialize)]
-struct LanguageNode {
-    name: String,
+pub(crate) struct LanguageNode {
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct CalendarData {
-    user: Option<CalendarUser>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CalendarUser {
-    contributions_collection: CalendarContributionsCollection,
+pub(crate) struct CalendarData {
+    pub(crate) user: Option<CalendarUser>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CalendarContributionsCollection {
-    contribution_calendar: ContributionCalendar,
-}
-
-#[derive(Debug, Deserialize)]
-struct ContributionCalendar {
-    weeks: Vec<ContributionWeek>,
+pub(crate) struct CalendarUser {
+    pub(crate) contributions_collection: CalendarContributionsCollection,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ContributionWeek {
-    contribution_days: Vec<ContributionDayNode>,
+pub(crate) struct CalendarContributionsCollection {
+    pub(crate) contribution_calendar: ContributionCalendar,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ContributionCalendar {
+    pub(crate) weeks: Vec<ContributionWeek>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ContributionDayNode {
-    date: String,
-    contribution_count: u32,
+pub(crate) struct ContributionWeek {
+    pub(crate) contribution_days: Vec<ContributionDayNode>,
 }
 
-const PROFILE_QUERY: &str = r#"
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ContributionDayNode {
+    pub(crate) date: String,
+    pub(crate) contribution_count: u32,
+}
+
+pub(crate) const PROFILE_QUERY: &str = r#"
 query GitHubPersonalStatsProfile($login: String!) {
   user(login: $login) {
     login
@@ -787,7 +439,7 @@ query GitHubPersonalStatsProfile($login: String!) {
 }
 "#;
 
-const OWNED_REPOSITORIES_QUERY: &str = r#"
+pub(crate) const OWNED_REPOSITORIES_QUERY: &str = r#"
 query GitHubPersonalStatsOwnedRepositories($login: String!, $after: String) {
   user(login: $login) {
     repositories(first: 100, after: $after, ownerAffiliations: OWNER, orderBy: {field: STARGAZERS, direction: DESC}) {
@@ -808,7 +460,7 @@ query GitHubPersonalStatsOwnedRepositories($login: String!, $after: String) {
 }
 "#;
 
-const AUTHORED_REPOSITORIES_QUERY: &str = r#"
+pub(crate) const AUTHORED_REPOSITORIES_QUERY: &str = r#"
 query GitHubPersonalStatsAuthoredRepositories($login: String!, $after: String) {
   user(login: $login) {
     repositoriesContributedTo(first: 100, after: $after, contributionTypes: COMMIT, includeUserRepositories: true, orderBy: {field: STARGAZERS, direction: DESC}) {
@@ -819,7 +471,7 @@ query GitHubPersonalStatsAuthoredRepositories($login: String!, $after: String) {
 }
 "#;
 
-const CALENDAR_QUERY: &str = r#"
+pub(crate) const CALENDAR_QUERY: &str = r#"
 query GitHubPersonalStatsCalendar($login: String!, $from: DateTime!, $to: DateTime!) {
   user(login: $login) {
     contributionsCollection(from: $from, to: $to) {

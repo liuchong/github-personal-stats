@@ -347,3 +347,122 @@ fn a_configured_identity_is_left_alone() {
     let author = git(&repo, &["log", "-1", "--format=%ae"]);
     assert!(author.contains("test@example.invalid"), "{author}");
 }
+
+/// Both the collector and the daemon publish, and they agree about what the
+/// options mean only because they come through here.
+#[test]
+fn the_options_that_choose_a_sink_mean_the_same_to_every_caller() {
+    let snapshot = PathBuf::from("/tmp/record");
+
+    let file =
+        github_personal_stats_collect::sink::choose(None, &snapshot, None, None, None, false)
+            .expect("no sink named means the file one");
+    assert!(file.describe().contains("/tmp/record"));
+
+    let git = github_personal_stats_collect::sink::choose(
+        Some("git"),
+        &snapshot,
+        Some("/tmp/checkout"),
+        Some("git@example.invalid:me/data.git"),
+        None,
+        true,
+    )
+    .expect("a git sink with a checkout should be built");
+    let said = git.describe();
+    assert!(said.contains("git@example.invalid:me/data.git"), "{said}");
+    // The branch is master unless asked otherwise, everywhere.
+    assert!(said.ends_with("on master"), "{said}");
+
+    let without_push = github_personal_stats_collect::sink::choose(
+        Some("git"),
+        &snapshot,
+        Some("/tmp/checkout"),
+        None,
+        Some("trunk"),
+        false,
+    )
+    .unwrap()
+    .describe();
+    assert!(without_push.contains("without pushing"), "{without_push}");
+    assert!(without_push.contains("on trunk"), "{without_push}");
+
+    let no_checkout =
+        github_personal_stats_collect::sink::choose(Some("git"), &snapshot, None, None, None, true)
+            .err()
+            .expect("a git sink with nowhere to work is not a sink");
+    assert!(no_checkout.to_string().contains("--repo"));
+
+    let unknown = github_personal_stats_collect::sink::choose(
+        Some("http"),
+        &snapshot,
+        None,
+        None,
+        None,
+        true,
+    )
+    .err()
+    .expect("an unwritten sink must be refused rather than silently ignored");
+    assert!(unknown.to_string().contains("there is file and git"));
+}
+
+#[test]
+fn a_checkout_with_no_history_adopts_the_remotes() {
+    let root = scratch("adopt");
+    let origin = bare(&root);
+
+    // One machine publishes, so the remote has history.
+    cloning(&root.join("first"), &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
+
+    // A second checkout is made by hand with nothing in it, as a restored machine
+    // or a hand-made directory would be, and must not fight the remote.
+    let second = root.join("second");
+    fs::create_dir_all(&second).unwrap();
+    git(&second, &["init", "--quiet"]);
+    git(&second, &["remote", "add", "origin", &origin]);
+
+    let sink = GitSink {
+        repo: second.clone(),
+        origin: Some(origin.clone()),
+        branch: "master".to_owned(),
+        push: true,
+    };
+    let mut later = snapshot("2026-08-24T19:30:00Z", 120);
+    later.machine = "m-second".to_owned();
+    sink.publish(&later, Recount::KeepFuller)
+        .expect("an empty checkout should adopt the remote's history, not diverge from it");
+
+    // The remote's commit is an ancestor of what was pushed, which is what makes
+    // this a fast-forward for every other machine.
+    let history = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
+    assert_eq!(history.lines().count(), 2, "{history}");
+}
+
+#[test]
+fn a_remote_that_moved_between_the_commit_and_the_push_is_caught_up_with() {
+    let root = scratch("moved");
+    let origin = bare(&root);
+    let ours = root.join("ours");
+    let theirs = root.join("theirs");
+
+    cloning(&ours, &origin)
+        .publish(&snapshot("2026-08-24T19:00:00Z", 60), Recount::KeepFuller)
+        .unwrap();
+
+    // Another machine pushes while we were working, so our first push is refused.
+    let mut other = snapshot("2026-08-24T19:10:00Z", 90);
+    other.machine = "m-other".to_owned();
+    cloning(&theirs, &origin)
+        .publish(&other, Recount::KeepFuller)
+        .unwrap();
+
+    let mut ours_again = snapshot("2026-08-24T19:20:00Z", 300);
+    ours_again.machine = "m-1234abcd".to_owned();
+    cloning(&ours, &origin)
+        .publish(&ours_again, Recount::KeepFuller)
+        .expect("a refused push should be retried after catching up");
+
+    let history = git(&PathBuf::from(&origin), &["log", "--oneline", "master"]);
+    assert_eq!(history.lines().count(), 3, "{history}");
+}
