@@ -297,3 +297,49 @@ One behaviour was deliberately reversed. An unreadable published file used to be
 
 Migration was done on the live repository and checked rather than assumed: 102 days before, 102 after, no day missing, and no field smaller in any day. Agent seconds rose by seventy-six, which is the work done while the check ran.
 
+
+## Collecting Is One Job And Presenting Is Another
+
+The activity work was asked for as a card and built as a pipeline, and the shape it settled into is worth keeping: the collector records facts at their finest grain, and every view is a fold over them.
+
+A fact is a duration or a count with everything known about it attached — the measure it belongs to, the language, the author, the model. Nothing is pre-summed for a particular view. A block of a chart then says which value it wants, what to break it down by, how many rows and what to divide each bar between, and the same fold answers all of them. What this bought was not elegance: it is why hours by model, lines by language and tokens by measure could each be added without touching the collector, and why a fold is read once and folded repeatedly rather than the record being read per block.
+
+Two vocabulary mistakes were made and are worth naming. A day holds several measures of time that overlap — an editor's presence, an agent's work, hours imported from elsewhere — and a block that did not say which one it read let a reader assume it was the only one; every heading names its measure now. And the author of anything not attributable was called `me`, which quietly asserted that a formatter's output and a shell script's writing were typed by a person. It is `unattributed`, which is all the source actually knows.
+
+Alignment turned out to be part of the meaning rather than a finish. A column of durations right-aligned as whole strings lines up the word `mins` and not the digits, so `4 hrs 7 mins` sits under `11 hrs 30 mins` looking broken; the minutes field is padded to two characters instead. In a monospace chart the reader compares by eye down a column, and a column that does not line up is a column that cannot be compared.
+
+## Ninety Per Cent Of What Looked Like A Person Typing Was One Second Of Inventory
+
+The chart reported that nine and three quarter per cent of lines were not written by an agent, on a machine where essentially everything is. The instinct was to argue about the label. The number was wrong, and finding out how took one query.
+
+Of 48,039 lines attributed to `source='human'`, 99.36 per cent arrived within a single second, spread across 135 files and 11 languages. That is not typing; it is the editor taking inventory of a workspace, or backfilling its own table, and recording each existing line as it went. The smaller remainder had the same character at a smaller scale: a formatter rewriting a file, a shell command writing one.
+
+So a second in which unattributed lines appear across more than eight distinct files is discarded, as a sweep rather than as work. The threshold is a judgement, and it is stated where the query is: nobody edits nine files in one second, and a run that legitimately touches many files at once is a tool run, which is exactly what is being excluded. The agent share went from 90.24 to 99.93 per cent, which matches how the work is actually done.
+
+Two general lessons. When a figure contradicts what you know about your own behaviour, the figure is a hypothesis about the data and the fastest route is to ask the data how it is distributed — the timestamp histogram answered in one query what an argument about wording could not. And a source's column names are the source's opinions: Cursor's `source='human'` means "no AI request accounts for this", which is not the same claim as the word suggests, and the code says so where it reads it.
+
+## The Measure Of Being At The Editor Was Measuring The Wrong Person
+
+The editor plugin reported `editor 0h 0m` after thirty-seven hours of continuous work with the window open. The transport was fine — a hand-made pulse was accepted, the token matched, the extension was loaded in the right editor. Zero was what the design asked for.
+
+It watched the things only a person does: saving, switching file, moving the caret. It deliberately ignored documents changing, on the reasoning that an agent editing a file raises that event exactly as typing does, and counting it would put agent work into the measure of a person being present. The reasoning is sound and the conclusion was still useless, because a day spent directing an agent raises none of the events it did watch: the prompt goes into a panel that is not a `TextDocument`, and the edits come back from something that is not you. A more precise answer to the wrong question.
+
+The signal that is true of every way of working is window focus. A pulse now goes out when the window takes focus and every thirty seconds while it keeps it, whoever is typing, filed under whatever file is open. What this gives up is a window left focused while you walk away, which the idle timeout bounds and cannot detect. That error is in one direction and small; reporting nothing for a working day was not.
+
+Three things came out of it. A measure has to be defined by what can be observed about the way work is actually done, not by the cleanest available proxy for the way it used to be done. The `write` flag the pulse had carried since the beginning turned out to have no reader anywhere, so it went — a field nothing consumes is not provenance, it is a claim nobody checks. And a cached token that the daemon has since rotated used to be met with a 4xx, a warning nobody sees and the pulses dropped for ever; a 401 now forgets the token and keeps the pulses for the next attempt.
+
+## A Flag That Parsed, A Record That Loaded, And A Card That Drew Nothing
+
+`generate --card activity --activity-record <dir>` accepted the flag, read the record, and drew `No activity recorded yet`. It had done so since the card was added, because the aggregation returns an empty comparison for that card by design — the profile it aggregates has no activity in it — and nothing on the `generate` path ever built one from the record instead. Every part worked and the wire between two of them was missing.
+
+There was no test. That is the whole explanation, and the sequel proves the point better than the bug does: with the record connected, the top row of the card was a bar with no label holding sixty-four per cent, because most measured hours belong to terminal agents that never say what was being worked on, and the card ranked that nameless share first. The text chart had been fixed for exactly this weeks earlier and the card knew nothing about it — two views filtering one list by their own rules, which is how they come to disagree. Worse, they disagreed on arithmetic too: the card's shares were computed against every measured hour and the chart's against the hours that could be placed, so the same language read 9.4 per cent on one and 26.28 per cent on the other.
+
+The fix is one accessor on the fold that both read, and one figure both declare. Shares are shares of what could be placed, and the remainder is stated in the same words in both places. The tests added are the ones that would have caught each stage: that the card draws from a record at all, that a nameless share is declared rather than ranked, and that a card and a chart of the same measure give the same number.
+
+## Coverage Was Measuring The Decision Not To Test The Network
+
+The gate sat at eighty-five per cent and the workspace at eighty-three, and the largest single block of uncovered lines was two hundred and ninety-five in `core/src/client.rs`. They were all one thing: the connector is built https-only, so it cannot be pointed at a local server, and every line of `post`, `request_body` and the `fetch_*` helpers can only run against GitHub itself.
+
+Padding the percentage elsewhere would have left that permanently dragging the number down, and excluding the file would have hidden how well the rest of it was covered — because everything below those lines, assembling a profile, ranking languages, reading an error body, building a URL, was already tested. The boundary was exactly where the file split naturally, so it was split: `remote.rs` holds what talks to GitHub and is excluded on the same grounds as a binary's `main`, and `client.rs` holds every decision made about what comes back and is measured. Eighty-seven and a half per cent, of the part where a number means something.
+
+The other file worth a mention is the git sink, which publishes the record and was at sixty-three per cent with its shared entry point — the function both the collector and the daemon call to decide what a sink option means — untested altogether. It has tests now, along with a checkout with no history adopting the remote's and a push refused because the remote moved. That was worth doing whatever the gate said.
