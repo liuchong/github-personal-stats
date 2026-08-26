@@ -636,28 +636,28 @@ With nothing configured you get what was written, who wrote it, and what wrote i
 ```txt
 LINES BY LANGUAGE
 
-Total        +492,274   lines, 90.24% by an agent
+Total        +451,076   lines, 99.93% by an agent
 
-Rust         +121,554   #################========   24.69 %
-Markdown     +118,978   #######################=-   24.16 %
-Go            +94,234   ##################=------   19.14 %
+Markdown     +118,648   #########################   26.30 %
+Go            +91,139   ###################------   20.20 %
+Rust          +85,184   ##################-------   18.88 %
 
 LINES BY AUTHOR
 
-Total             +492,274   lines, last 30 days
+Total          +451,076   lines, last 30 days
 
-agent             +444,235   #########################   90.24 %
-not by an agent    +48,039   ###----------------------    9.75 %
+agent          +450,768   #########################   99.93 %
+unattributed       +308   -------------------------    0.06 %
 
 LINES BY MODEL
 
-Total            +444,235   lines, 90.24% by an agent
+Total            +450,768   lines, 99.93% by an agent
 
-gpt-5.6-sol      +126,003   #########################   28.36 %
-claude-opus-5    +122,111   ########################-   27.48 %
-gpt-5.5          +109,701   ######################---   24.69 %
+gpt-5.6-sol      +126,001   #########################   27.95 %
+claude-opus-5    +124,986   #########################   27.72 %
+gpt-5.5          +109,683   ######################---   24.33 %
 
-# agent    = not by an agent    - rest
+# agent    = unattributed    - rest
 ```
 
 ### What the figures mean
@@ -672,9 +672,11 @@ Three different things can be counted, they are measured by different means, and
 
 `lines` is the default because a line is counted rather than inferred. The editor records a row per line as it appears, which is why it can say what language the line was in and which model produced it.
 
-It is also why the figures are additions only, written `+492,274` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
+It is also why the figures are additions only, written `+451,076` with nothing after them. A line that was deleted stops having a row, so there is nothing left to count and no removal can be reported. That absence is what the source can see rather than a gap waiting to be filled, and reporting removals honestly would mean watching each edit as it happens, which is the editor plugin's job.
 
-`not by an agent` means only that: nothing observed an agent writing it. It is a weaker claim than a person having typed it, and it is deliberately not called "me". Only an editor plugin watching keystrokes can honestly make the stronger claim.
+`unattributed` means what it says and no more: no request accounts for these lines. It is not a count of what you typed, and it deliberately does not claim to be. A formatter reformatting a file, a shell command writing one, a terminal agent editing outside the editor and a person typing all land here identically, because the editor recorded that the lines appeared and nothing recorded what produced them. Only a plugin watching each edit as it happens can honestly say a person typed something.
+
+For the same reason, moments where unattributed lines appear across more than a handful of files at once are left out of the count altogether. An edit happens to a file; lines turning up in a hundred files inside one second is the tracker taking inventory of a workspace it has just been pointed at, or a formatter sweeping a tree. Those lines were on disk long before that second, so counting them would credit a month with work done over years, and attribute it to nobody in particular. On this record the distinction is not marginal: the largest sweep put 47,804 lines across 135 files in a single second, while no other unattributed moment reached beyond four files and no generated edit reached beyond fourteen. Left in, it would have reported 9.75% of a month as not written by an agent, and made one language look a third hand-written.
 
 ### How time is measured
 
@@ -742,24 +744,24 @@ Values are `lines`, `time` and `tokens`. Dimensions are `languages`, `models`, `
 | `title=…` | Replaces the heading |
 | `measure=…` | Reads a named measure of time rather than the chart's |
 
-Every bar is already divided by author, so a glance says which languages an agent wrote most of. `authors=on` puts the number beside it, which is what you want when the interesting rows are the ones that go against the average:
+Every bar is already divided by author, so its shape says how much of a language an agent wrote. `authors=on` writes the number beside it, for when the difference between rows is too small to read off twenty-five characters of glyph:
 
 ```txt
 LINES BY LANGUAGE
 
-Total        +492,274   lines, 90.24% by an agent
+Total        +451,076   lines, 99.93% by an agent
 
-Rust         +121,554   #################========   24.69 %    69.50% agent
-Markdown     +118,978   #######################=-   24.16 %    96.36% agent
-Go            +94,234   ##################=------   19.14 %    96.61% agent
-Zig           +28,323   ######-------------------    5.75 %   100.00% agent
-Python        +25,323   #####--------------------    5.14 %    91.38% agent
-TypeScript    +24,649   #####--------------------    5.00 %   100.00% agent
+Markdown     +118,648   #########################   26.30 %    99.96% agent
+Go            +91,139   ###################------   20.20 %    99.99% agent
+Rust          +85,184   ##################-------   18.88 %    99.89% agent
+Zig           +28,527   ######-------------------    6.32 %   100.00% agent
+TypeScript    +24,649   #####--------------------    5.46 %   100.00% agent
+Python        +23,451   #####--------------------    5.19 %   100.00% agent
 
-# agent    = not by an agent    - rest
+# agent    = unattributed    - rest
 ```
 
-On a block of hours the same setting writes `69.50% agent lines`, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.
+On a block of hours the same setting writes `99.89% agent lines`, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.
 
 A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.
 
@@ -788,15 +790,15 @@ Everything is padded to a monospace grid, so the chart belongs in a fenced block
 
 ### When the counting itself changes
 
-The record keeps whichever reading of a day saw the most, which is right while the way time is counted stays the same, and wrong the moment it changes: a larger figure from an old rule is not a fuller reading, and nothing smaller can ever replace it.
+The record keeps whichever reading of a day saw the most, which is right while the counting stays the same, and wrong the moment it changes: a larger figure from an old rule is not a fuller reading, and nothing smaller can ever replace it. Left alone, a figure could only ever be corrected upwards.
 
 So a change of rule can be asked for explicitly:
 
 ```sh
-github-personal-stats-collect --recount-time
+github-personal-stats-collect --recount
 ```
 
-This replaces the time recorded for the days the current run can actually see, and leaves everything else alone — lines, commits and tokens are untouched, and so is any day older than your sources remember. The daemon never does this on its own.
+This replaces the hours and lines recorded for the days the current run can actually see. Each measure is replaced only where the run has something to say about it, because the sources forget at different rates: a day whose editor lines have aged out still arrives with its commits, and treating that as a reading of zero lines would delete the only copy of them. Days older than your sources remember are not touched at all, and the daemon never does this on its own.
 
 ## Local Activity Storage
 

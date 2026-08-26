@@ -318,7 +318,9 @@ fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock 
     // A bar is only ever divided by authorship at present, so that is what its
     // parts are called. The words live here rather than in the layout because the
     // layout has no way of knowing what a bar was divided by.
-    block.with_rows(rows, total).divided_into(AGENT, NOT_AGENT)
+    block
+        .with_rows(rows, total)
+        .divided_into(AGENT, UNATTRIBUTED)
 }
 
 /// What the record can say about who wrote a line.
@@ -329,7 +331,10 @@ fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock 
 /// "me" would claim the stronger thing, and only an editor plugin watching
 /// keystrokes can honestly claim that.
 const AGENT: &str = "agent";
-const NOT_AGENT: &str = "not by an agent";
+/// Everything no request accounts for, which is not the same as everything a
+/// person did. A shell command, a formatter and a terminal agent all land here,
+/// so the row says what is true of all of them rather than guessing which.
+const UNATTRIBUTED: &str = "unattributed";
 
 /// The block's total.
 ///
@@ -550,7 +555,7 @@ fn author_lines(window: &ActivityWindow, spec: &BlockSpec) -> Fold {
     let rows = [
         (AGENT, window.lines.authors.agent, window.time.authors.agent),
         (
-            NOT_AGENT,
+            UNATTRIBUTED,
             window.lines.authors.human,
             window.time.authors.human,
         ),

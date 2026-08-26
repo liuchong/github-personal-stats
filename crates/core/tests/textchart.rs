@@ -132,7 +132,7 @@ fn a_divided_row_shows_the_split_inside_its_bar() {
             vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
             1_000,
         )
-        .divided_into("agent", "not by an agent");
+        .divided_into("agent", "unattributed");
     let style = ChartStyle {
         bar_cells: 20,
         ..ChartStyle::default()

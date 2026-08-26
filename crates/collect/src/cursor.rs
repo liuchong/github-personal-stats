@@ -27,6 +27,26 @@ const COMMITTED_QUERY: &str = "SELECT commitDate, \
      linesAdded, linesDeleted \
      FROM scored_commits GROUP BY commitHash";
 
+/// Moments where lines nothing generated appeared across too many files at once
+/// to have been edited.
+///
+/// An edit happens to a file. When the tracker records unattributed lines in a
+/// dozen files inside the same second it is not watching anyone work, it is
+/// taking inventory: the sweep it makes of a workspace it has just been pointed
+/// at, or the pass a formatter makes over a tree. Measured on this record the two
+/// kinds do not overlap — the largest sweep put 47,804 lines across 135 files in
+/// one second, where no other unattributed moment reached beyond four files, and
+/// no generated edit reached beyond fourteen. Counting the sweep as work would
+/// have credited a month with tens of thousands of lines that were on disk before
+/// the tracker existed, and the day it landed on was not even the day they were
+/// written.
+///
+/// Only unattributed rows are weighed. A generated edit is accounted for by the
+/// request behind it however many files it touched.
+const SWEEPS: &str = "SELECT createdAt / 1000 FROM ai_code_hashes \
+     WHERE source = 'human' GROUP BY createdAt / 1000 \
+     HAVING COUNT(DISTINCT fileName) > 8";
+
 /// Lines grouped as finely as the source allows: by day, by who wrote them, by
 /// which model, and by what file they landed in.
 ///
@@ -37,7 +57,9 @@ const COMMITTED_QUERY: &str = "SELECT commitDate, \
 const GENERATED_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
      source, COALESCE(NULLIF(model, ''), '') AS model, \
      COALESCE(fileExtension, '') AS extension, COUNT(*) AS lines \
-     FROM ai_code_hashes GROUP BY day, source, model, extension";
+     FROM ai_code_hashes \
+     WHERE NOT (source = 'human' AND createdAt / 1000 IN (SELECT * FROM sweeps)) \
+     GROUP BY day, source, model, extension";
 
 /// Moments, kept by who caused them as well as by what file they touched.
 ///
@@ -49,7 +71,18 @@ const EVENT_QUERY: &str = "SELECT createdAt / 1000 AS second, \
      date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
      COALESCE(fileExtension, '') AS extension, source, \
      COALESCE(NULLIF(model, ''), '') AS model, COUNT(*) AS weight \
-     FROM ai_code_hashes GROUP BY second, extension, source, model ORDER BY second";
+     FROM ai_code_hashes \
+     WHERE NOT (source = 'human' AND createdAt / 1000 IN (SELECT * FROM sweeps)) \
+     GROUP BY second, extension, source, model ORDER BY second";
+
+/// Puts the definition of a sweep in front of a query that leaves them out.
+///
+/// The two readings of the table have to agree about what a sweep is, or a moment
+/// could be dropped from the lines and kept in the timeline, and an inventory
+/// would go on opening a session on a day nobody worked.
+fn excluding_sweeps(query: &str) -> String {
+    format!("WITH sweeps AS ({SWEEPS}) {query}")
+}
 
 const REQUEST_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
      COUNT(DISTINCT requestId) AS requests \
@@ -169,7 +202,7 @@ fn read_generated(
     days: &mut BTreeMap<String, DayBucket>,
 ) -> Result<(), CollectError> {
     let mut statement = connection
-        .prepare(GENERATED_QUERY)
+        .prepare(&excluding_sweeps(GENERATED_QUERY))
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
     let rows = statement
@@ -230,7 +263,7 @@ fn author_of(source: &str) -> Author {
 
 fn read_moments(connection: &Connection) -> Result<Vec<Event>, CollectError> {
     let mut statement = connection
-        .prepare(EVENT_QUERY)
+        .prepare(&excluding_sweeps(EVENT_QUERY))
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
     let rows = statement

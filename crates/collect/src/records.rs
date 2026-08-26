@@ -142,7 +142,7 @@ pub fn publish(
 
     let mut held = keep_fuller_days(&published, &snapshot.days);
     if recount == Recount::Replace {
-        recount_time(&mut held, &snapshot.days);
+        replace_readings(&mut held, &snapshot.days);
     }
 
     for day in &held {
@@ -173,14 +173,28 @@ pub fn publish(
     Ok(written)
 }
 
-/// Puts this reading's time on the days it covers, in place of what was there.
+/// Puts this reading's figures on the days it can see, in place of what was there.
 ///
-/// A day the reading did not reach keeps the time it had: the sources forget, and
-/// a day they have forgotten is not a day that held no work.
-fn recount_time(held: &mut [DayBucket], fresh: &[DayBucket]) {
+/// Each measure is replaced only where this reading has something to say about it,
+/// because the sources forget at different rates. A day whose lines have aged out
+/// still arrives with its commits, and taking that as a reading of zero lines
+/// would delete the only copy of them; a day the reading did not reach at all
+/// keeps everything it had.
+fn replace_readings(held: &mut [DayBucket], fresh: &[DayBucket]) {
     for day in held.iter_mut() {
-        if let Some(reading) = fresh.iter().find(|other| other.date == day.date) {
-            day.time = reading.time.clone();
+        let Some(reading) = fresh.iter().find(|other| other.date == day.date) else {
+            continue;
+        };
+        // Measure by measure rather than the whole map, or a run made while the
+        // editor plugin was quiet would take the agent's hours as the whole
+        // reading and delete the editor's.
+        for (measure, bucket) in &reading.time {
+            if bucket.seconds > 0 {
+                day.time.insert(measure.clone(), bucket.clone());
+            }
+        }
+        if !reading.lines.is_empty() {
+            day.lines = reading.lines.clone();
         }
     }
 }

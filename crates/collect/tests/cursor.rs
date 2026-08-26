@@ -69,7 +69,8 @@ fn database(root: &Path) -> PathBuf {
                 source TEXT,
                 model TEXT,
                 fileExtension TEXT,
-                requestId TEXT
+                requestId TEXT,
+                fileName TEXT
              );",
         )
         .expect("the schema should be created");
@@ -93,13 +94,49 @@ fn commit(path: &Path, hash: &str, date: &str, counts: [i64; 10]) {
 }
 
 fn hash(path: &Path, at_seconds: i64, source: &str, model: &str, ext: &str, request: &str) {
+    written_in(
+        path,
+        at_seconds,
+        source,
+        model,
+        ext,
+        request,
+        &format!("a.{ext}"),
+    );
+}
+
+fn written_in(
+    path: &Path,
+    at_seconds: i64,
+    source: &str,
+    model: &str,
+    ext: &str,
+    request: &str,
+    file: &str,
+) {
     let connection = Connection::open(path).unwrap();
     connection
         .execute(
-            "INSERT INTO ai_code_hashes VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![at_seconds * 1_000, source, model, ext, request],
+            "INSERT INTO ai_code_hashes VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![at_seconds * 1_000, source, model, ext, request, file],
         )
         .expect("a hash row should insert");
+}
+
+/// One second in which unattributed lines turn up all over a tree, which is what
+/// the tracker taking inventory of a workspace looks like.
+fn sweep(path: &Path, at_seconds: i64, files: usize) {
+    for index in 0..files {
+        written_in(
+            path,
+            at_seconds,
+            "human",
+            "",
+            "rs",
+            "",
+            &format!("src/file{index}.rs"),
+        );
+    }
 }
 
 /// Midnight UTC on 24 August 2026, plus an offset in seconds.
@@ -459,4 +496,48 @@ fn the_database_is_looked_for_where_cursor_keeps_it() {
 
     assert!(path.ends_with("ai-code-tracking.db"), "{path:?}");
     assert!(path.to_string_lossy().contains(".cursor"), "{path:?}");
+}
+
+/// The failure this guards against was a month credited with tens of thousands of
+/// lines that were on disk before the tracker existed, all landing in one second
+/// and all attributed to a person who had typed none of them.
+#[test]
+fn taking_inventory_of_a_workspace_is_not_a_month_of_writing() {
+    let root = scratch("sweep");
+    let path = database(&root);
+    // What the reader should keep: an agent's edit, and a small unattributed
+    // write of the kind a formatter or a shell command leaves behind.
+    hash(&path, at(3_600), "composer", "a-model", "rs", "r1");
+    hash(&path, at(3_601), "human", "", "rs", "");
+    // What it should not: a sweep of a tree, an order of magnitude more files in
+    // a single second than any edit touches.
+    sweep(&path, at(7_200), 60);
+
+    let days = read(&path, 300).expect("the database should read");
+    let day = days.values().next().expect("one day");
+
+    assert_eq!(written(day, Author::Agent, "a-model"), 1);
+    assert_eq!(
+        written(day, Author::Human, ""),
+        1,
+        "a small unattributed write is a change the editor saw and cannot place, \
+         which is worth keeping: {:?}",
+        day.lines
+    );
+}
+
+/// An inventory taken at three in the morning is not three in the morning spent
+/// working, and the timeline has to agree with the lines about that or the same
+/// moment is dropped from one and kept in the other.
+#[test]
+fn a_sweep_does_not_open_a_working_stretch() {
+    let root = scratch("sweep-time");
+    let path = database(&root);
+    hash(&path, at(3_600), "composer", "a-model", "rs", "r1");
+    sweep(&path, at(50_000), 60);
+
+    let days = read(&path, 300).expect("the database should read");
+    let day = days.values().next().expect("one day");
+
+    assert_eq!(day.measure(MEASURE_AGENT).sessions, 1);
 }

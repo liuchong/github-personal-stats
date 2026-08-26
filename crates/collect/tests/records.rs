@@ -157,10 +157,10 @@ fn more_work_on_a_day_already_recorded_is_taken() {
 }
 
 #[test]
-fn recounting_replaces_the_time_it_can_see_and_leaves_the_rest() {
-    // For when the way time is counted changes rather than the record growing.
-    // The keeping rule would hold the older, larger figure for ever, so a
-    // correction downwards needs asking for.
+fn recounting_replaces_what_it_can_see_and_leaves_the_rest() {
+    // For when the counting itself changes rather than the record growing. The
+    // keeping rule would hold the older, larger figure for ever, so a correction
+    // downwards needs asking for.
     let place = root();
     keeping(
         place.as_path(),
@@ -171,10 +171,14 @@ fn recounting_replaces_the_time_it_can_see_and_leaves_the_rest() {
     )
     .expect("the first publication should work");
 
-    // A run that reaches only the newer day, counting it as less than before.
+    // A run that reaches only the newer day, counting both its hours and its
+    // lines as fewer than before.
+    let mut thinner = worked("2026-08-26", 1_800);
+    thinner.lines.clear();
+    thinner.add_lines("", Author::Agent, "a-model", 120, 0);
     publish(
         place.as_path(),
-        &reading("2026-08-27T06:00:00Z", vec![worked("2026-08-26", 1_800)]),
+        &reading("2026-08-27T06:00:00Z", vec![thinner]),
         Recount::Replace,
     )
     .expect("a recount should work");
@@ -186,12 +190,42 @@ fn recounting_replaces_the_time_it_can_see_and_leaves_the_rest() {
             .expect("the day should still be on record")
     };
     assert_eq!(day("2026-08-26").measure("agent").seconds, 1_800);
+    assert_eq!(day("2026-08-26").lines[0].added, 120);
     // The older day the sources have since forgotten keeps what it had. A
     // recount corrects a reading; it does not delete history.
     assert_eq!(day("2026-07-01").measure("agent").seconds, 7_200);
-    // And only time is recounted: lines are counts, and a thinner reading of
-    // them is not a correction.
-    assert_eq!(day("2026-08-26").lines[0].added, 500);
+    assert_eq!(day("2026-07-01").lines[0].added, 500);
+}
+
+#[test]
+fn recounting_leaves_a_measure_this_run_did_not_see() {
+    // A machine can hold more than one measure, and they are collected by
+    // different means. A run made while the editor plugin was quiet knows nothing
+    // about editor time, and taking that silence for a reading of zero would
+    // delete it.
+    let place = root();
+    let mut both = worked("2026-08-26", 7_200);
+    both.measure_mut("editor").seconds = 3_600;
+    keeping(
+        place.as_path(),
+        &reading("2026-08-26T06:00:00Z", vec![both]),
+    )
+    .expect("the first publication should work");
+
+    publish(
+        place.as_path(),
+        &reading("2026-08-27T06:00:00Z", vec![worked("2026-08-26", 1_800)]),
+        Recount::Replace,
+    )
+    .expect("a recount should work");
+
+    let held = read_days(place.as_path(), "m-laptop").expect("the record should read back");
+    let day = held
+        .iter()
+        .find(|day| day.date == "2026-08-26")
+        .expect("the day should still be on record");
+    assert_eq!(day.measure("agent").seconds, 1_800);
+    assert_eq!(day.measure("editor").seconds, 3_600);
 }
 
 #[test]

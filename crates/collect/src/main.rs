@@ -62,8 +62,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         chosen(&args, &prefs, "--branch").as_deref(),
         !(args.iter().any(|arg| arg == "--no-push") || prefs.switch("no-push")),
     )?;
-    let recount = if args.iter().any(|arg| arg == "--recount-time") || prefs.switch("recount-time")
-    {
+    let recount = if args.iter().any(|arg| arg == "--recount") || prefs.switch("recount") {
         Recount::Replace
     } else {
         Recount::KeepFuller
@@ -148,11 +147,13 @@ Options:
   --branch <name>          Branch to push to (default: master)
   --no-push                Commit locally without pushing
   --idle-timeout <minutes> Gap that ends a working stretch (default: {DEFAULT_IDLE_TIMEOUT_MINUTES})
-  --recount-time           Replace the time already recorded for the days this
-                           run can see, instead of keeping whichever reading was
-                           larger. For when the way time is counted changed;
-                           lines, commits and tokens are left alone, and days
-                           this run cannot see are untouched
+  --recount                Replace the hours and lines already recorded for the
+                           days this run can see, instead of keeping whichever
+                           reading was larger. For when the counting itself
+                           changed rather than the record growing. Each measure
+                           is replaced only where this run saw something, so a
+                           day whose lines have aged out keeps them, and days
+                           this run cannot see are untouched entirely
   --state <dir>            Where the machine identity, token and pulse journal live
                            (default: XDG state directory)
   --home <dir>             Where to look for local records (default: HOME)

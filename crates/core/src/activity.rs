@@ -46,9 +46,12 @@ pub fn language_label(name: &str) -> &str {
 /// never divides is time across measures: agent time and editor time can cover
 /// the same minute, and nothing sums them.
 ///
-/// `Human` is the weaker of the two claims. It means an agent was not seen to do
-/// it, which also covers a checkout, a rebase, a formatter and a scripted
-/// rewrite. Only a plugin watching keystrokes can say a person typed something.
+/// `Human` is named for the column it is read from and is not a claim that a
+/// person typed anything. It means only that no request accounts for the line,
+/// which equally covers a checkout, a rebase, a formatter, a scripted rewrite and
+/// an agent working through a shell rather than through the editor. Charts label
+/// it unattributed for that reason. Only a plugin watching keystrokes can say a
+/// person typed something.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Author {
