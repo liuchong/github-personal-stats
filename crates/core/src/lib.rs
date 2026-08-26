@@ -14,9 +14,10 @@ pub mod workspace;
 
 pub use activity::{
     ACTIVITY_SCHEMA, ActivitySnapshot, ActivityTotals, Author, AuthorShare, DayBucket, LineCounts,
-    LineFact, LineTotals, MEASURE_AGENT, MEASURE_EDITOR, MEASURE_IMPORTED, MeasureTotals,
-    ModelUsage, TimeBucket, TokenUsage, UNKNOWN_LANGUAGE, language_label, merge_snapshots,
-    parse_activity_snapshot, summarise_activity, write_activity_snapshot,
+    LineFact, LineShare, LineTotals, Lines, MEASURE_AGENT, MEASURE_EDITOR, MEASURE_IMPORTED,
+    MeasureTotals, ModelUsage, TimeBucket, TimeFact, TimeTotals, TokenUsage, UNKNOWN_LANGUAGE,
+    language_label, merge_snapshots, parse_activity_snapshot, summarise_activity,
+    write_activity_snapshot,
 };
 pub use activityblocks::{
     BlockSpec, ChartRows, ChartValue, build_blocks, default_blocks, parse_blocks,

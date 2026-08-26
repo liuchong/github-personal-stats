@@ -266,6 +266,67 @@ impl AuthorShare {
     }
 }
 
+/// Lines put in and lines taken out, kept apart.
+///
+/// Sources differ in what they can see. An editor watching an agent write counts
+/// the lines it produced and has no notion of one removed; a commit knows both.
+/// Carrying the pair everywhere lets a figure say which it is, instead of
+/// presenting their sum as though it were an amount of work — a rewrite that
+/// replaces a hundred lines with a hundred others is two hundred by that sum and
+/// no larger than a file by any honest reading.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Lines {
+    pub added: u64,
+    pub deleted: u64,
+}
+
+impl Lines {
+    pub fn total(&self) -> u64 {
+        self.added + self.deleted
+    }
+
+    pub fn absorb(&mut self, other: &Self) {
+        self.added += other.added;
+        self.deleted += other.deleted;
+    }
+}
+
+/// Lines by author, with additions and removals still apart.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LineShare {
+    pub agent: Lines,
+    pub human: Lines,
+}
+
+impl LineShare {
+    pub fn total(&self) -> u64 {
+        self.agent.total() + self.human.total()
+    }
+
+    pub fn added(&self) -> u64 {
+        self.agent.added + self.human.added
+    }
+
+    pub fn deleted(&self) -> u64 {
+        self.agent.deleted + self.human.deleted
+    }
+
+    pub fn ai_share_basis_points(&self) -> u32 {
+        let total = self.total();
+        if total == 0 {
+            return 0;
+        }
+        u32::try_from(self.agent.total().saturating_mul(10_000) / total).unwrap_or(10_000)
+    }
+
+    fn absorb(&mut self, author: Author, lines: &Lines) {
+        match author {
+            Author::Agent => self.agent.absorb(lines),
+            Author::Human => self.human.absorb(lines),
+        }
+    }
+}
+
 /// Line facts folded up, every field a different fold over the same entries.
 ///
 /// This is a result rather than a stored shape. Nothing writes it to a file; it
@@ -274,58 +335,64 @@ impl AuthorShare {
 /// rather than a field to every day on record.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LineTotals {
-    pub by_model: BTreeMap<String, u64>,
-    pub by_language: BTreeMap<String, AuthorShare>,
-    pub agent: u64,
-    pub human: u64,
-    pub added: u64,
-    pub deleted: u64,
+    pub by_model: BTreeMap<String, Lines>,
+    pub by_language: BTreeMap<String, LineShare>,
+    pub authors: LineShare,
 }
 
 impl LineTotals {
     /// Folds the facts of one day in.
     pub fn absorb_facts(&mut self, facts: &[LineFact]) {
         for fact in facts {
-            let total = fact.total();
-            self.added += fact.added;
-            self.deleted += fact.deleted;
-            let language = self.by_language.entry(fact.language.clone()).or_default();
-            match fact.author {
-                Author::Agent => {
-                    self.agent += total;
-                    language.agent += total;
-                    if !fact.model.is_empty() {
-                        *self.by_model.entry(fact.model.clone()).or_default() += total;
-                    }
-                }
-                Author::Human => {
-                    self.human += total;
-                    language.human += total;
-                }
+            let lines = Lines {
+                added: fact.added,
+                deleted: fact.deleted,
+            };
+            self.authors.absorb(fact.author, &lines);
+            self.by_language
+                .entry(fact.language.clone())
+                .or_default()
+                .absorb(fact.author, &lines);
+            if fact.author == Author::Agent && !fact.model.is_empty() {
+                self.by_model
+                    .entry(fact.model.clone())
+                    .or_default()
+                    .absorb(&lines);
             }
         }
     }
 
     pub fn total(&self) -> u64 {
-        self.agent + self.human
+        self.authors.total()
+    }
+
+    pub fn added(&self) -> u64 {
+        self.authors.added()
+    }
+
+    pub fn deleted(&self) -> u64 {
+        self.authors.deleted()
     }
 
     pub fn ai_share_basis_points(&self) -> u32 {
-        let total = self.total();
-        if total == 0 {
-            return 0;
-        }
-        u32::try_from(self.agent.saturating_mul(10_000) / total).unwrap_or(10_000)
+        self.authors.ai_share_basis_points()
     }
 
     /// Models that wrote anything, largest first.
-    pub fn models(&self) -> Vec<(&str, u64)> {
-        rank(
-            self.by_model
-                .iter()
-                .map(|(model, lines)| (model.as_str(), *lines))
-                .collect(),
-        )
+    pub fn models(&self) -> Vec<(&str, Lines)> {
+        let mut ranked = self
+            .by_model
+            .iter()
+            .map(|(model, lines)| (model.as_str(), *lines))
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| {
+            right
+                .1
+                .total()
+                .cmp(&left.1.total())
+                .then_with(|| left.0.cmp(right.0))
+        });
+        ranked
     }
 }
 
@@ -390,15 +457,15 @@ pub struct TimeBucket {
     pub seconds: u64,
     pub languages: BTreeMap<String, u64>,
     pub sessions: u32,
-    /// The same seconds, said again by author where the source knew one.
+    /// The same seconds, said again at whatever grain the source knew.
     ///
-    /// Not every source does: a tracker that watches an editor reports how long
-    /// a file was worked on and has no view on who was doing it. So this refines
-    /// `languages` rather than replacing it, and a language's seconds here never
-    /// exceed its seconds there. What is missing is time nobody could attribute,
-    /// which is a different thing from time attributed to nobody.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub by_author: Vec<TimeFact>,
+    /// Not every source knows one: a tracker that watches an editor reports how
+    /// long a file was worked on and has no view on who or what was doing it. So
+    /// this refines `seconds` rather than replacing it, and never exceeds it.
+    /// What is missing is time nobody could attribute, which is a different
+    /// thing from time attributed to nobody.
+    #[serde(default, alias = "byAuthor", skip_serializing_if = "Vec::is_empty")]
+    pub facts: Vec<TimeFact>,
 }
 
 impl TimeBucket {
@@ -408,8 +475,8 @@ impl TimeBucket {
         for (language, seconds) in &other.languages {
             *self.languages.entry(language.clone()).or_default() += seconds;
         }
-        for fact in &other.by_author {
-            self.spend(&fact.language, fact.author, fact.seconds);
+        for fact in &other.facts {
+            self.spend(&fact.language, fact.author, &fact.model, fact.seconds);
         }
     }
 
@@ -421,64 +488,113 @@ impl TimeBucket {
             let held = self.languages.entry(language.clone()).or_default();
             *held = (*held).max(*seconds);
         }
-        for fact in &other.by_author {
-            let held = self.fact_mut(&fact.language, fact.author);
+        for fact in &other.facts {
+            let held = self.fact_mut(&fact.language, fact.author, &fact.model);
             held.seconds = held.seconds.max(fact.seconds);
         }
     }
 
-    /// Adds attributed seconds, keeping one entry per language and author.
-    pub fn spend(&mut self, language: &str, author: Author, seconds: u64) {
-        self.fact_mut(language, author).seconds += seconds;
+    /// Adds attributed seconds, keeping one entry per language, author and model.
+    pub fn spend(&mut self, language: &str, author: Author, model: &str, seconds: u64) {
+        self.fact_mut(language, author, model).seconds += seconds;
     }
 
     /// The seconds in one language that a given author is known to account for.
     pub fn attributed(&self, language: &str, author: Author) -> u64 {
-        self.by_author
+        self.facts
             .iter()
-            .find(|fact| fact.language == language && fact.author == author)
+            .filter(|fact| fact.language == language && fact.author == author)
             .map(|fact| fact.seconds)
-            .unwrap_or_default()
+            .sum()
     }
 
-    fn fact_mut(&mut self, language: &str, author: Author) -> &mut TimeFact {
-        let key = (language, author);
-        match self
-            .by_author
-            .binary_search_by(|held| (held.language.as_str(), held.author).cmp(&key))
-        {
-            Ok(index) => &mut self.by_author[index],
+    fn fact_mut(&mut self, language: &str, author: Author, model: &str) -> &mut TimeFact {
+        let key = (language, author, model);
+        match self.facts.binary_search_by(|held| held.key().cmp(&key)) {
+            Ok(index) => &mut self.facts[index],
             Err(index) => {
-                self.by_author.insert(
+                self.facts.insert(
                     index,
                     TimeFact {
                         language: language.to_owned(),
                         author,
+                        model: model.to_owned(),
                         seconds: 0,
                     },
                 );
-                &mut self.by_author[index]
+                &mut self.facts[index]
             }
         }
     }
 }
 
-/// Seconds in one language that one author is known to account for.
+/// One fact about time spent: in what language, by whom, and with which model.
 ///
-/// The rule that produces these is the same one that puts seconds against a
-/// language at all: a gap between two moments belongs to the moment before it,
-/// so it belongs to that moment's file and to whoever caused it. Attributing the
-/// author is therefore no more of an estimate than attributing the language, and
-/// the two are recorded together for that reason.
+/// Deliberately the same grain as `LineFact`, so that any breakdown the cards
+/// draw of lines can also be drawn of hours without collecting anything new. The
+/// rule that produces these is the same one that puts seconds against a language
+/// at all: a gap between two moments belongs to the moment before it, so it
+/// belongs to that moment's file, to whoever caused it, and to whatever model
+/// was answering. Naming the author is therefore no more of an estimate than
+/// naming the language, which is why they are recorded together.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeFact {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub language: String,
-    /// No default: a fact whose author is unknown is what `languages` is for.
+    /// No default: a fact whose author is unknown is what `seconds` is for.
     pub author: Author,
+    /// Empty for a person's time, and for an agent whose model went unrecorded.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub model: String,
     #[serde(default)]
     pub seconds: u64,
+}
+
+impl TimeFact {
+    /// What makes two facts the same fact. Folding and merging both key on this.
+    fn key(&self) -> (&str, Author, &str) {
+        (&self.language, self.author, &self.model)
+    }
+}
+
+/// Time facts folded up, every field a different fold over the same entries.
+///
+/// The counterpart of `LineTotals`, and the reason a chart can offer hours beside
+/// any figure it already draws: both are folds over facts of the same shape, so
+/// asking "and how long did that take" needs no new field on any day.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimeTotals {
+    pub by_model: BTreeMap<String, u64>,
+    pub by_language: BTreeMap<String, AuthorShare>,
+    pub authors: AuthorShare,
+}
+
+impl TimeTotals {
+    /// Folds the facts of one measure in.
+    pub fn absorb_facts(&mut self, facts: &[TimeFact]) {
+        for fact in facts {
+            let language = self.by_language.entry(fact.language.clone()).or_default();
+            match fact.author {
+                Author::Agent => {
+                    self.authors.agent += fact.seconds;
+                    language.agent += fact.seconds;
+                    if !fact.model.is_empty() {
+                        *self.by_model.entry(fact.model.clone()).or_default() += fact.seconds;
+                    }
+                }
+                Author::Human => {
+                    self.authors.human += fact.seconds;
+                    language.human += fact.seconds;
+                }
+            }
+        }
+    }
+
+    /// Seconds against one model, or nothing if that model has none.
+    pub fn model(&self, name: &str) -> u64 {
+        self.by_model.get(name).copied().unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -776,6 +892,8 @@ pub struct MeasureTotals {
     pub sessions: u32,
     pub languages: Vec<CodingActivityEntry>,
     pub daily_seconds: Vec<(String, u64)>,
+    /// The part of `seconds` a source could put a name to, folded every way.
+    pub facts: TimeTotals,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -821,7 +939,7 @@ impl ActivityTotals {
             .into_iter()
             .map(|(name, lines)| ModelUsage {
                 name: name.to_owned(),
-                lines,
+                lines: lines.total(),
             })
             .collect()
     }
@@ -853,6 +971,7 @@ pub fn summarise_activity(days: &[DayBucket]) -> ActivityTotals {
             let measure = totals.time.entry(name.clone()).or_default();
             measure.seconds += bucket.seconds;
             measure.sessions += bucket.sessions;
+            measure.facts.absorb_facts(&bucket.facts);
             measure
                 .daily_seconds
                 .push((day.date.clone(), bucket.seconds));

@@ -75,11 +75,15 @@ pub enum Column {
     Bar,
     /// The row's share of the block, as a percentage.
     Share,
-    /// A remark the fold attached to the row, such as who wrote its lines.
+    /// Remarks the fold attached to the row, such as the hours behind its figure
+    /// or who wrote its lines.
     ///
-    /// The layout does not know what it says and does not need to: whoever built
-    /// the row worded it, because only they know what it is a remark about. A
-    /// chart where no row has one does not draw the column.
+    /// The layout does not know what they say and does not need to: whoever built
+    /// the row worded them, because only they know what they are remarks about.
+    /// One of these in the column list draws as many columns as the rows have
+    /// remarks, so asking for a second remark is a matter of attaching one rather
+    /// than of naming a column for it. A chart where no row has any does not draw
+    /// the column at all.
     Aside,
 }
 
@@ -153,9 +157,10 @@ pub struct ChartRow {
     pub weight: u64,
     pub primary: u64,
     pub secondary: u64,
-    /// A remark to print after the row, worded by whoever built it. Empty means
-    /// there is nothing to remark on, and then no such column is drawn.
-    pub aside: String,
+    /// Remarks to print after the row, worded by whoever built it and drawn in
+    /// the order they were attached. Empty means there is nothing to remark on,
+    /// and then no such column is drawn.
+    pub asides: Vec<String>,
 }
 
 impl ChartRow {
@@ -166,13 +171,13 @@ impl ChartRow {
             weight,
             primary: 0,
             secondary: 0,
-            aside: String::new(),
+            asides: Vec::new(),
         }
     }
 
     /// Attaches a remark to print after the row.
     pub fn with_aside(mut self, aside: impl Into<String>) -> Self {
-        self.aside = aside.into();
+        self.asides.push(aside.into());
         self
     }
 
@@ -305,22 +310,56 @@ pub fn render_text_chart(blocks: &[ChartBlock], style: &ChartStyle) -> String {
     out
 }
 
+/// One column as drawn: its kind, and which remark it holds where a row has
+/// several.
+struct Slot {
+    column: Column,
+    aside: usize,
+}
+
+/// Turns the asked-for columns into the columns to draw, which differ in one way:
+/// a single request for remarks becomes one column per remark the rows carry.
+fn slots(block: &ChartBlock, style: &ChartStyle) -> Vec<Slot> {
+    let remarks = block
+        .rows
+        .iter()
+        .map(|row| row.asides.len())
+        .max()
+        .unwrap_or_default();
+    style
+        .columns
+        .iter()
+        .flat_map(|column| match column {
+            Column::Aside => (0..remarks)
+                .map(|aside| Slot {
+                    column: Column::Aside,
+                    aside,
+                })
+                .collect(),
+            other => vec![Slot {
+                column: *other,
+                aside: 0,
+            }],
+        })
+        .collect()
+}
+
 /// The alignment: each column is measured across every row of the block, then
 /// every row is padded to those widths.
 fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
+    let slots = slots(block, style);
     let cells = block
         .rows
         .iter()
         .map(|row| {
-            style
-                .columns
+            slots
                 .iter()
-                .map(|column| match column {
+                .map(|slot| match slot.column {
                     Column::Name => row.name.clone(),
                     Column::Value => row.value.clone(),
                     Column::Bar => bar(row, block, style),
                     Column::Share => share(row.weight, block.total),
-                    Column::Aside => row.aside.clone(),
+                    Column::Aside => row.asides.get(slot.aside).cloned().unwrap_or_default(),
                 })
                 .collect::<Vec<_>>()
         })
@@ -329,10 +368,9 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
     // The total is measured with the rows so that it lines up with them, but it
     // has no bar and no share of itself; its note goes where the bar would be.
     let summary = block.summary.as_ref().map(|summary| {
-        style
-            .columns
+        slots
             .iter()
-            .map(|column| match column {
+            .map(|slot| match slot.column {
                 Column::Name => summary.label.clone(),
                 Column::Value => summary.value.clone(),
                 Column::Bar => summary.note.clone(),
@@ -340,13 +378,13 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
             })
             .collect::<Vec<_>>()
     });
-    let drawn = (0..style.columns.len())
+    let drawn = (0..slots.len())
         .filter(|index| {
             cells.iter().any(|row| !row[*index].is_empty())
                 || summary.iter().any(|summary| !summary[*index].is_empty())
         })
         .collect::<Vec<_>>();
-    let widths = (0..style.columns.len())
+    let widths = (0..slots.len())
         .map(|index| {
             // The total's label and figure are measured with the rows, so they
             // sit above them. Its note is not: the note is a sentence, and
@@ -354,7 +392,7 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
             // away from the bars for the sake of a line that has no percentage.
             let measured = summary
                 .iter()
-                .filter(|_| !matches!(style.columns[index], Column::Bar))
+                .filter(|_| !matches!(slots[index].column, Column::Bar))
                 .chain(cells.iter());
             measured
                 .map(|row| row[index].chars().count())
@@ -365,7 +403,7 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
 
     let mut out = String::new();
     if let Some(summary) = &summary {
-        let mut line = pad_row(summary, &widths, style, &drawn);
+        let mut line = pad_row(summary, &widths, &slots, &drawn);
         // The note rides in the bar's column, so a chart drawn without bars has
         // nowhere to put it and would drop what the figures are a total of. It
         // trails the row instead, where nothing lines up under it anyway.
@@ -383,15 +421,14 @@ fn lay_out(block: &ChartBlock, style: &ChartStyle) -> String {
         out.push('\n');
     }
     for row in &cells {
-        let _ = writeln!(out, "{}", pad_row(row, &widths, style, &drawn));
+        let _ = writeln!(out, "{}", pad_row(row, &widths, &slots, &drawn));
     }
     out
 }
 
-fn pad_row(row: &[String], widths: &[usize], style: &ChartStyle, drawn: &[usize]) -> String {
+fn pad_row(row: &[String], widths: &[usize], slots: &[Slot], drawn: &[usize]) -> String {
     let mut line = String::new();
     for (position, &index) in drawn.iter().enumerate() {
-        let column = &style.columns[index];
         if position > 0 {
             line.push_str(&" ".repeat(GUTTER));
         }
@@ -399,8 +436,12 @@ fn pad_row(row: &[String], widths: &[usize], style: &ChartStyle, drawn: &[usize]
         let pad = widths[index].saturating_sub(text.chars().count());
         // Names and bars read left to right; figures line up on their last digit.
         // A summary's note sits in the bar's column and is prose, so it is left
-        // aligned for the same reason a name is.
-        let numeric = matches!(column, Column::Value | Column::Share);
+        // aligned for the same reason a name is. A remark is a figure with its
+        // unit written out, so it lines up on the unit.
+        let numeric = matches!(
+            slots[index].column,
+            Column::Value | Column::Share | Column::Aside
+        );
         if numeric {
             line.push_str(&" ".repeat(pad));
             line.push_str(text);

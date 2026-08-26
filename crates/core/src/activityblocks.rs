@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    ActivityComparison, ActivityWindow, Author, AuthorShare, GithubStatsError, LineFact,
+    ActivityComparison, ActivityWindow, Author, GithubStatsError, LineFact, LineShare, Lines,
     language_label,
     renderer::{format_duration_aligned, format_number as thousands},
     textchart::{ChartBlock, ChartRow, ChartSummary},
@@ -74,6 +74,15 @@ pub struct BlockSpec {
     /// since a bar whose length is time and whose parts are lines would invite
     /// exactly the wrong reading.
     pub authors: bool,
+    /// Whether each row should say how long it took.
+    ///
+    /// Off by default, and a setting rather than a second block, because time is
+    /// the weaker of the two figures: a count of lines is a count, while hours
+    /// are inferred from the gaps between moments something was seen happening
+    /// and are only as good as how densely those moments were observed. A reader
+    /// who wants them can have them against any breakdown — time is recorded at
+    /// the same grain as lines — but they are not what a chart leads with.
+    pub time: bool,
 }
 
 impl BlockSpec {
@@ -84,9 +93,16 @@ impl BlockSpec {
             limit: 6,
             split: true,
             authors: false,
+            time: false,
             title: String::new(),
             measure: String::new(),
         }
+    }
+
+    /// The same block, with each row saying how long it took.
+    pub fn timed(mut self) -> Self {
+        self.time = true;
+        self
     }
 
     /// The same block, read from a named measure.
@@ -146,12 +162,13 @@ impl BlockSpec {
                 }
                 "split" => block.split = matches!(held.trim(), "on" | "true" | "yes" | "author"),
                 "authors" => block.authors = matches!(held.trim(), "on" | "true" | "yes"),
+                "time" => block.time = matches!(held.trim(), "on" | "true" | "yes"),
                 "title" => block.title = held.trim().to_owned(),
                 "measure" => block.measure = held.trim().to_owned(),
                 other => {
                     return Err(invalid(&format!(
                         "unknown block setting {other:?}; \
-                         expected limit, split, authors, title, or measure"
+                         expected limit, split, authors, time, title, or measure"
                     )));
                 }
             }
@@ -200,11 +217,17 @@ pub fn parse_blocks(spec: &str) -> Result<Vec<BlockSpec>, GithubStatsError> {
         .collect()
 }
 
-/// What a chart shows when nothing was asked for: how long, who wrote it, and
-/// with what. Three questions that between them say what a day of this work was.
+/// What a chart shows when nothing was asked for: what was written, who wrote it,
+/// and with what. Three questions that between them say what this work was.
+///
+/// Lines rather than hours, because a line is counted and an hour is inferred.
+/// Every one of these blocks will also state the hours behind its figures on
+/// request, which is the right way round: the reader who wants the weaker measure
+/// asks for it, rather than the reader who wants the stronger one having to know
+/// to turn the other off.
 pub fn default_blocks() -> Vec<BlockSpec> {
     vec![
-        BlockSpec::new(ChartValue::Time, ChartRows::Languages),
+        BlockSpec::new(ChartValue::Lines, ChartRows::Languages),
         BlockSpec::new(ChartValue::Lines, ChartRows::Authors),
         BlockSpec::new(ChartValue::Lines, ChartRows::Models),
     ]
@@ -232,27 +255,61 @@ fn pick<'a>(folds: &'a [ActivityComparison], measure: &str) -> Option<&'a Activi
     folds.iter().find(|fold| fold.measure.as_str() == measure)
 }
 
+/// What a fold produced: rows, and the block's total behind them.
+///
+/// The total is carried twice because it answers two questions in two shapes. As
+/// a number it is what each row's percentage is a percentage of. As a change it
+/// is the figure printed above the rows, and there it has to say additions and
+/// removals apart for the same reason the rows do.
+struct Fold {
+    rows: Vec<ChartRow>,
+    total: u64,
+    written: Lines,
+}
+
+impl Fold {
+    /// A fold of something that is not a count of lines, where the total is just
+    /// a number and whoever words it knows what unit it is in.
+    fn plain(rows: Vec<ChartRow>, total: u64) -> Self {
+        Self {
+            rows,
+            total,
+            written: Lines::default(),
+        }
+    }
+
+    fn counted(rows: Vec<ChartRow>, written: Lines) -> Self {
+        Self {
+            rows,
+            total: written.total(),
+            written,
+        }
+    }
+}
+
 fn build_block(comparison: &ActivityComparison, spec: &BlockSpec) -> ChartBlock {
     let window = &comparison.recent;
 
-    let (rows, total) = match (spec.value, spec.rows) {
+    let fold = match (spec.value, spec.rows) {
         (ChartValue::Time, ChartRows::Languages) => language_time(comparison, spec),
         (ChartValue::Time, ChartRows::Windows) => window_time(comparison),
         (ChartValue::Lines, ChartRows::Languages) => language_lines(comparison, spec),
-        (ChartValue::Lines, ChartRows::Authors) => author_lines(window),
+        (ChartValue::Lines, ChartRows::Authors) => author_lines(window, spec),
         (ChartValue::Lines, ChartRows::Models) => model_lines(window, spec),
-        (ChartValue::Lines, ChartRows::Windows) => window_lines(comparison),
+        (ChartValue::Lines, ChartRows::Windows) => window_lines(comparison, spec),
         (ChartValue::Tokens, ChartRows::Models) => model_tokens(window, spec),
-        // Time has no author to divide by, and tokens are not recorded against a
-        // language or an author. Rather than invent a number, the block says so.
-        _ => (Vec::new(), 0),
+        // Tokens are not recorded against a language or an author, and a span is
+        // not a thing an author writes. Rather than invent a number for a
+        // breakdown nothing measured, the block says it has nothing.
+        _ => Fold::plain(Vec::new(), 0),
     };
 
     let block = ChartBlock::new(spec.heading());
-    let block = match summary(comparison, spec, total) {
+    let block = match summary(comparison, spec, &fold) {
         Some(summary) => block.with_summary(summary),
         None => block,
     };
+    let (rows, total) = (fold.rows, fold.total);
     // A bar is only ever divided by authorship at present, so that is what its
     // parts are called. The words live here rather than in the layout because the
     // layout has no way of knowing what a bar was divided by.
@@ -276,7 +333,8 @@ const NOT_AGENT: &str = "not by an agent";
 /// lines by model totals what the models wrote, which is not what everyone wrote.
 /// Putting the window's figure there would make the percentages look wrong when
 /// they are right.
-fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Option<ChartSummary> {
+fn summary(comparison: &ActivityComparison, spec: &BlockSpec, fold: &Fold) -> Option<ChartSummary> {
+    let total = fold.total;
     if total == 0 {
         return None;
     }
@@ -289,7 +347,8 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Opt
             "Longest",
             match spec.value {
                 ChartValue::Time => format_duration_aligned(total),
-                _ => thousands(total),
+                ChartValue::Lines => change(fold.written),
+                ChartValue::Tokens => thousands(total),
             },
             "spans overlap; each reads as a share of this",
         ));
@@ -318,13 +377,13 @@ fn summary(comparison: &ActivityComparison, spec: &BlockSpec, total: u64) -> Opt
                     percent(window.lines.ai_share_basis_points())
                 ),
             };
-            ChartSummary::new("Total", thousands(total), note)
+            ChartSummary::new("Total", change(fold.written), note)
         }
         ChartValue::Tokens => ChartSummary::new("Total", thousands(total), "tokens billed"),
     })
 }
 
-fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<ChartRow>, u64) {
+fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
     let total = comparison
         .languages
         .iter()
@@ -356,21 +415,34 @@ fn language_time(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Char
             }
         })
         .collect();
-    (rows, total)
+    Fold::plain(rows, total)
 }
 
 /// How a language's lines divide, for a row whose figure is not lines.
 ///
 /// It names what it counted. On a block of hours the reader has every reason to
 /// assume a percentage refers to the hours, and this one does not.
-fn authorship(lines: &AuthorShare) -> String {
+fn authorship(lines: &LineShare) -> String {
     if lines.total() == 0 {
         return String::new();
     }
     format!("{} agent lines", percent(lines.ai_share_basis_points()))
 }
 
-fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<ChartRow>, u64) {
+/// A count of lines, said as a change rather than as a quantity.
+///
+/// The sign is not decoration: added and removed lines are different events, and
+/// a source that only ever sees one of them should not be read as having weighed
+/// both. Where nothing was removed the figure says only what was put in, because
+/// a written `-0` claims a measurement that was never taken.
+fn change(lines: Lines) -> String {
+    if lines.deleted == 0 {
+        return format!("+{}", thousands(lines.added));
+    }
+    format!("+{} -{}", thousands(lines.added), thousands(lines.deleted))
+}
+
+fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
     let mut ranked = comparison
         .languages
         .iter()
@@ -383,59 +455,116 @@ fn language_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> (Vec<Cha
             .cmp(&left.lines.total())
             .then_with(|| left.name.cmp(&right.name))
     });
-    let total = ranked.iter().map(|language| language.lines.total()).sum();
+    let total = ranked.iter().fold(Lines::default(), |mut held, language| {
+        held.absorb(&written(&language.lines));
+        held
+    });
     let rows = ranked
         .into_iter()
         .take(spec.limit)
         .map(|language| {
             let row = ChartRow::new(
                 language_label(&language.name),
-                thousands(language.lines.total()),
+                change(written(&language.lines)),
                 language.lines.total(),
             );
-            if spec.split {
-                row.divided(language.lines.agent, language.lines.human)
+            let row = if spec.split {
+                row.divided(language.lines.agent.total(), language.lines.human.total())
             } else {
                 row
-            }
+            };
+            timed(row, spec, language.recent_seconds)
         })
         .collect();
-    (rows, total)
+    Fold::counted(rows, total)
 }
 
-fn author_lines(window: &ActivityWindow) -> (Vec<ChartRow>, u64) {
-    let total = window.lines.total();
-    let rows = [(AGENT, window.lines.agent), (NOT_AGENT, window.lines.human)]
-        .into_iter()
-        .filter(|(_, lines)| *lines > 0 || total > 0)
-        .map(|(name, lines)| ChartRow::new(name, thousands(lines), lines))
-        .collect();
-    (rows, total)
+/// The additions and removals of a split, disregarding who made them.
+fn written(lines: &LineShare) -> Lines {
+    Lines {
+        added: lines.added(),
+        deleted: lines.deleted(),
+    }
 }
 
-fn model_lines(window: &ActivityWindow, spec: &BlockSpec) -> (Vec<ChartRow>, u64) {
+/// Attaches the hours behind a row's figure, where the block asked for them.
+///
+/// A row with no recorded time gets an empty remark rather than a zero, which is
+/// the difference between "no hours were observed against this" and "this took no
+/// time". Where no row in the block has any, the column is not drawn at all.
+fn timed(row: ChartRow, spec: &BlockSpec, seconds: u64) -> ChartRow {
+    if !spec.time {
+        return row;
+    }
+    if seconds == 0 {
+        return row.with_aside(String::new());
+    }
+    row.with_aside(format_duration_aligned(seconds))
+}
+
+fn author_lines(window: &ActivityWindow, spec: &BlockSpec) -> Fold {
+    let total = written(&window.lines.authors);
+    let rows = [
+        (AGENT, window.lines.authors.agent, window.time.authors.agent),
+        (
+            NOT_AGENT,
+            window.lines.authors.human,
+            window.time.authors.human,
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, lines, _)| lines.total() > 0 || total.total() > 0)
+    .map(|(name, lines, seconds)| {
+        timed(
+            ChartRow::new(name, change(lines), lines.total()),
+            spec,
+            seconds,
+        )
+    })
+    .collect();
+    Fold::counted(rows, total)
+}
+
+fn model_lines(window: &ActivityWindow, spec: &BlockSpec) -> Fold {
     let models = window.models();
-    let total = models.iter().map(|(_, lines)| lines).sum();
+    let total = models
+        .iter()
+        .fold(Lines::default(), |mut held, (_, lines)| {
+            held.absorb(lines);
+            held
+        });
     let rows = models
         .into_iter()
         .take(spec.limit)
-        .map(|(name, lines)| ChartRow::new(name, thousands(lines), lines))
+        .map(|(name, lines)| {
+            timed(
+                ChartRow::new(name, change(lines), lines.total()),
+                spec,
+                window.time.model(name),
+            )
+        })
         .collect();
-    (rows, total)
+    Fold::counted(rows, total)
 }
 
-fn model_tokens(window: &ActivityWindow, spec: &BlockSpec) -> (Vec<ChartRow>, u64) {
+fn model_tokens(window: &ActivityWindow, spec: &BlockSpec) -> Fold {
     let spend = window.token_spend();
     let total = spend.iter().map(|(_, billed)| billed).sum();
     let rows = spend
         .into_iter()
         .take(spec.limit)
-        .map(|(name, billed)| ChartRow::new(name, thousands(billed), billed))
+        .map(|(name, billed)| {
+            timed(
+                ChartRow::new(name, thousands(billed), billed),
+                spec,
+                window.time.model(name),
+            )
+        })
         .collect();
-    (rows, total)
+    Fold::plain(rows, total)
 }
 
-fn window_time(comparison: &ActivityComparison) -> (Vec<ChartRow>, u64) {
+fn window_time(comparison: &ActivityComparison) -> Fold {
     let windows = [&comparison.recent, &comparison.baseline];
     let total = windows
         .iter()
@@ -452,28 +581,35 @@ fn window_time(comparison: &ActivityComparison) -> (Vec<ChartRow>, u64) {
             )
         })
         .collect();
-    (rows, total)
+    Fold::plain(rows, total)
 }
 
-fn window_lines(comparison: &ActivityComparison) -> (Vec<ChartRow>, u64) {
+fn window_lines(comparison: &ActivityComparison, spec: &BlockSpec) -> Fold {
     let windows = [&comparison.recent, &comparison.baseline];
+    // Spans contain one another, so the largest is the only sensible thing for
+    // the shorter ones to read as a share of; summing them would count the
+    // recent span twice.
     let total = windows
         .iter()
-        .map(|window| window.lines.total())
-        .max()
-        .unwrap_or(0);
+        .map(|window| written(&window.lines.authors))
+        .max_by_key(Lines::total)
+        .unwrap_or_default();
     let rows = windows
         .into_iter()
         .map(|window| {
-            ChartRow::new(
+            let row = ChartRow::new(
                 window.span.label(),
-                thousands(window.lines.total()),
+                change(written(&window.lines.authors)),
                 window.lines.total(),
             )
-            .divided(window.lines.agent, window.lines.human)
+            .divided(
+                window.lines.authors.agent.total(),
+                window.lines.authors.human.total(),
+            );
+            timed(row, spec, window.seconds)
         })
         .collect();
-    (rows, total)
+    Fold::counted(rows, total)
 }
 
 /// Sums facts by language, for callers folding a record directly rather than

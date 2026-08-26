@@ -41,14 +41,15 @@ const GENERATED_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'local
 
 /// Moments, kept by who caused them as well as by what file they touched.
 ///
-/// The source column costs nothing to carry and is what lets a measure of time be
-/// divided by author later. Dropping it here would have meant the record could
-/// say which language an hour went to but not who spent it, for no reason other
-/// than not having asked.
+/// The source and model columns cost nothing to carry and are what let a measure
+/// of time be divided the same ways lines are. Dropping them here would have meant
+/// the record could say which language an hour went to but not who spent it or
+/// what answered, for no reason other than not having asked.
 const EVENT_QUERY: &str = "SELECT createdAt / 1000 AS second, \
      date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
-     COALESCE(fileExtension, '') AS extension, source, COUNT(*) AS weight \
-     FROM ai_code_hashes GROUP BY second, extension, source ORDER BY second";
+     COALESCE(fileExtension, '') AS extension, source, \
+     COALESCE(NULLIF(model, ''), '') AS model, COUNT(*) AS weight \
+     FROM ai_code_hashes GROUP BY second, extension, source, model ORDER BY second";
 
 const REQUEST_QUERY: &str = "SELECT date(createdAt / 1000, 'unixepoch', 'localtime') AS day, \
      COUNT(DISTINCT requestId) AS requests \
@@ -247,23 +248,32 @@ fn read_moments(connection: &Connection) -> Result<Vec<Event>, CollectError> {
                 row.get::<_, Option<String>>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
             ))
         })
         .map_err(|error| schema_error(CODE_HASHES, error))?;
 
     let mut moments = Vec::<Event>::new();
     for row in rows {
-        let (second, day, extension, source, weight) =
+        let (second, day, extension, source, model, weight) =
             row.map_err(|error| schema_error(CODE_HASHES, error))?;
         let Some(day) = day else {
             continue;
         };
+        let author = author_of(&source);
         let part = Part::new(
             crate::language::from_extension(&extension),
-            Some(author_of(&source)),
+            Some(author),
             positive(weight),
-        );
+        )
+        .by(match author {
+            // A change nobody generated carries no model, on the same reasoning
+            // that keeps it off the line counts: whatever model happened to be
+            // loaded did not cause it.
+            Author::Human => String::new(),
+            Author::Agent => model,
+        });
 
         match moments.last_mut() {
             Some(moment) if moment.second == second => moment.languages.push(part),

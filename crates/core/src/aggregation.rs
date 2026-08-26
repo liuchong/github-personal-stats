@@ -1,7 +1,8 @@
 use crate::{
     Author, AuthorShare, ContributionDay, DEFAULT_ACTIVITY_WINDOWS, DayBucket, GithubData,
-    HeatRing, HeatWindow, LineCounts, LineTotals, MAX_ACTIVITY_WINDOW, MEASURE_AGENT,
-    MEASURE_EDITOR, MEASURE_IMPORTED, OutputKind, RepositoryLanguage, TimeBucket, TokenUsage,
+    HeatRing, HeatWindow, LineCounts, LineShare, LineTotals, Lines, MAX_ACTIVITY_WINDOW,
+    MEASURE_AGENT, MEASURE_EDITOR, MEASURE_IMPORTED, OutputKind, RepositoryLanguage, TimeBucket,
+    TimeTotals, TokenUsage,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -182,6 +183,10 @@ pub struct ActivityWindow {
     pub sessions: u32,
     pub commits: LineCounts,
     pub lines: LineTotals,
+    /// The part of `seconds` a source could name, folded by language, author and
+    /// model. This is what lets a figure drawn by model or by author offer the
+    /// hours behind it, rather than only the count.
+    pub time: TimeTotals,
     pub tokens: BTreeMap<String, TokenUsage>,
     pub requests: u32,
 }
@@ -206,12 +211,12 @@ impl ActivityWindow {
     }
 
     /// The model that wrote the most lines in the span, if any did.
-    pub fn leading_model(&self) -> Option<(&str, u64)> {
+    pub fn leading_model(&self) -> Option<(&str, Lines)> {
         self.lines.models().into_iter().next()
     }
 
     /// Models that wrote anything, largest first.
-    pub fn models(&self) -> Vec<(&str, u64)> {
+    pub fn models(&self) -> Vec<(&str, Lines)> {
         self.lines.models()
     }
 
@@ -242,8 +247,9 @@ pub struct ActivityLanguage {
     pub recent_basis_points: u32,
     pub baseline_seconds: u64,
     pub baseline_basis_points: u32,
-    /// Authorship of this language's lines in the recent span.
-    pub lines: AuthorShare,
+    /// Authorship of this language's lines in the recent span, additions and
+    /// removals kept apart.
+    pub lines: LineShare,
     /// Authorship of this language's seconds in the recent span, as far as the
     /// source could say. Sums to at most `recent_seconds`; the difference is
     /// time nobody could attribute rather than time attributed to nobody.
@@ -273,6 +279,7 @@ impl ActivityComparison {
             sessions: 0,
             commits: LineCounts::default(),
             lines: LineTotals::default(),
+            time: TimeTotals::default(),
             tokens: BTreeMap::new(),
             requests: 0,
         };
@@ -556,7 +563,7 @@ struct LanguageTotals {
     seconds: BTreeMap<String, u64>,
     /// The part of `seconds` that a source could put a name to. Never larger.
     attributed: BTreeMap<String, AuthorShare>,
-    lines: BTreeMap<String, AuthorShare>,
+    lines: BTreeMap<String, LineShare>,
 }
 
 /// Sums one span, returning the window and its per-language totals.
@@ -583,6 +590,7 @@ fn window(
     let mut last = None::<&str>;
     let mut commits = LineCounts::default();
     let mut lines = LineTotals::default();
+    let mut time = TimeTotals::default();
     let mut tokens = BTreeMap::<String, TokenUsage>::new();
     let mut requests = 0u32;
     let mut totals = LanguageTotals::default();
@@ -619,10 +627,14 @@ fn window(
             }
             *totals.seconds.entry(language.clone()).or_default() += count;
         }
-        for fact in &bucket.by_author {
-            if ignored(&fact.language) {
-                continue;
-            }
+        let kept = bucket
+            .facts
+            .iter()
+            .filter(|fact| !ignored(&fact.language))
+            .cloned()
+            .collect::<Vec<_>>();
+        time.absorb_facts(&kept);
+        for fact in &kept {
             let held = totals.attributed.entry(fact.language.clone()).or_default();
             match fact.author {
                 Author::Agent => held.agent += fact.seconds,
@@ -639,9 +651,13 @@ fn window(
                 continue;
             }
             let held = totals.lines.entry(fact.language.clone()).or_default();
+            let written = Lines {
+                added: fact.added,
+                deleted: fact.deleted,
+            };
             match fact.author {
-                Author::Agent => held.agent += fact.total(),
-                Author::Human => held.human += fact.total(),
+                Author::Agent => held.agent.absorb(&written),
+                Author::Human => held.human.absorb(&written),
             }
         }
     }
@@ -655,6 +671,7 @@ fn window(
         sessions,
         commits,
         lines,
+        time,
         tokens,
         requests,
     };

@@ -257,13 +257,23 @@ fn the_blocks_a_record_can_fill_are_folded_from_its_facts() {
         &ChartStyle::default(),
     );
 
-    assert!(text.contains("TIME  BY LANGUAGE"), "{text}");
-    assert!(text.contains("2 hrs  0 mins"), "{text}");
+    // Lines by default, because a line is counted where an hour is inferred.
+    assert!(text.contains("LINES  BY LANGUAGE"), "{text}");
     assert!(text.contains("LINES  BY AUTHOR"), "{text}");
-    // Eleven hundred agent lines against two hundred of mine.
-    assert!(text.contains("1,100"), "{text}");
+    // Eleven hundred agent lines against two hundred nobody watched an agent
+    // write, said as the change they are rather than as a quantity.
+    assert!(text.contains("+1,100"), "{text}");
     assert!(text.contains("LINES  BY MODEL"), "{text}");
     assert!(text.contains("gpt-5.6"), "{text}");
+    // The hours are there for the asking, against the same breakdown.
+    let timed = render_text_chart(
+        &build_blocks(
+            std::slice::from_ref(&comparison),
+            &parse_blocks("lines/languages,time=on").unwrap(),
+        ),
+        &ChartStyle::default(),
+    );
+    assert!(timed.contains("1 hrs 30 mins"), "{timed}");
 }
 
 #[test]
@@ -539,7 +549,11 @@ fn lines_whose_language_went_unrecorded_are_named_rather_than_dropped() {
                 .to_owned()
         })
         .collect::<Vec<_>>();
-    assert_eq!(totals, vec!["500", "500"], "the two totals differ\n{text}");
+    assert_eq!(
+        totals,
+        vec!["+500", "+500"],
+        "the two totals differ\n{text}"
+    );
 }
 
 #[test]
@@ -548,8 +562,8 @@ fn a_time_block_divides_its_bars_by_who_spent_the_time() {
     let bucket = day.measure_mut(MEASURE_AGENT);
     bucket.seconds = 4_000;
     bucket.languages.insert("Rust".to_owned(), 4_000);
-    bucket.spend("Rust", Author::Agent, 3_000);
-    bucket.spend("Rust", Author::Human, 1_000);
+    bucket.spend("Rust", Author::Agent, "", 3_000);
+    bucket.spend("Rust", Author::Human, "", 1_000);
 
     let fold = compare_activity(
         &[day],

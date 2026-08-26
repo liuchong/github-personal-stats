@@ -184,8 +184,8 @@ fn generated(totals: &ActivityTotals) -> String {
     let lines = &totals.lines;
     rows(&[
         ("Lines", lines.total().to_string()),
-        ("By an agent", lines.agent.to_string()),
-        ("By hand", lines.human.to_string()),
+        ("By an agent", lines.authors.agent.total().to_string()),
+        ("Not by an agent", lines.authors.human.total().to_string()),
         ("AI share", percentage(lines.ai_share_basis_points())),
     ])
 }

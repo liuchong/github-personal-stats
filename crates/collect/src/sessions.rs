@@ -15,11 +15,14 @@ pub struct Event {
     pub languages: Vec<Part>,
 }
 
-/// A share of one moment: what was touched, by whom if known, and how much of
-/// the moment it accounts for.
+/// A share of one moment: what was touched, by whom and with what if known, and
+/// how much of the moment it accounts for.
 pub struct Part {
     pub language: &'static str,
     pub author: Option<Author>,
+    /// Empty where the source did not name one, which is the usual case outside
+    /// an agent's own writes.
+    pub model: String,
     pub weight: u64,
 }
 
@@ -28,8 +31,14 @@ impl Part {
         Self {
             language,
             author,
+            model: String::new(),
             weight,
         }
+    }
+
+    pub fn by(mut self, model: impl Into<String>) -> Self {
+        self.model = model.into();
+        self
     }
 }
 
@@ -95,7 +104,7 @@ fn spend(days: &mut BTreeMap<String, TimeBucket>, event: &Event, seconds: u64) {
             .entry(part.language.to_string())
             .or_default() += slice;
         if let Some(author) = part.author {
-            bucket.spend(part.language, author, slice);
+            bucket.spend(part.language, author, &part.model, slice);
         }
         spent += slice;
     }
@@ -109,7 +118,7 @@ fn spend(days: &mut BTreeMap<String, TimeBucket>, event: &Event, seconds: u64) {
             .entry(part.language.to_string())
             .or_default() += remainder;
         if let Some(author) = part.author {
-            bucket.spend(part.language, author, remainder);
+            bucket.spend(part.language, author, &part.model, remainder);
         }
     }
 }

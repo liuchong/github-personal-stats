@@ -389,18 +389,14 @@ fn time_divides_by_author_without_exceeding_what_it_divides() {
         ..TimeBucket::default()
     };
     bucket.languages.insert("Rust".to_owned(), 100);
-    bucket.spend("Rust", Author::Agent, 70);
-    bucket.spend("Rust", Author::Human, 20);
+    bucket.spend("Rust", Author::Agent, "", 70);
+    bucket.spend("Rust", Author::Human, "", 20);
 
     assert_eq!(bucket.attributed("Rust", Author::Agent), 70);
     assert_eq!(bucket.attributed("Rust", Author::Human), 20);
     // The ten seconds nobody could put a name to stay unattributed rather than
     // being handed to whichever author was handy.
-    let named = bucket
-        .by_author
-        .iter()
-        .map(|fact| fact.seconds)
-        .sum::<u64>();
+    let named = bucket.facts.iter().map(|fact| fact.seconds).sum::<u64>();
     assert_eq!(named, 90);
     assert!(named <= bucket.seconds);
 }
@@ -415,7 +411,7 @@ fn a_source_that_cannot_name_an_author_leaves_the_split_empty() {
     };
     bucket.languages.insert("Clojure".to_owned(), 3_600);
 
-    assert!(bucket.by_author.is_empty());
+    assert!(bucket.facts.is_empty());
     assert_eq!(bucket.attributed("Clojure", Author::Agent), 0);
 }
 
@@ -425,7 +421,7 @@ fn two_machines_add_their_attributed_time_and_two_readings_do_not() {
         let mut day = DayBucket::new("2026-08-20");
         let bucket = day.measure_mut(MEASURE_AGENT);
         bucket.seconds = seconds;
-        bucket.spend("Go", Author::Agent, seconds);
+        bucket.spend("Go", Author::Agent, "", seconds);
         day
     };
 
