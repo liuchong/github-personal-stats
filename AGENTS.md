@@ -87,6 +87,15 @@ Before the Rust workspace exists, use repository inspection, Markdown review, an
 - A publish to crates.io cannot be undone. A version can only be yanked, it stays downloadable, and its number is spent permanently. Treat every publish as irreversible and ask first.
 - When work is finished and a release looks warranted, say so and stop there. Choosing the number is the user's decision, not a semver deduction.
 
+## Asking The User
+
+- Every question goes in the reply itself, written as prose. Never use a structured-question tool, a multiple-choice popup, an option list, a radio list, a confirmation dialog, or a form. Those controls hold a few words per option, so the user is shown conclusions with none of the evidence behind them and can only guess or cancel.
+- "There are too many options", "the prose would be long", "a popup is clearer", and "the user can pick Other" are not reasons. A popup is never a substitute for the explanation, and an explanation posted after a popup does not repair it.
+- A question worth asking carries all of: the specific fact that raised it and what stays blocked without an answer; what the answer changes in scope, behaviour, or acceptance; where the evidence is, by file path with a line number or function name, and the code itself where it is short; for each option, what has to be true for it to be the right one, what it costs, and what it risks; which one is recommended, why, and what would flip that recommendation; and which parts are verified, with how they were verified, against which parts are still assumption.
+- Ask only what is the user's to decide: priorities, risk appetite, product judgement, and anything needing access or information the repository does not hold. Anything a command, a log, a test, or the code can settle, settle it before asking.
+- Ask the related questions together, with their background, in one pass. Do not extract one narrow answer at a time about the same decision.
+- A cancelled popup is not a refusal and not consent. It means the question could not be answered as posed. Re-ask it in prose with what was missing, and say that the earlier attempt did not carry enough to judge.
+
 ## Required Reading Order
 
 1. `AGENTS.md`

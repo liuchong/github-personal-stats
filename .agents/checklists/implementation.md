@@ -6,6 +6,7 @@ Before editing:
 - Read the relevant playbook.
 - Inspect the working tree.
 - Confirm the change belongs to the current task.
+- If something has to be asked, ask it in the reply as prose, with the evidence and the trade-offs, per `AGENTS.md`. Never through a popup or an option list.
 
 Before completion:
 

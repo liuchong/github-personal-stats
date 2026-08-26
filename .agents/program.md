@@ -72,6 +72,8 @@ the machine was in swap and had to be cleaned up by hand.
 
 ## Stop Conditions
 
+Stopping means asking in the reply, in prose, to the standard in `AGENTS.md`: what raised the question, what the answer changes, where the evidence is, what each way costs, and which is recommended. Never reach for a structured-question tool, a multiple-choice popup, or a confirmation dialog to do it — those fit a label per option and leave the user choosing between conclusions they cannot check. Settle anything a command or the code can answer before asking at all.
+
 Stop and ask the user when:
 
 - A version number would change, or anything would be published, and the user did not ask for it in that message. Finishing the work is not the authorisation, and neither is a release the user asked for earlier.
@@ -82,4 +84,4 @@ Stop and ask the user when:
 
 ## Output Expectations
 
-Keep final summaries short. Report what changed, how it was verified, and any remaining risk. Do not mention private reference sources in user-facing summaries unless the user explicitly asks outside repository content.
+Keep final summaries short. Report what changed, how it was verified, and any remaining risk. Anything the user has to decide goes in the same reply as prose, never as a control they click. Do not mention private reference sources in user-facing summaries unless the user explicitly asks outside repository content.
