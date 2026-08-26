@@ -64,11 +64,18 @@ const ACTIVITY_BLOCK_TOP: u32 = 48;
 const ACTIVITY_WINDOW_STEP: u32 = 62;
 const ACTIVITY_ROW_STEP: u32 = 22;
 
+/// The leading window's figure, which is the largest thing on the card and so
+/// the one that decides whether two windows can share a line.
+const ACTIVITY_LEADING_SIZE: f32 = 21.0;
+
+/// From the left edge of a language row to its name, leaving the dot its room.
+const ACTIVITY_NAME_LEFT: u32 = 15;
+
 /// Room kept at the right edge for a share such as `27.6%`.
 const ACTIVITY_SHARE_COLUMN: u32 = 46;
 
-/// On a narrow card the windows sit side by side and the tracks go underneath, so
-/// the tracks start below one window block rather than beside two.
+/// On a narrow card the windows sit above the tracks, so the tracks start below a
+/// window block rather than beside two.
 const ACTIVITY_STACKED_TRACKS: u32 = ACTIVITY_BLOCK_TOP + 26;
 
 /// Rows of the languages panel, as tracks on a narrow card and as two columns on
@@ -436,9 +443,35 @@ fn activity_natural_height(
     let windows = ACTIVITY_WINDOW_STEP + 44 + DESCENDER;
 
     if is_narrow(width) {
-        ACTIVITY_STACKED_TRACKS + tracks
+        activity_tracks_top(width, comparison) + tracks
     } else {
         ACTIVITY_BLOCK_TOP + windows.max(tracks)
+    }
+}
+
+/// Whether a narrow card can set its two spans side by side.
+///
+/// The question is not how wide the card is. A span's figure is set at one size
+/// whatever the card is wide, so what matters is whether half the card holds a
+/// duration — and `588 hrs 45 mins` needs half as much again as `9 hrs 2 mins`.
+/// Asking the figures rather than picking a second width threshold is what keeps
+/// a long total from being written over a neighbouring one.
+fn spans_fit_beside(width: u32, comparison: &ActivityComparison) -> bool {
+    let widest = [&comparison.recent, &comparison.baseline]
+        .into_iter()
+        .map(|window| advance(&format_duration(window.seconds), ACTIVITY_LEADING_SIZE))
+        .max()
+        .unwrap_or(0);
+    width / 2 >= widest + GUTTER
+}
+
+/// How far below the head a narrow card's language tracks begin: past one row of
+/// spans if they sit side by side, past two if they had to be stacked.
+fn activity_tracks_top(width: u32, comparison: &ActivityComparison) -> u32 {
+    if spans_fit_beside(width, comparison) {
+        ACTIVITY_STACKED_TRACKS
+    } else {
+        ACTIVITY_STACKED_TRACKS + ACTIVITY_WINDOW_STEP
     }
 }
 
@@ -1561,22 +1594,30 @@ fn columned_activity(
     )
 }
 
-/// The two windows side by side above the language tracks, for a card too narrow
-/// to hold figures and tracks in one row.
+/// The two windows above the language tracks, for a card too narrow to hold
+/// figures and tracks in one row. Side by side where they fit, stacked where a
+/// figure would otherwise be written over its neighbour.
 fn stacked_activity(
     area: Rect,
     comparison: &ActivityComparison,
     config: &GithubStatsConfig,
     theme: &RenderTheme,
 ) -> String {
-    let column = area.width / 2;
+    let beside = spans_fit_beside(area.width, comparison);
     let windows = [&comparison.recent, &comparison.baseline]
         .into_iter()
         .enumerate()
         .map(|(index, window)| {
+            let step = index as u32;
             activity_window(
-                area.x + index as u32 * column,
-                area.y + ACTIVITY_BLOCK_TOP,
+                area.x + if beside { step * area.width / 2 } else { 0 },
+                area.y
+                    + ACTIVITY_BLOCK_TOP
+                    + if beside {
+                        0
+                    } else {
+                        step * ACTIVITY_WINDOW_STEP
+                    },
                 window,
                 index == 0,
                 theme,
@@ -1584,11 +1625,12 @@ fn stacked_activity(
         })
         .collect::<String>();
 
+    let top = activity_tracks_top(area.width, comparison);
     let tracks = Rect {
         x: area.x,
-        y: area.y + ACTIVITY_STACKED_TRACKS,
+        y: area.y + top,
         width: area.width,
-        height: area.height.saturating_sub(ACTIVITY_STACKED_TRACKS),
+        height: area.height.saturating_sub(top),
     };
 
     format!(
@@ -1624,7 +1666,7 @@ fn activity_window(
     leading: bool,
     theme: &RenderTheme,
 ) -> String {
-    let size = if leading { 21.0 } else { 17.0 };
+    let size = if leading { ACTIVITY_LEADING_SIZE } else { 17.0 };
     let ink = if leading { theme.ink } else { theme.muted };
     format!(
         "{}{}{}",
@@ -1652,7 +1694,20 @@ fn activity_tracks(
         .saturating_sub(if note.is_some() { ACTIVITY_ROW_STEP } else { 0 })
         / rows as u32)
         .clamp(16, ACTIVITY_ROW_STEP);
-    let name_column = (area.width * 30 / 100).clamp(72, 130);
+    // Names are set at one size whatever the card is wide, so a column measured
+    // as a share of the width crowds them on a tile: `TypeScript` needs the same
+    // room at 275 as at 900. Measure what has to fit, and give the track the
+    // rest — but never so much that no track is left.
+    let room = area
+        .width
+        .saturating_sub(ACTIVITY_SHARE_COLUMN + TRACK_MINIMUM);
+    let name_column = placed
+        .iter()
+        .take(rows)
+        .map(|language| ACTIVITY_NAME_LEFT + advance(&language.name, 11.5) + GUTTER / 2)
+        .max()
+        .unwrap_or(72)
+        .clamp(72, room.max(72));
     let track_x = area.x + name_column;
     let track_width = area
         .width
@@ -1686,7 +1741,13 @@ fn activity_tracks(
             format!(
                 "{}{}{}{}{}{}",
                 circle(area.x + 4, y - 4, 3.5, colour),
-                text(area.x + 15, y, 11.5, theme.ink, &language.name),
+                text(
+                    area.x + ACTIVITY_NAME_LEFT,
+                    y,
+                    11.5,
+                    theme.ink,
+                    &language.name
+                ),
                 rounded_rect(track_x, y - 7, track_width, 4, theme.track),
                 rounded_rect(track_x, y - 7, filled, 4, colour),
                 baseline_mark(track_x + mark, y - 7, theme),
@@ -1704,7 +1765,10 @@ fn activity_tracks(
     match note {
         Some(said) => {
             let y = area.y + ACTIVITY_BLOCK_TOP + rows as u32 * step + 4;
-            format!("{drawn}{}", text(area.x + 15, y, 11.0, theme.muted, &said))
+            format!(
+                "{drawn}{}",
+                text(area.x + ACTIVITY_NAME_LEFT, y, 11.0, theme.muted, &said)
+            )
         }
         None => drawn,
     }

@@ -614,3 +614,42 @@ fn a_card_and_a_chart_of_the_same_measure_give_the_same_share() {
     assert!(svg.contains(">75.0%<"), "card: {svg}");
     assert!(chart.contains("75.00 %"), "chart: {chart}");
 }
+
+#[test]
+fn spans_too_long_to_share_a_line_are_given_one_each() {
+    let config = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_size(275, 260)
+        .unwrap()
+        .with_auto_height();
+    // Six hundred hours, which is what a record a few months old holds, and long
+    // enough that two of these cannot share the width of a tile.
+    let comparison = comparison_over(&[
+        worked_day("2026-05-24", &[("Rust", 360_000)]),
+        worked_day("2026-04-24", &[("Rust", 1_800_000)]),
+    ]);
+
+    let svg = render_card(&CardData::Activity(Box::new(comparison)), &config);
+
+    let baselines = leading_baselines(&svg);
+    assert_eq!(baselines.len(), 2, "both spans are named: {svg}");
+    assert_ne!(
+        baselines[0], baselines[1],
+        "a tile wrote one span's figure across the other: {svg}"
+    );
+    // The card has to grow to hold the second row rather than crop it.
+    let note = "not placed to a language";
+    assert!(!svg.contains(note), "nothing here is unplaced: {svg}");
+    assert!(svg.contains(">Rust<"), "the language survived: {svg}");
+}
+
+/// Where each span's figure sits, read off the size only a leading figure uses.
+fn leading_baselines(svg: &str) -> Vec<String> {
+    svg.split("<text ")
+        .filter(|element| element.contains("hrs "))
+        .filter_map(|element| {
+            let y = element.split("y=\"").nth(1)?.split('"').next()?;
+            Some(y.to_owned())
+        })
+        .collect()
+}
