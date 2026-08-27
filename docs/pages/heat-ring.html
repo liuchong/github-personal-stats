@@ -23,7 +23,7 @@
       <a href="../pages/cards.html">Cards and layout</a>
       <a href="../pages/configuration.html">Configuration</a>
       <a href="../pages/heat-ring.html" class="current" aria-current="page">The heat ring</a>
-      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/themes.html">Themes and type</a>
       <a href="../pages/activity.html">Coding activity</a>
       <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
@@ -67,7 +67,7 @@
 <pre data-language="yaml"><code>options: --user your-github-login --heat-window 60 --heat-scale sqrt --heat-color github-blue --heat-label &quot;{X}/last {Y}&quot;</code></pre>
 <h3 id="behaviour-worth-knowing">Behaviour worth knowing<a class="permalink" href="#behaviour-worth-knowing" aria-label="Link to this section">#</a></h3>
 <ul><li>Above the threshold, neighbouring days are averaged so each band stays at least four pixels wide. The ring still spans exactly the days the centre reports, but the bands you can count are fewer than the days.</li><li>A streak window has no quiet days by definition. Only a fixed window shows grey nodes.</li><li>A window longer than the available history pads the missing days as quiet.</li><li>When the streak is zero the ring falls back to a plain track and the centre reads <code>0</code>.</li><li>Regenerate the images in this section with <code>python3 scripts/render-ring-samples.py</code> after building the CLI.</li></ul>
-<nav class="steps"><a class="prev" href="configuration.html"><span>Previous</span>Configuration</a><a class="next" href="themes.html"><span>Next</span>Themes and colour</a></nav>
+<nav class="steps"><a class="prev" href="configuration.html"><span>Previous</span>Configuration</a><a class="next" href="themes.html"><span>Next</span>Themes and type</a></nav>
 </article>
 </main>
 <footer class="footer">

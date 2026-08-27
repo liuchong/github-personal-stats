@@ -36,7 +36,7 @@ pub use config::{
     CardSelection, DEFAULT_ACTIVITY_WINDOWS, DEFAULT_HEAT_THRESHOLD, DEFAULT_LANGUAGE_ROWS,
     GithubStatsConfig, HeatRing, HeatScale, HeatShape, HeatWindow, ImageSize, LanguageScope,
     MAX_ACTIVITY_WINDOW, MAX_LANGUAGE_ROWS, MAX_PADDING, MAX_SCALE_BASIS_POINTS,
-    MIN_SCALE_BASIS_POINTS, StatMetric, StreakMetric, Theme, TileMetric,
+    MIN_SCALE_BASIS_POINTS, StatMetric, StreakMetric, Theme, TileMetric, Typeface,
 };
 pub use data::{ContributionDay, GithubData, GithubProfile, RepositoryLanguage, UserStats};
 pub use error::{GithubStatsError, RemoteErrorKind};

@@ -236,6 +236,51 @@ fn cli_renders_each_theme_and_refuses_an_unknown_one() {
 }
 
 #[test]
+fn cli_sets_a_card_in_the_face_it_is_asked_for() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/fixtures/github_user_data.json");
+    let output = std::env::temp_dir().join(format!(
+        "github-personal-stats-cli-{}-mono.svg",
+        std::process::id()
+    ));
+    let status = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--font",
+            "mono",
+            "--output",
+            output.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    let svg = fs::read_to_string(&output).unwrap();
+    assert!(svg.contains("ui-monospace"), "{svg}");
+    let _ = fs::remove_file(output);
+
+    let refused = Command::new(env!("CARGO_BIN_EXE_github-personal-stats"))
+        .args([
+            "generate",
+            "--fixture",
+            fixture.to_str().unwrap(),
+            "--font",
+            "comic",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8(refused.stderr)
+            .unwrap()
+            .contains("expected sans or mono")
+    );
+}
+
+#[test]
 fn cli_configures_panel_content_and_refuses_a_list_it_cannot_draw() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../core/tests/fixtures/github_user_data.json");

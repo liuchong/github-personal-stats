@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Themes and colour · GitHub Personal Stats</title>
-<meta name="description" content="Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged." />
+<title>Themes and type · GitHub Personal Stats</title>
+<meta name="description" content="Light, dark, and transparent, the face the text is set in, and why a ramp cannot serve both surfaces unchanged." />
 <link rel="icon" type="image/svg+xml" href="../brand/icon-small.svg" />
 <link rel="stylesheet" href="../assets/site.css" />
 </head>
@@ -23,7 +23,7 @@
       <a href="../pages/cards.html">Cards and layout</a>
       <a href="../pages/configuration.html">Configuration</a>
       <a href="../pages/heat-ring.html">The heat ring</a>
-      <a href="../pages/themes.html" class="current" aria-current="page">Themes and colour</a>
+      <a href="../pages/themes.html" class="current" aria-current="page">Themes and type</a>
       <a href="../pages/activity.html">Coding activity</a>
       <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
@@ -32,21 +32,26 @@
 </header>
 <main id="content">
 <article class="doc">
-<h1>Themes and colour</h1>
-<p class="lede">Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged.</p>
+<h1>Themes and type</h1>
+<p class="lede">Light, dark, and transparent, the face the text is set in, and why a ramp cannot serve both surfaces unchanged.</p>
 <h2 id="themes">Themes<a class="permalink" href="#themes" aria-label="Link to this section">#</a></h2>
 <p><code>--theme</code> picks the palette: <code>light</code> (default), <code>dark</code>, or <code>transparent</code>. An unrecognised name fails the run rather than quietly rendering the default.</p>
 <pre data-language="yaml"><code>options: --user your-github-login --theme dark</code></pre>
 <p><code>transparent</code> drops the background but keeps the dark text of the light palette, so it belongs on a light surface. For a dark surface use <code>dark</code>.</p>
+<h2 id="typeface">Typeface<a class="permalink" href="#typeface" aria-label="Link to this section">#</a></h2>
+<p><code>--font</code> picks the family: <code>sans</code> (default) or <code>mono</code>.</p>
+<pre data-language="yaml"><code>options: --user your-github-login --font mono --padding 16</code></pre>
+<p><code>mono</code> asks for the family GitHub sets its own code in, so a card sitting above a fenced block of text reads as one design rather than two. Pin <code>--padding 16</code> alongside it and the card&#x27;s text begins on the same column the block&#x27;s text does, since a code block indents its own text by 16px.</p>
+<p>It is also the more exactly placed of the two: the layout measures a character as six tenths of its size, which is what a monospaced face actually does and only an average of what a proportional one does.</p>
 <h3 id="following-the-readers-colour-scheme">Following the reader&#x27;s colour scheme<a class="permalink" href="#following-the-readers-colour-scheme" aria-label="Link to this section">#</a></h3>
 <p>GitHub honours <code>&lt;picture&gt;</code> in a README, so generate one card per surface and let the browser choose. Add a second generate step:</p>
-<pre data-language="yaml"><code>      - uses: liuchong/github-personal-stats@v1.5.0
+<pre data-language="yaml"><code>      - uses: liuchong/github-personal-stats@v1.5.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.5.0
+      - uses: liuchong/github-personal-stats@v1.5.1
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg

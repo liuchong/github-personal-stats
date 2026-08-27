@@ -23,7 +23,7 @@
       <a href="../pages/cards.html" class="current" aria-current="page">Cards and layout</a>
       <a href="../pages/configuration.html">Configuration</a>
       <a href="../pages/heat-ring.html">The heat ring</a>
-      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/themes.html">Themes and type</a>
       <a href="../pages/activity.html">Coding activity</a>
       <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
@@ -61,14 +61,14 @@ cargo run -p github-personal-stats -- generate --fixture profile.json --card hea
 <p>For one profile of 194 repositories, the fetch took seven minutes and the fourteen tiles drawn from it took a third of a second altogether.</p>
 <p>A saved profile holds the answers to the options that shape a fetch, so those belong to <code>fetch</code>: <code>--authored-languages</code>, <code>--author-email</code>, and <code>--min-repo-language-share</code>. Passing one of them to <code>generate --fixture</code> is refused rather than quietly ignored. Everything about how a card is drawn, and <code>--hide-language</code>, still applies at render time, so one saved profile serves any number of themes, widths, and cards.</p>
 <p>In a workflow, that is one <code>fetch</code> step ahead of the render steps:</p>
-<pre data-language="yaml"><code>- uses: liuchong/github-personal-stats@v1.5.0
+<pre data-language="yaml"><code>- uses: liuchong/github-personal-stats@v1.5.1
   with:
     mode: fetch
     path: ${{ runner.temp }}/profile.json
     options: --user ${{ github.repository_owner }} --authored-languages
     token: ${{ secrets.PERSONAL_STATS_TOKEN }}
 
-- uses: liuchong/github-personal-stats@v1.5.0
+- uses: liuchong/github-personal-stats@v1.5.1
   with:
     card: stats
     path: profile/stats.svg

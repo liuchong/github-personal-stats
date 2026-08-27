@@ -416,3 +416,20 @@ and the guide were fenced the same way and had the same problem.
 Also found while measuring narrow variants: dropping the bar column left the key
 to the bar characters printed under a chart that had none of them. The key is now
 conditional on the column being drawn.
+
+## A card can be set in the face the block below it is set in
+
+Measured on a profile page: a code block fills the whole column, 846px, and
+indents its own text by 16. A card's margin scaled with its width and came to 21
+at the size the tiles are drawn, so the chart below them read as five pixels
+outdented. Pinning `--padding 16` lines the two up.
+
+That left the family. `--font mono` asks for the list GitHub sets code in. It
+costs nothing to be exact about: `advance()` already measures a character as six
+tenths of the size, which is what a monospaced face does and only an average of
+what a proportional one does, so the existing layout arithmetic becomes true
+rather than approximate. Default stays `sans`.
+
+What cannot be lined up: a stat row leads with a 16px icon, so its label starts
+at 38 inside the card against the chart's 16. Removing the icons to gain that is
+not worth it, and the card titles do line up.

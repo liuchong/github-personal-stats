@@ -97,6 +97,10 @@ Generate options:
                           languages, streak, heat, or metric card
                           (default: {DEFAULT_HEIGHT})
   --theme <name>          light, dark, transparent (default: {DEFAULT_THEME})
+  --font <sans|mono>      Family the text is set in; mono sets it in the face a
+                          fenced block of text is set in, and places it more
+                          exactly, since the layout measures a character as six
+                          tenths of its size either way (default: sans)
   --padding <pixels|auto> Inner margin; pin it to align tiles of differing
                           widths (default: auto, {MAX_PADDING} at most)
   --scale <multiplier>    Display the card larger or smaller than it is laid
@@ -259,6 +263,9 @@ fn generate(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     }
     if let Some(value) = option_value(&args, "--theme") {
         config = config.with_theme(&value)?;
+    }
+    if let Some(value) = option_value(&args, "--font") {
+        config = config.with_typeface(&value)?;
     }
     if let Some(value) = option_value(&args, "--padding") {
         config = config.with_padding(&value)?;

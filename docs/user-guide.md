@@ -36,7 +36,7 @@ jobs:
         env:
           PERSONAL_STATS_TOKEN: ${{ secrets.PERSONAL_STATS_TOKEN }}
         run: test -n "$PERSONAL_STATS_TOKEN"
-      - uses: liuchong/github-personal-stats@v1.5.0
+      - uses: liuchong/github-personal-stats@v1.5.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
@@ -123,18 +123,30 @@ options: --user your-github-login --theme dark
 
 `transparent` drops the background but keeps the dark text of the light palette, so it belongs on a light surface. For a dark surface use `dark`.
 
+## Typeface
+
+`--font` picks the family: `sans` (default) or `mono`.
+
+```yaml
+options: --user your-github-login --font mono --padding 16
+```
+
+`mono` asks for the family GitHub sets its own code in, so a card sitting above a fenced block of text reads as one design rather than two. Pin `--padding 16` alongside it and the card's text begins on the same column the block's text does, since a code block indents its own text by 16px.
+
+It is also the more exactly placed of the two: the layout measures a character as six tenths of its size, which is what a monospaced face actually does and only an average of what a proportional one does.
+
 ### Following the reader's colour scheme
 
 GitHub honours `<picture>` in a README, so generate one card per surface and let the browser choose. Add a second generate step:
 
 ```yaml
-      - uses: liuchong/github-personal-stats@v1.5.0
+      - uses: liuchong/github-personal-stats@v1.5.1
         with:
           card: dashboard
           path: profile/github-personal-stats.svg
           options: --user your-github-login --theme light
           token: ${{ secrets.PERSONAL_STATS_TOKEN }}
-      - uses: liuchong/github-personal-stats@v1.5.0
+      - uses: liuchong/github-personal-stats@v1.5.1
         with:
           card: dashboard
           path: profile/github-personal-stats-dark.svg
@@ -386,14 +398,14 @@ number of themes, widths, and cards.
 In a workflow, that is one `fetch` step ahead of the render steps:
 
 ```yaml
-- uses: liuchong/github-personal-stats@v1.5.0
+- uses: liuchong/github-personal-stats@v1.5.1
   with:
     mode: fetch
     path: ${{ runner.temp }}/profile.json
     options: --user ${{ github.repository_owner }} --authored-languages
     token: ${{ secrets.PERSONAL_STATS_TOKEN }}
 
-- uses: liuchong/github-personal-stats@v1.5.0
+- uses: liuchong/github-personal-stats@v1.5.1
   with:
     card: stats
     path: profile/stats.svg
@@ -953,8 +965,8 @@ github-personal-stats-daemon status
 daemon      listening on 127.0.0.1:7391
 token       /Users/you/.local/state/github-personal-stats/token
 publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode 1.5.0 — 412 pulses on 2026-08-24, last 30s ago
-editors     emacs 1.5.0 — 96 pulses on 2026-08-24, last 2m ago
+editors     vscode 1.5.1 — 412 pulses on 2026-08-24, last 30s ago
+editors     emacs 1.5.1 — 96 pulses on 2026-08-24, last 2m ago
 collected   100 days, agent 146h 29m, editor 3h 12m
 ```
 
@@ -965,7 +977,7 @@ The day is named rather than called "today" because the two are not always the s
 A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:
 
 ```
-editors     vscode 1.5.0 — loaded 12m ago, nothing reported recently
+editors     vscode 1.5.1 — loaded 12m ago, nothing reported recently
 ```
 
 That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.
@@ -1102,7 +1114,7 @@ Then check the storage out alongside your profile repository, and point a render
     ssh-key: ${{ secrets.STATS_DATA_KEY }}
     path: storage
 
-- uses: liuchong/github-personal-stats@v1.5.0
+- uses: liuchong/github-personal-stats@v1.5.1
   with:
     card: activity
     path: profile/activity.svg

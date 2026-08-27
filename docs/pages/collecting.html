@@ -23,7 +23,7 @@
       <a href="../pages/cards.html">Cards and layout</a>
       <a href="../pages/configuration.html">Configuration</a>
       <a href="../pages/heat-ring.html">The heat ring</a>
-      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/themes.html">Themes and type</a>
       <a href="../pages/activity.html">Coding activity</a>
       <a href="../pages/collecting.html" class="current" aria-current="page">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
@@ -65,13 +65,13 @@ panel http://127.0.0.1:7391/?token=…</code></pre>
 <pre><code>daemon      listening on 127.0.0.1:7391
 token       /Users/you/.local/state/github-personal-stats/token
 publishing  git git@github.com:you/personal-stats-data.git via /Users/you/.local/state/github-personal-stats/storage on master
-editors     vscode 1.5.0 — 412 pulses on 2026-08-24, last 30s ago
-editors     emacs 1.5.0 — 96 pulses on 2026-08-24, last 2m ago
+editors     vscode 1.5.1 — 412 pulses on 2026-08-24, last 30s ago
+editors     emacs 1.5.1 — 96 pulses on 2026-08-24, last 2m ago
 collected   100 days, agent 146h 29m, editor 3h 12m</code></pre>
 <p>Each line is something that can be separately broken. <code>editors no plugin has loaded</code> means exactly that: reload the editor window. <code>token missing</code> means no plugin can report at all, because the shared secret it needs is not there yet.</p>
 <p>The day is named rather than called &quot;today&quot; because the two are not always the same thing. A plugin files its work under the date its own machine shows, so east of UTC the journal is already on tomorrow&#x27;s file for the first hours of the evening — and those are the hours most likely to be worked. Naming the day it found means the line cannot claim to be about now when it is about yesterday.</p>
 <p>A plugin says hello when it starts, so a loaded plugin is visible before it has any work to report:</p>
-<pre><code>editors     vscode 1.5.0 — loaded 12m ago, nothing reported recently</code></pre>
+<pre><code>editors     vscode 1.5.1 — loaded 12m ago, nothing reported recently</code></pre>
 <p>That line is the normal state of a window in the background: a window nobody is looking at is not somewhere anybody is working.</p>
 <p>Your editor&#x27;s status bar says the same thing from the other side:</p>
 <ul><li><code>$(pulse) stats</code> — loaded and reporting.</li><li><code>$(pulse) stats 14</code> — loaded, but 14 pulses are queued because the daemon is not answering.</li><li><code>$(circle-slash) stats</code> — no token found, so nothing is being sent.</li></ul>
@@ -140,7 +140,7 @@ rm /tmp/key /tmp/key.pub</code></pre>
     ssh-key: ${{ secrets.STATS_DATA_KEY }}
     path: storage
 
-- uses: liuchong/github-personal-stats@v1.5.0
+- uses: liuchong/github-personal-stats@v1.5.1
   with:
     card: activity
     path: profile/activity.svg

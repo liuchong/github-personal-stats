@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Liu Chong
 
 ;; Author: Liu Chong <mail@liuchong.dev>
-;; Version: 1.5.0
+;; Version: 1.5.1
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: convenience, tools
 ;; URL: https://github.com/liuchong/github-personal-stats
@@ -49,7 +49,7 @@
 (require 'subr-x)
 (require 'url)
 
-(defconst github-personal-stats-version "1.5.0"
+(defconst github-personal-stats-version "1.5.1"
   "Version reported to the daemon.
 
 Deliberately the project's version rather than the plugin's own: a

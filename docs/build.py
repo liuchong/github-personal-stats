@@ -58,9 +58,9 @@ PAGES = [
     ),
     (
         "themes",
-        "Themes and colour",
-        "Light, dark, and transparent, and why a ramp cannot serve both surfaces unchanged.",
-        ["Themes", "Visual Notes"],
+        "Themes and type",
+        "Light, dark, and transparent, the face the text is set in, and why a ramp cannot serve both surfaces unchanged.",
+        ["Themes", "Typeface", "Visual Notes"],
     ),
     (
         "activity",

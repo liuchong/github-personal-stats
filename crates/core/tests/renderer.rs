@@ -508,6 +508,49 @@ fn light_and_dark_cards_differ_only_by_their_palette() {
 }
 
 #[test]
+fn a_card_can_be_set_in_the_face_a_fenced_block_is_set_in() {
+    let card = |font: Option<&str>| {
+        let mut config = GithubStatsConfig::new("octo").unwrap();
+        if let Some(font) = font {
+            config = config.with_typeface(font).unwrap();
+        }
+        render_card(&CardData::Status { state: "ready" }, &config)
+    };
+
+    let sans = card(None);
+    let mono = card(Some("mono"));
+
+    assert!(sans.contains("sans-serif"), "{sans}");
+    assert!(!sans.contains("monospace"), "{sans}");
+    assert!(mono.contains("ui-monospace"), "{mono}");
+    assert!(!mono.contains("sans-serif"), "{mono}");
+    // A face is a face: asking for one must not move anything or say anything
+    // different, since the layout measures a character the same either way.
+    assert_eq!(sans.matches("<text").count(), mono.matches("<text").count());
+    assert_eq!(card(Some("sans")), sans);
+
+    for name in ["mono", "MONO", " monospace ", "sans", "ui", "default"] {
+        assert!(
+            GithubStatsConfig::new("octo")
+                .unwrap()
+                .with_typeface(name)
+                .is_ok(),
+            "{name} must name a face"
+        );
+    }
+
+    let error = GithubStatsConfig::new("octo")
+        .unwrap()
+        .with_typeface("comic")
+        .expect_err("a face nobody has must not quietly become the default");
+
+    assert!(matches!(
+        error,
+        GithubStatsError::InvalidConfig { field: "font", .. }
+    ));
+}
+
+#[test]
 fn readme_section_renderer_matches_snapshot() {
     let summary = aggregate_coding_activity(
         vec![

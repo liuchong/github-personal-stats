@@ -23,7 +23,7 @@
       <a href="../pages/cards.html">Cards and layout</a>
       <a href="../pages/configuration.html">Configuration</a>
       <a href="../pages/heat-ring.html">The heat ring</a>
-      <a href="../pages/themes.html">Themes and colour</a>
+      <a href="../pages/themes.html">Themes and type</a>
       <a href="../pages/activity.html" class="current" aria-current="page">Coding activity</a>
       <a href="../pages/collecting.html">Collecting it</a>
       <a href="../pages/private-data.html">Private repository data</a>
@@ -41,7 +41,7 @@
   <img src="../images/activity/card-light.svg" alt="An activity card comparing the last thirty days with all time, ranked by language" width="100%" />
 </p>
 <p>And a chart, for a README that is mostly words:</p>
-<pre data-language="txt"><code>LINES BY LANGUAGE
+<pre data-language="text"><code>LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
 
@@ -70,7 +70,7 @@ Zig            +6,926   #####--------------------    5.77 %</code></pre>
 <p>Print the same chart to a terminal instead, which is the quickest way to try a configuration:</p>
 <pre data-language="sh"><code>github-personal-stats chart --activity-record &lt;your record&gt;</code></pre>
 <p>With nothing configured you get the period covered, then what was written, who wrote it, and what wrote it:</p>
-<pre data-language="txt"><code>From: 24 May 2026 - To: 27 August 2026
+<pre data-language="text"><code>From: 24 May 2026 - To: 27 August 2026
 
 LINES BY LANGUAGE
 
@@ -123,7 +123,7 @@ unnamed           +8,293   #####--------------------    6.91 %
 <div class="table-scroll"><table><thead><tr><th>Counted seconds coming from gaps of</th><th>Share</th></tr></thead><tbody><tr><td>Under 30 seconds</td><td>79%</td></tr><tr><td>30 seconds to 2 minutes</td><td>9%</td></tr><tr><td>2 to 5 minutes</td><td>12%</td></tr></tbody></table></div>
 <p>With the editor alone, over half the total came from gaps above a minute, which is interpolation. With both sources, four fifths of it comes from gaps under half a minute, which is very nearly direct observation. Tightening the idle timeout from five minutes to thirty seconds now changes the monthly total by less than a fifth, which is the useful way to say that the figure is being set by evidence rather than by the length of the silences.</p>
 <p>The remaining limitation is that most of those hours cannot be attributed to a language. The terminal agents report when they were working without reporting what they were working on; roughly one in eight of their moments names a file at all, and a file named at one instant says nothing about the minutes around it. So a block of hours by language ranks only the hours it can place, and says how many it could not:</p>
-<pre data-language="txt"><code>TIME BY LANGUAGE
+<pre data-language="text"><code>TIME BY LANGUAGE
 
 Total        73 hrs 32 mins   last 30 days, 119 hrs 58 mins not placed to a language
 
@@ -134,7 +134,7 @@ TypeScript    8 hrs  0 mins   #########----------------   10.88 %
 Python        5 hrs 32 mins   ######-------------------    7.53 %
 Zig           4 hrs 14 mins   #####--------------------    5.77 %</code></pre>
 <p>That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with <code>time=on</code>:</p>
-<pre data-language="txt"><code>LINES BY LANGUAGE
+<pre data-language="text"><code>LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
 
@@ -148,7 +148,7 @@ TypeScript    +13,046   #########----------------   10.87 %    8 hrs  0 mins</co
 <p>Values are <code>lines</code>, <code>time</code> and <code>tokens</code>. Dimensions are <code>languages</code>, <code>models</code>, <code>authors</code> and <code>windows</code>. Not every pairing was measured — nothing records a token against a language or an author — and a block that asks for a pairing nothing measured says <code>nothing recorded</code> rather than inventing a number.</p>
 <div class="table-scroll"><table><thead><tr><th>Setting</th><th>Does</th></tr></thead><tbody><tr><td><code>limit=8</code></td><td>Rows at most, largest first</td></tr><tr><td><code>time=on</code></td><td>Adds the hours behind each row</td></tr><tr><td><code>authors=on</code></td><td>Adds the agent&#x27;s share of each row, as a number beside the bar</td></tr><tr><td><code>split=off</code></td><td>Draws each bar whole instead of dividing it by author</td></tr><tr><td><code>title=…</code></td><td>Replaces the heading</td></tr><tr><td><code>measure=…</code></td><td>Reads a named measure of time rather than the chart&#x27;s</td></tr></tbody></table></div>
 <p>Every bar is already divided by author, so its shape says how much of a language an agent wrote. <code>authors=on</code> writes the number beside it, for when the difference between rows is too small to read off twenty-five characters of glyph:</p>
-<pre data-language="txt"><code>LINES BY LANGUAGE
+<pre data-language="text"><code>LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
 
@@ -163,7 +163,7 @@ Zig            +6,926   #####--------------------    5.77 %   100.00% agent
 <p>On a block of hours the same setting writes <code>99.89% agent lines</code>, naming the figure it counted, because a percentage next to a duration would otherwise be read as a share of the hours.</p>
 <p>A measure belongs to a block rather than to the whole chart, because the interesting charts hold more than one. Hours an agent spent changing code and hours imported from another tracker are different quantities covering overlapping periods: they can sit side by side but must never be added, and a chart with a single measure could only ever show one of them.</p>
 <pre data-language="sh"><code>--activity-blocks &#x27;time/windows;time/windows,measure=imported&#x27;</code></pre>
-<pre data-language="txt"><code>TIME BY SPAN
+<pre data-language="text"><code>TIME BY SPAN
 
 Longest        619 hrs 25 mins   spans overlap; each reads as a share of this
 
@@ -188,7 +188,7 @@ All time       266 hrs 21 mins   #########################   100.00 %</code></pr
 --activity-dates on</code></pre>
 <p>Columns are drawn in the order given, and a column that no row fills is not drawn at all. <code>--activity-bar</code> takes two or three characters: the agent&#x27;s share, the share nothing watched an agent write, and the remainder. <code>--activity-bar-basis</code> decides whether a bar&#x27;s length is measured against the largest row or against the block&#x27;s total. <code>--activity-dates off</code> drops the opening line of dates, which is worth doing when the chart sits under a heading that already says which period it covers.</p>
 <p>Everything is padded to a monospace grid, so the chart belongs in a fenced block. <code>update-readme</code> writes one for you.</p>
-<nav class="steps"><a class="prev" href="themes.html"><span>Previous</span>Themes and colour</a><a class="next" href="collecting.html"><span>Next</span>Collecting it</a></nav>
+<nav class="steps"><a class="prev" href="themes.html"><span>Previous</span>Themes and type</a><a class="next" href="collecting.html"><span>Next</span>Collecting it</a></nav>
 </article>
 </main>
 <footer class="footer">

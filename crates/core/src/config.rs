@@ -75,6 +75,50 @@ impl Theme {
     }
 }
 
+/// Which family a card sets its text in.
+///
+/// The layout measures text as six tenths of the size per character either way,
+/// which is what a monospaced face actually does and only an average of what a
+/// proportional one does. So the choice is about what the card should look like
+/// beside its neighbours, and the monospaced setting is the more exactly placed
+/// of the two: a card sat above a fenced block of text reads as one design
+/// rather than two.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Typeface {
+    #[default]
+    Sans,
+    Mono,
+}
+
+impl Typeface {
+    pub fn parse(value: &str) -> Result<Self, GithubStatsError> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "sans" | "default" | "ui" => Ok(Self::Sans),
+            "mono" | "monospace" => Ok(Self::Mono),
+            _ => Err(GithubStatsError::InvalidConfig {
+                field: "font",
+                message: "expected sans or mono".to_owned(),
+            }),
+        }
+    }
+
+    /// The families to ask for, most wanted first.
+    ///
+    /// The monospaced list is the one GitHub sets its own code in, so a card
+    /// beside a fenced block is set in the same face the block is rather than in
+    /// something close to it.
+    pub fn stack(self) -> &'static str {
+        match self {
+            Self::Sans => {
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif"
+            }
+            Self::Mono => {
+                "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+            }
+        }
+    }
+}
+
 pub const DEFAULT_HEAT_THRESHOLD: u32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -326,6 +370,8 @@ pub struct GithubStatsConfig {
     pub cards: CardSelection,
     pub size: ImageSize,
     pub theme: Theme,
+    /// The family the card's text is set in.
+    pub typeface: Typeface,
     pub language_scope: LanguageScope,
     pub author_emails: Vec<String>,
     pub hidden_languages: Vec<String>,
@@ -374,6 +420,7 @@ impl GithubStatsConfig {
                 height: 420,
             },
             theme: Theme::Light,
+            typeface: Typeface::default(),
             language_scope: LanguageScope::Owned,
             author_emails: Vec::new(),
             hidden_languages: Vec::new(),
@@ -576,6 +623,11 @@ impl GithubStatsConfig {
 
     pub fn with_theme(mut self, value: &str) -> Result<Self, GithubStatsError> {
         self.theme = Theme::parse(value)?;
+        Ok(self)
+    }
+
+    pub fn with_typeface(mut self, value: &str) -> Result<Self, GithubStatsError> {
+        self.typeface = Typeface::parse(value)?;
         Ok(self)
     }
 

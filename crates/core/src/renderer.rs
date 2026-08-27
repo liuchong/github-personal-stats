@@ -4,9 +4,6 @@ use crate::{
     LanguageShare, StatMetric, StreakMetric, StreakSummary, Theme, TileMetric,
 };
 
-const FONT_STACK: &str =
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif";
-
 const MINIMUM_BAND_WIDTH: f64 = 4.0;
 
 const NARROW_WIDTH: u32 = 440;
@@ -259,7 +256,7 @@ fn render_dashboard(
 
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         format!(
@@ -288,7 +285,7 @@ fn render_stats_card(
     let size = &config.size;
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         stats_section(
@@ -309,7 +306,7 @@ fn render_languages_card(
     let size = &config.size;
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         languages_section(
@@ -330,7 +327,7 @@ fn render_streak_card(
     let size = &config.size;
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         streak_section(
@@ -353,7 +350,7 @@ fn render_activity_card(
     let pad = padding(config);
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         activity_section(card_area(size, pad), comparison, config, theme),
@@ -370,7 +367,7 @@ fn render_status_card(
     let area = card_area(size, padding(config));
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         format!(
@@ -502,13 +499,13 @@ fn padding(config: &GithubStatsConfig) -> u32 {
 /// resampled: the same geometry simply arrives larger or smaller.
 fn svg_root(
     size: &ImageSize,
-    scale_basis_points: u32,
+    config: &GithubStatsConfig,
     theme: &RenderTheme,
     title: &str,
     body: String,
 ) -> String {
     let scaled = |value: u32| {
-        (u64::from(value) * u64::from(scale_basis_points) / 10_000)
+        (u64::from(value) * u64::from(config.scale_basis_points) / 10_000)
             .try_into()
             .unwrap_or(u32::MAX)
     };
@@ -519,7 +516,7 @@ fn svg_root(
         display_height = scaled(size.height),
         width = size.width,
         height = size.height,
-        font = FONT_STACK,
+        font = config.typeface.stack(),
         title = escape_xml(title),
         background = theme.background,
         body = body,
@@ -844,7 +841,7 @@ fn render_heat_card(
 
     svg_root(
         size,
-        config.scale_basis_points,
+        config,
         theme,
         title,
         current_streak_ring(
@@ -917,13 +914,7 @@ fn render_metric_card(
         figure.note = String::new();
     }
 
-    svg_root(
-        size,
-        config.scale_basis_points,
-        theme,
-        title,
-        side_metric(figure),
-    )
+    svg_root(size, config, theme, title, side_metric(figure))
 }
 
 /// Three columns need room the ring's own date line already struggles for, so a
