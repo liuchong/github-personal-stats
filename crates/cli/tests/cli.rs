@@ -84,8 +84,10 @@ fn cli_updates_marked_readme_section() {
     let readme = fs::read_to_string(&target).unwrap();
     assert!(readme.contains("before"));
     // What lands in the README is the chart the record describes, in a fenced
-    // block so the columns keep their alignment wherever it is read.
-    assert!(readme.contains("```txt"), "{readme}");
+    // block so the columns keep their alignment wherever it is read. Named as
+    // `text` and not `txt`, which GitHub takes for a language and colours.
+    assert!(readme.contains("```text\n"), "{readme}");
+    assert!(!readme.contains("```txt\n"), "{readme}");
     assert!(readme.contains("LINES BY LANGUAGE"), "{readme}");
     assert!(readme.contains("Rust"), "{readme}");
     let _ = fs::remove_dir_all(&record);

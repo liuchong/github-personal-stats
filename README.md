@@ -73,7 +73,7 @@ Your profile knows what you pushed and nothing about how it came to be. A collec
 
 The same record reads as text for a README made of words, and the card is the only one here that renders with no token, no saved profile, and no network:
 
-```txt
+```text
 LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent

@@ -357,7 +357,10 @@ fn update_readme(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     // A record turns into the chart it describes. Without one there is nothing to
     // say: what used to stand in here was two invented figures, which a reader
     // had no way of telling from the real thing.
-    let replacement = format!("```txt\n{}\n```", activity_chart(&args)?.trim_end());
+    // Fenced as `text` rather than `txt`: GitHub resolves the shorter alias to a
+    // language that has a grammar, and colours a chart of lines and percentages
+    // as if `##` were a keyword and the legend a comment.
+    let replacement = format!("```text\n{}\n```", activity_chart(&args)?.trim_end());
     let updated = replace_section(&source, &start, &end, &replacement)?;
 
     fs::write(target, updated)?;

@@ -324,7 +324,10 @@ pub fn render_text_chart(blocks: &[ChartBlock], style: &ChartStyle) -> String {
         out.push_str(&lay_out(block, style));
     }
 
-    if style.legend && divided {
+    // Only worth saying when a bar was drawn: the legend names the characters a
+    // bar is built from, and a chart asked for without that column has none of
+    // them anywhere for a reader to match the words against.
+    if style.legend && divided && style.columns.contains(&Column::Bar) {
         let named = blocks
             .iter()
             .filter(|block| block.rows.iter().any(ChartRow::divides))

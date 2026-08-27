@@ -628,7 +628,7 @@ It comes out in two shapes. A card, for a README that is mostly pictures:
 
 And a chart, for a README that is mostly words:
 
-```txt
+```text
 LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
@@ -686,7 +686,7 @@ github-personal-stats chart --activity-record <your record>
 
 With nothing configured you get the period covered, then what was written, who wrote it, and what wrote it:
 
-```txt
+```text
 From: 24 May 2026 - To: 27 August 2026
 
 LINES BY LANGUAGE
@@ -778,7 +778,7 @@ With the editor alone, over half the total came from gaps above a minute, which 
 
 The remaining limitation is that most of those hours cannot be attributed to a language. The terminal agents report when they were working without reporting what they were working on; roughly one in eight of their moments names a file at all, and a file named at one instant says nothing about the minutes around it. So a block of hours by language ranks only the hours it can place, and says how many it could not:
 
-```txt
+```text
 TIME BY LANGUAGE
 
 Total        73 hrs 32 mins   last 30 days, 119 hrs 58 mins not placed to a language
@@ -793,7 +793,7 @@ Zig           4 hrs 14 mins   #####--------------------    5.77 %
 
 That is also why hours are an option on a block rather than the thing a chart leads with. Any breakdown will state the hours behind its figures on request, with `time=on`:
 
-```txt
+```text
 LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
@@ -825,7 +825,7 @@ Values are `lines`, `time` and `tokens`. Dimensions are `languages`, `models`, `
 
 Every bar is already divided by author, so its shape says how much of a language an agent wrote. `authors=on` writes the number beside it, for when the difference between rows is too small to read off twenty-five characters of glyph:
 
-```txt
+```text
 LINES BY LANGUAGE
 
 Total        +119,979   lines, 99.94% by an agent
@@ -848,7 +848,7 @@ A measure belongs to a block rather than to the whole chart, because the interes
 --activity-blocks 'time/windows;time/windows,measure=imported'
 ```
 
-```txt
+```text
 TIME BY SPAN
 
 Longest        619 hrs 25 mins   spans overlap; each reads as a share of this

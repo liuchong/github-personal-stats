@@ -155,6 +155,27 @@ fn a_divided_row_shows_the_split_inside_its_bar() {
 }
 
 #[test]
+fn a_chart_with_no_bar_in_it_is_not_given_a_key_to_one() {
+    let divided = ChartBlock::new("LINES BY LANGUAGE")
+        .with_rows(
+            vec![ChartRow::new("Rust", "1,000", 1_000).divided(750, 250)],
+            1_000,
+        )
+        .divided_into("agent", "unattributed");
+    let narrow = ChartStyle {
+        columns: vec![Column::Name, Column::Value, Column::Share],
+        ..ChartStyle::default()
+    };
+    let text = render_text_chart(&[divided], &narrow);
+
+    assert!(text.contains("Rust"), "{text}");
+    assert!(
+        !text.contains("# agent"),
+        "the key names characters no row drew\n{text}"
+    );
+}
+
+#[test]
 fn the_bar_characters_are_a_choice() {
     let style = ChartStyle {
         glyphs: BarGlyphs::parse(">~-").unwrap(),

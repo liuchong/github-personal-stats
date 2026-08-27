@@ -403,3 +403,16 @@ Then the mode found a bug that had nothing to do with Emacs. `daemon status` sai
 The first fix guessed the local day from the journal and was wrong: whether a machine's day is ahead of UTC's depends on the hour, not only on the zone, so no timestamp reveals an offset that can be applied to now. The concept was the defect. `reporters` no longer takes a day to look for; it reads a day either side of UTC's and reports each editor on the latest day it actually appears, and the status line names that day. A fact instead of a guess — and it immediately paid for itself by revealing that this machine's VS Code plugin last reported two days ago, which the old wording had been hiding behind `nothing reported today` all along.
 
 Installing it into a real configuration found the mode's own version of the silent zero, before it could cost anything. Presence required `frame-focus-state`, and that function answers `nil` — documented as "definitely known not to be focused" — for a terminal frame whose terminal never reports focus, which includes a plain tty and anything under tmux or screen. A day's work in `emacs -nw` would have been recorded as nothing, which is precisely the failure the VS Code extension already learned once. Focus is now asked only of graphical frames; where it cannot be known, the idle cutoff is the whole test, because whether Emacs was given anything to do is the only signal that exists there.
+
+## A fence GitHub takes for a language
+
+The chart written into a README was fenced as ```txt. GitHub resolves that alias
+to a language that has a grammar, and coloured the result: `##` as a keyword, the
+legend line as a comment, language names and figures as strings. Asked GitHub's
+own markdown API which aliases stay plain — `text`, `plaintext` and a bare fence
+do, `txt` does not — and the writer now emits `text`. The samples in the README
+and the guide were fenced the same way and had the same problem.
+
+Also found while measuring narrow variants: dropping the bar column left the key
+to the bar characters printed under a chart that had none of them. The key is now
+conditional on the column being drawn.
